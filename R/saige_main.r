@@ -35,46 +35,6 @@
     fn
 }
 
-.cfunction2 <- function(name)
-{
-    fn <- function(x, y) NULL
-    f <- quote(.Call(SEQ_ExternalName2, x, y))
-    f[[1L]] <- .Call
-    f[[2L]] <- getNativeSymbolInfo(name, "SAIGEgds")$address
-    body(fn) <- f
-    fn
-}
-
-.cfunction3 <- function(name)
-{
-    fn <- function(x, y, z) NULL
-    f <- quote(.Call(SEQ_ExternalName3, x, y, z))
-    f[[1L]] <- .Call
-    f[[2L]] <- getNativeSymbolInfo(name, "SAIGEgds")$address
-    body(fn) <- f
-    fn
-}
-
-.cfunction4 <- function(name)
-{
-    fn <- function(w, x, y, z) NULL
-    f <- quote(.Call(SEQ_ExternalName4, w, x, y, z))
-    f[[1L]] <- .Call
-    f[[2L]] <- getNativeSymbolInfo(name, "SAIGEgds")$address
-    body(fn) <- f
-    fn
-}
-
-.cfunction5 <- function(name)
-{
-    fn <- function(v, w, x, y, z) NULL
-    f <- quote(.Call(SEQ_ExternalName5, v, w, x, y, z))
-    f[[1L]] <- .Call
-    f[[2L]] <- getNativeSymbolInfo(name, "SAIGEgds")$address
-    body(fn) <- f
-    fn
-}
-
 
 
 #######################################################################
@@ -98,9 +58,12 @@
 # Open a SNP GDS file
 #
 
-seqAssocGMMAT_SPA <- function(gdsfile, modobj, parallel=FALSE, verbose=TRUE)
+seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
+    parallel=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass"))
+    stopifnot(is.numeric(maf), length(maf)==1L)
+    stopifnot(is.numeric(mac), length(mac)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     # check model
@@ -111,6 +74,10 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, parallel=FALSE, verbose=TRUE)
     }
     .check_saige_model(modobj)
 
+    # save the current filter
+    seqSetFilter(gdsfile, action="push", verbose=FALSE)
+    on.exit({ seqSetFilter(gdsfile, action="pop", verbose=FALSE) })
+
     # check sample ID
     seqSetFilter(gdsfile, sample.id=modobj$sample.id, verbose=FALSE)
     sid <- seqGetData(gdsfile, "sample.id")
@@ -120,9 +87,10 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, parallel=FALSE, verbose=TRUE)
     if (any(is.na(ii)))
         stop("Sample IDs do not match.")
 
-    # initialize
+    # initialize the internal model
     mu <- unname(modobj$fitted.values)
 	mobj <- list(
+	    maf = maf, mac = mac,
         y     = unname(modobj$obj.noK$y[ii]),
         mu.a  = mu[ii],
         mu2.a = (mu * (1 - mu))[ii],
@@ -132,9 +100,10 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, parallel=FALSE, verbose=TRUE)
 	)
     if (!is.finite(mobj$var.ratio))
         stop("Invalid variance ratio in the SAIGE model.")
+    # initialize internally
     .Call(saige_score_test_init, mobj)
 
-    # scan
+    # scan all (selected) variants
     if (modobj$trait.type == "binary")
     {
         rv <- seqApply(gdsfile, "annotation/format/DS",
@@ -142,6 +111,16 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, parallel=FALSE, verbose=TRUE)
             parallel=parallel, .progress=verbose, .list_dup=FALSE)
     }
 
+    # if any maf/mac filter
+    x <- sapply(rv, is.null)
+    if (any(x))
+    {
+        x <- !x
+        seqSetFilter(gdsfile, variant.sel=x, action="intersect", verbose=T)
+        rv <- rv[x]
+    }
+
+    # output
     data.frame(
         id  = seqGetData(f, "variant.id"),
         chr = seqGetData(f, "chromosome"),

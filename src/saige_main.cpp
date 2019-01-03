@@ -21,6 +21,7 @@
 
 
 #include <RcppArmadillo.h>
+#include <algorithm>
 
 using namespace Rcpp;
 using namespace arma;
@@ -43,6 +44,9 @@ static SEXP GetListElement(SEXP list, const char *str)
 	return elmt;
 }
 
+
+static double threshold_maf = 0;
+static double threshold_mac = 0;
 
 static double *model_y = NULL;
 static double *model_mu = NULL;
@@ -68,7 +72,7 @@ static void SummaryAndImputeGeno(double *ds, size_t n, double &AF, double &AC,
 		}
 	}
 	AC = sum;
-	AF = (num > 0) ? (sum/num) : R_NaN;
+	AF = (num > 0) ? (sum/(2*num)) : R_NaN;
 	Num = num;
 }
 
@@ -78,6 +82,10 @@ static void SummaryAndImputeGeno(double *ds, size_t n, double &AF, double &AC,
 RcppExport SEXP saige_score_test_init(SEXP model)
 {
 BEGIN_RCPP
+	threshold_maf = Rf_asReal(GetListElement(model, "maf"));
+	if (!R_FINITE(threshold_maf)) threshold_maf = -1;
+	threshold_mac = Rf_asReal(GetListElement(model, "mac"));
+	if (!R_FINITE(threshold_mac)) threshold_mac = -1;
 	model_y = REAL(GetListElement(model, "y"));
 	model_mu = REAL(GetListElement(model, "mu.a"));
 	model_mu2 = REAL(GetListElement(model, "mu2.a"));
@@ -112,32 +120,39 @@ BEGIN_RCPP
 	int Num;
 	SummaryAndImputeGeno(&ds[0], num_samp, AF, AC, Num);
 
-	// genotype vector, reuse memory and avoid extra copy
-	colvec G(ds.begin(), num_samp, false);
-	// XV matrix
-	NumericMatrix mt1(model_null_XV);
-	mat XV(mt1.begin(), mt1.nrow(), mt1.ncol(), false);
-	// XXVX_inv matrix
-	NumericMatrix mt2(model_null_XXVX_inv);
-	mat XXVX_inv(mt2.begin(), mt2.nrow(), mt2.ncol(), false);
-	// normalized genotypes
-	colvec g = G - XXVX_inv * (XV * G);
+	double maf = std::min(AF, 1-AF);
+	double mac = std::min(AC, 2*Num - AC);
+	if (Num>0 && maf>=threshold_maf && mac>=threshold_mac)
+	{
+		// genotype vector, reuse memory and avoid extra copy
+		colvec G(ds.begin(), num_samp, false);
+		// XV matrix
+		NumericMatrix mt1(model_null_XV);
+		mat XV(mt1.begin(), mt1.nrow(), mt1.ncol(), false);
+		// XXVX_inv matrix
+		NumericMatrix mt2(model_null_XXVX_inv);
+		mat XXVX_inv(mt2.begin(), mt2.nrow(), mt2.ncol(), false);
+		// normalized genotypes
+		colvec g = G - XXVX_inv * (XV * G);
 
-	// dot
-	double q  = dot(colvec(model_y, num_samp, false), g);
-	double m1 = dot(colvec(model_mu, num_samp, false), g);
-	double var = dot(colvec(model_mu2, num_samp, false), g%g) * model_varRatio;
-	double S = q - m1;
+		// dot
+		double q  = dot(colvec(model_y, num_samp, false), g);
+		double m1 = dot(colvec(model_mu, num_samp, false), g);
+		double var = dot(colvec(model_mu2, num_samp, false), g%g) * model_varRatio;
+		double S = q - m1;
 
-	// p-value
-	double pval = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
-	double beta = S / var;
-	double se   = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
+		// p-value
+		double pval = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
+		double beta = S / var;
+		double se   = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
 
-	NumericVector ans(6);
-	ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
-	ans[3] = beta;  ans[4] = se;    ans[5] = pval;
-	return ans;
+		NumericVector ans(6);
+		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
+		ans[3] = beta;  ans[4] = se;    ans[5] = pval;
+		return ans;
+	} else {
+		return R_NilValue;
+	}
 
 END_RCPP
 }
