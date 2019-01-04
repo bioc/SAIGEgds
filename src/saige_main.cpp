@@ -36,18 +36,14 @@ extern "C" double vec_dot_f64(size_t n, const double *p1, const double *p2);
 /// Get the list element named str, or return NULL
 static SEXP GetListElement(SEXP list, const char *str)
 {
-	SEXP elmt = R_NilValue;
 	SEXP names = Rf_getAttrib(list, R_NamesSymbol);
 	R_xlen_t n = XLENGTH(list);
 	for (R_xlen_t i=0; i < n; i++)
 	{
 		if (strcmp(CHAR(STRING_ELT(names, i)), str) == 0)
-		{
-			elmt = VECTOR_ELT(list, i);
-			break;
-		}
+			return VECTOR_ELT(list, i);
 	}
-	return elmt;
+	return R_NilValue;
 }
 
 
@@ -56,6 +52,7 @@ static double threshold_mac = 0;
 
 static double *model_y = NULL;
 static double *model_mu = NULL;
+static double *model_y_mu = NULL;
 static double *model_mu2 = NULL;
 static SEXP model_null_XXVX_inv = NULL;
 static SEXP model_null_XV = NULL;
@@ -93,8 +90,9 @@ BEGIN_RCPP
 	threshold_mac = Rf_asReal(GetListElement(model, "mac"));
 	if (!R_FINITE(threshold_mac)) threshold_mac = -1;
 	model_y = REAL(GetListElement(model, "y"));
-	model_mu = REAL(GetListElement(model, "mu.a"));
-	model_mu2 = REAL(GetListElement(model, "mu2.a"));
+	model_mu = REAL(GetListElement(model, "mu"));
+	model_y_mu = REAL(GetListElement(model, "y_mu"));
+	model_mu2 = REAL(GetListElement(model, "mu2"));
 	model_null_XXVX_inv = GetListElement(model, "XXVX_inv");
 	model_null_XV = GetListElement(model, "XV");
 	model_varRatio = Rf_asReal(GetListElement(model, "var.ratio"));
@@ -138,23 +136,28 @@ BEGIN_RCPP
 		// XXVX_inv matrix, reuse memory
 		NumericMatrix mt2(model_null_XXVX_inv);
 		mat XXVX_inv(mt2.begin(), mt2.nrow(), mt2.ncol(), false);
-		// normalized genotypes
+		// adjusted genotypes
 		colvec g = G - XXVX_inv * (XV * G);
 
 		// inner product
-		double q  = vec_dot_f64(num_samp, model_y, &g[0]);
-		double m1 = vec_dot_f64(num_samp, model_mu, &g[0]);
+		double S = vec_dot_f64(num_samp, model_y_mu, &g[0]);
 		double var = dot(colvec(model_mu2, num_samp, false), g%g) * model_varRatio;
-		double S = q - m1;
 
 		// p-value
-		double pval = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
+		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
+		double pval = pval = pval_noadj;
 		double beta = S / var;
-		double se   = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
+		double se   = abs(beta/::Rf_qnorm5(pval_noadj/2, 0, 1, TRUE, FALSE));
 
-		NumericVector ans(6);
+		// need SPAtest or not?
+		if (pval_noadj <= 0.05)
+		{
+		}
+
+		NumericVector ans(7);
 		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
 		ans[3] = beta;  ans[4] = se;    ans[5] = pval;
+		ans[6] = pval_noadj;
 		return ans;
 	} else {
 		return R_NilValue;

@@ -25,7 +25,7 @@
 
 extern "C" double vec_dot_f64(size_t n, const double *p1, const double *p2)
 {
-	int nn=n, i=1;
-	return F77_NAME(ddot)(&nn, p1, &i, p2, &i);
+	int nn=n, inc=1;
+	return F77_NAME(ddot)(&nn, p1, &inc, p2, &inc);
 }
 

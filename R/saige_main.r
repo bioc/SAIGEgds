@@ -92,8 +92,9 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
 	mobj <- list(
 	    maf = maf, mac = mac,
         y     = unname(modobj$obj.noK$y[ii]),
-        mu.a  = mu[ii],
-        mu2.a = (mu * (1 - mu))[ii],
+        mu  = mu[ii],
+        y_mu  = unname(modobj$obj.noK$y[ii]) - mu[ii],  # y - mu
+        mu2 = (mu * (1 - mu))[ii],
         XXVX_inv = modobj$obj.noK$XXVX_inv[ii, ],
         XV = modobj$obj.noK$XV[, ii],
         var.ratio = mean(modobj$var.ratio, na.rm=TRUE)
@@ -133,6 +134,7 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         beta = sapply(rv, `[`, i=4L),
         SE   = sapply(rv, `[`, i=5L),
         pval = sapply(rv, `[`, i=6L),
+        pval.noadj = sapply(rv, `[`, i=7L),
         stringsAsFactors = FALSE
     )
 }
