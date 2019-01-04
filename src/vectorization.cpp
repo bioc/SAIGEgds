@@ -22,6 +22,12 @@
 #include <cstring>
 #include <R_ext/BLAS.h>
 
+// Streaming SIMD Extensions (SSE, SSE2)
+#if (defined(__SSE__) && defined(__SSE2__))
+#   include <xmmintrin.h>  // SSE
+#   include <emmintrin.h>  // SSE2
+#endif
+
 
 /// sum_i p[i]*s[i]
 extern "C" double vec_dot(size_t n, const double *p, const double *s)
@@ -35,6 +41,20 @@ extern "C" double vec_dot(size_t n, const double *p, const double *s)
 extern "C" double vec_dot_sp(size_t n, const double *p, const double *s)
 {
 	double sum = 0;
+
+#ifdef __SSE2__
+	__m128d sum2 = _mm_setzero_pd();
+	for (; n >= 2; n-=2)
+	{
+		__m128d d1 = _mm_loadu_pd(p); p += 2;
+		__m128d d2 = _mm_loadu_pd(s); s += 2;
+		__m128d dd = _mm_mul_pd(d1, _mm_mul_pd(d2, d2));
+		sum2 = _mm_add_pd(sum2, dd);
+	}
+	sum2 = _mm_add_pd(sum2, _mm_shuffle_pd(sum2, sum2, 0x01));
+	sum += _mm_cvtsd_f64(sum2);
+#endif
+
 	for (; n > 0; n--, p++, s++) sum += (*p) * (*s) * (*s);
 	return sum;
 }
