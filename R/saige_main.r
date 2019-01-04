@@ -13,7 +13,7 @@
 
 
 #######################################################################
-# Internal C functions
+# Internal functions
 #
 .cfunction0 <- function(name)
 {
@@ -34,6 +34,8 @@
     body(fn) <- f
     fn
 }
+
+.pretty <- function(x) prettyNum(x, big.mark=",", scientific=FALSE)
 
 
 
@@ -66,6 +68,9 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     stopifnot(is.numeric(mac), length(mac)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
+    if (verbose)
+        cat("SAIGE association analyses:\n")
+
     # check model
     if (is.character(modobj))
     {
@@ -82,10 +87,17 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     seqSetFilter(gdsfile, sample.id=modobj$sample.id, verbose=FALSE)
     sid <- seqGetData(gdsfile, "sample.id")
     if (length(sid) != length(modobj$sample.id))
-        stop("Some of sample IDs do not exist in the GDS file.")
+        stop("Some of sample IDs are not available in the GDS file.")
     ii <- match(sid, modobj$sample.id)
     if (any(is.na(ii)))
         stop("Sample IDs do not match.")
+
+    if (verbose)
+    {
+        dm <- SeqArray:::.seldim(gdsfile)
+        cat("    # of samples: ", .pretty(dm[2L]), "\n", sep="")
+        cat("    # of variants: ", .pretty(dm[3L]), "\n", sep="")
+    }
 
     # initialize the internal model
     y <- unname(modobj$obj.noK$y)
@@ -119,6 +131,12 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         x <- !x
         seqSetFilter(gdsfile, variant.sel=x, action="intersect", verbose=T)
         rv <- rv[x]
+    }
+
+    if (verbose)
+    {
+        cat("# of variants after MAF/MAC filtering: ", .pretty(length(rv)),
+            "\n", sep="")
     }
 
     # output
