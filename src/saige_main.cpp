@@ -27,6 +27,12 @@ using namespace Rcpp;
 using namespace arma;
 
 
+// calculation with vectorization
+extern "C" double vec_dot_f64(size_t n, const double *p1, const double *p2);
+
+
+
+
 /// Get the list element named str, or return NULL
 static SEXP GetListElement(SEXP list, const char *str)
 {
@@ -126,18 +132,18 @@ BEGIN_RCPP
 	{
 		// genotype vector, reuse memory and avoid extra copy
 		colvec G(ds.begin(), num_samp, false);
-		// XV matrix
+		// XV matrix, reuse memory
 		NumericMatrix mt1(model_null_XV);
 		mat XV(mt1.begin(), mt1.nrow(), mt1.ncol(), false);
-		// XXVX_inv matrix
+		// XXVX_inv matrix, reuse memory
 		NumericMatrix mt2(model_null_XXVX_inv);
 		mat XXVX_inv(mt2.begin(), mt2.nrow(), mt2.ncol(), false);
 		// normalized genotypes
 		colvec g = G - XXVX_inv * (XV * G);
 
-		// dot
-		double q  = dot(colvec(model_y, num_samp, false), g);
-		double m1 = dot(colvec(model_mu, num_samp, false), g);
+		// inner product
+		double q  = vec_dot_f64(num_samp, model_y, &g[0]);
+		double m1 = vec_dot_f64(num_samp, model_mu, &g[0]);
 		double var = dot(colvec(model_mu2, num_samp, false), g%g) * model_varRatio;
 		double S = q - m1;
 
