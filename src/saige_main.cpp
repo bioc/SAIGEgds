@@ -27,9 +27,10 @@ using namespace Rcpp;
 using namespace arma;
 
 
-// calculation with vectorization
-extern "C" double vec_dot_f64(size_t n, const double *p1, const double *p2);
-
+/// sum_i p[i]*s[i]
+extern "C" double vec_dot(size_t n, const double *p, const double *s);
+/// sum_i p[i]*s[i]*s[i]
+extern "C" double vec_dot_sp(size_t n, const double *p, const double *s);
 
 
 
@@ -140,12 +141,12 @@ BEGIN_RCPP
 		colvec g = G - XXVX_inv * (XV * G);
 
 		// inner product
-		double S = vec_dot_f64(num_samp, model_y_mu, &g[0]);
-		double var = dot(colvec(model_mu2, num_samp, false), g%g) * model_varRatio;
+		double S = vec_dot(num_samp, model_y_mu, &g[0]);
+		double var = vec_dot_sp(num_samp, model_mu2, &g[0]) * model_varRatio;
 
 		// p-value
 		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
-		double pval = pval = pval_noadj;
+		double pval = pval_noadj;
 		double beta = S / var;
 		double se   = abs(beta/::Rf_qnorm5(pval_noadj/2, 0, 1, TRUE, FALSE));
 

@@ -23,9 +23,19 @@
 #include <R_ext/BLAS.h>
 
 
-extern "C" double vec_dot_f64(size_t n, const double *p1, const double *p2)
+/// sum_i p[i]*s[i]
+extern "C" double vec_dot(size_t n, const double *p, const double *s)
 {
 	int nn=n, inc=1;
-	return F77_NAME(ddot)(&nn, p1, &inc, p2, &inc);
+	return F77_NAME(ddot)(&nn, p, &inc, s, &inc);
+}
+
+
+/// sum_i p[i]*s[i]*s[i]
+extern "C" double vec_dot_sp(size_t n, const double *p, const double *s)
+{
+	double sum = 0;
+	for (; n > 0; n--, p++, s++) sum += (*p) * (*s) * (*s);
+	return sum;
 }
 

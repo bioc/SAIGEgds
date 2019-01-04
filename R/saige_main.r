@@ -88,12 +88,12 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         stop("Sample IDs do not match.")
 
     # initialize the internal model
+    y <- unname(modobj$obj.noK$y)
     mu <- unname(modobj$fitted.values)
 	mobj <- list(
 	    maf = maf, mac = mac,
-        y     = unname(modobj$obj.noK$y[ii]),
-        mu  = mu[ii],
-        y_mu  = unname(modobj$obj.noK$y[ii]) - mu[ii],  # y - mu
+        y = y[ii], mu = mu[ii],
+        y_mu = y[ii] - mu[ii],  # y - mu
         mu2 = (mu * (1 - mu))[ii],
         XXVX_inv = modobj$obj.noK$XXVX_inv[ii, ],
         XV = modobj$obj.noK$XV[, ii],
