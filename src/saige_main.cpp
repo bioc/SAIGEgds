@@ -27,10 +27,10 @@ using namespace Rcpp;
 using namespace arma;
 
 
-/// sum_i p[i]*s[i]
-extern "C" double vec_dot(size_t n, const double *p, const double *s);
-/// sum_i p[i]*s[i]*s[i]
-extern "C" double vec_dot_sp(size_t n, const double *p, const double *s);
+/// sum_i x[i]*y[i]
+extern "C" double vec_dot(size_t n, const double *x, const double *y);
+/// sum_i x[i]*y[i]*y[i]
+extern "C" double vec_dot_sp(size_t n, const double *x, const double *y);
 
 
 
@@ -51,6 +51,7 @@ static SEXP GetListElement(SEXP list, const char *str)
 static double threshold_maf = 0;
 static double threshold_mac = 0;
 
+static int model_num_samp = 0;
 static double *model_y = NULL;
 static double *model_mu = NULL;
 static double *model_y_mu = NULL;
@@ -86,11 +87,15 @@ static void SummaryAndImputeGeno(double *ds, size_t n, double &AF, double &AC,
 RcppExport SEXP saige_score_test_init(SEXP model)
 {
 BEGIN_RCPP
+	// threshold setting
 	threshold_maf = Rf_asReal(GetListElement(model, "maf"));
 	if (!R_FINITE(threshold_maf)) threshold_maf = -1;
 	threshold_mac = Rf_asReal(GetListElement(model, "mac"));
 	if (!R_FINITE(threshold_mac)) threshold_mac = -1;
-	model_y = REAL(GetListElement(model, "y"));
+	// model parameters
+	SEXP y = GetListElement(model, "y");
+	model_num_samp = Rf_length(y);
+	model_y = REAL(y);
 	model_mu = REAL(GetListElement(model, "mu"));
 	model_y_mu = REAL(GetListElement(model, "y_mu"));
 	model_mu2 = REAL(GetListElement(model, "mu2"));

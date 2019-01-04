@@ -95,8 +95,8 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         y = y[ii], mu = mu[ii],
         y_mu = y[ii] - mu[ii],  # y - mu
         mu2 = (mu * (1 - mu))[ii],
-        XXVX_inv = modobj$obj.noK$XXVX_inv[ii, ],
-        XV = modobj$obj.noK$XV[, ii],
+        XXVX_inv = modobj$obj.noK$XXVX_inv[ii, ],  # n_samp x K
+        XV = modobj$obj.noK$XV[, ii],              # K x n_samp
         var.ratio = mean(modobj$var.ratio, na.rm=TRUE)
 	)
     if (!is.finite(mobj$var.ratio))
