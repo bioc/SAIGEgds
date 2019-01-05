@@ -28,9 +28,9 @@ using namespace arma;
 
 
 /// sum_i x[i]*y[i]
-extern "C" double vec_dot(size_t n, const double *x, const double *y);
+extern "C" double f64_dot(size_t n, const double *x, const double *y);
 /// sum_i x[i]*y[i]*y[i]
-extern "C" double vec_dot_sp(size_t n, const double *x, const double *y);
+extern "C" double f64_dot_sp(size_t n, const double *x, const double *y);
 
 
 
@@ -93,9 +93,8 @@ BEGIN_RCPP
 	threshold_mac = Rf_asReal(GetListElement(model, "mac"));
 	if (!R_FINITE(threshold_mac)) threshold_mac = -1;
 	// model parameters
-	SEXP y = GetListElement(model, "y");
-	model_num_samp = Rf_length(y);
-	model_y = REAL(y);
+	model_num_samp = Rf_length(GetListElement(model, "y"));
+	model_y = REAL(GetListElement(model, "y"));
 	model_mu = REAL(GetListElement(model, "mu"));
 	model_y_mu = REAL(GetListElement(model, "y_mu"));
 	model_mu2 = REAL(GetListElement(model, "mu2"));
@@ -146,8 +145,8 @@ BEGIN_RCPP
 		colvec g = G - XXVX_inv * (XV * G);
 
 		// inner product
-		double S = vec_dot(num_samp, model_y_mu, &g[0]);
-		double var = vec_dot_sp(num_samp, model_mu2, &g[0]) * model_varRatio;
+		double S = f64_dot(num_samp, model_y_mu, &g[0]);
+		double var = f64_dot_sp(num_samp, model_mu2, &g[0]) * model_varRatio;
 
 		// p-value
 		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);

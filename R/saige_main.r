@@ -37,6 +37,7 @@
 
 .pretty <- function(x) prettyNum(x, big.mark=",", scientific=FALSE)
 
+.version <- function() .Call(saige_simd_version)
 
 
 #######################################################################

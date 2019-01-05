@@ -1,6 +1,7 @@
 # Export the following names
 useDynLib(SAIGEgds,
-    saige_score_test_init
+    saige_score_test_init,
+    saige_simd_version
 )
 
 # Export all names
