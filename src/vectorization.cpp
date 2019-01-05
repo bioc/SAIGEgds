@@ -71,23 +71,23 @@
 #endif
 
 
-
 using namespace std;
+
 
 // ========================================================================= //
 
 #ifdef COREARRAY_TARGET_DEFAULT
-static const char *simd_version() COREARRAY_TARGET_DEFAULT
+static COREARRAY_TARGET_DEFAULT const char *simd_version()
 	{ return "generic"; }
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-static const char *simd_version() COREARRAY_TARGET_SSE2
+static COREARRAY_TARGET_SSE2 const char *simd_version()
 	{ return "SSE2"; }
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-static const char *simd_version() COREARRAY_TARGET_AVX
+static COREARRAY_TARGET_AVX const char *simd_version()
 	{ return "AVX"; }
 #endif
 
@@ -102,8 +102,8 @@ extern "C" SEXP saige_simd_version()
 // sum_i x[i]*y[i]
 
 #ifdef COREARRAY_TARGET_DEFAULT
-inline static double d_dot(size_t n, const double *x, const double *y)
-	COREARRAY_TARGET_DEFAULT
+inline static COREARRAY_TARGET_DEFAULT
+	double d_dot(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
 	for (; n > 0; n--) sum += (*x++) * (*y++);
@@ -112,8 +112,8 @@ inline static double d_dot(size_t n, const double *x, const double *y)
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-inline static double d_dot(size_t n, const double *x, const double *y)
-	COREARRAY_TARGET_SSE2
+inline static COREARRAY_TARGET_SSE2
+	double d_dot(size_t n, const double *x, const double *y)
 {
 	__m128d sum2 = _mm_setzero_pd();
 	for (; n >= 2; n-=2)
@@ -130,8 +130,8 @@ inline static double d_dot(size_t n, const double *x, const double *y)
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-inline static double d_dot(size_t n, const double *x, const double *y)
-	COREARRAY_TARGET_AVX
+inline static COREARRAY_TARGET_AVX
+	double d_dot(size_t n, const double *x, const double *y)
 {
 	// AVX
 	__m256d sum4 = _mm256_setzero_pd();
@@ -170,8 +170,8 @@ extern "C" double f64_dot(size_t n, const double *x, const double *y)
 // sum_i x[i]*y[i]*y[i]
 
 #ifdef COREARRAY_TARGET_DEFAULT
-inline static double d_dot_sp(size_t n, const double *x, const double *y)
-	COREARRAY_TARGET_DEFAULT
+inline static COREARRAY_TARGET_DEFAULT
+	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
 	for (; n > 0; n--) sum += (*x++) * (*y++);
@@ -180,8 +180,8 @@ inline static double d_dot_sp(size_t n, const double *x, const double *y)
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-inline static double d_dot_sp(size_t n, const double *x, const double *y)
-	COREARRAY_TARGET_SSE2
+inline static COREARRAY_TARGET_SSE2
+	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	__m128d sum2 = _mm_setzero_pd();
 	for (; n >= 2; n-=2)
@@ -198,8 +198,8 @@ inline static double d_dot_sp(size_t n, const double *x, const double *y)
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-inline static double d_dot_sp(size_t n, const double *x, const double *y)
-	COREARRAY_TARGET_AVX
+inline static COREARRAY_TARGET_AVX
+	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	// AVX
 	__m256d sum4 = _mm256_setzero_pd();
