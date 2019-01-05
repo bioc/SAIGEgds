@@ -32,7 +32,7 @@
 #       define COREARRAY_HAVE_TARGET_CLONES
 #       define COREARRAY_TARGET_CLONES(opt)    __attribute__((target_clones(opt)))
 #   endif
-//#elif defined(__clang__)
+//#elif defined(__clang__)  // not support
 //#   define COREARRAY_HAVE_TARGET
 //#   define COREARRAY_TARGET(opt)           __attribute__((target(opt)))
 //#   define COREARRAY_TARGET_CLONES(opt)    __attribute__((target_clones(opt)))
@@ -41,7 +41,7 @@
 #   define COREARRAY_TARGET_CLONES(opt)
 #endif
 
-#if COREARRAY_HAVE_TARGET
+#ifdef COREARRAY_HAVE_TARGET
 #   define COREARRAY_TARGET_DEFAULT
 #   define COREARRAY_TARGET_SSE2
 #   define COREARRAY_TARGET_AVX

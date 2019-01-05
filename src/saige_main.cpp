@@ -145,7 +145,9 @@ BEGIN_RCPP
 		colvec g = G - XXVX_inv * (XV * G);
 
 		// inner product
+		// S = sum(model_y_mu .* g)
 		double S = f64_dot(num_samp, model_y_mu, &g[0]);
+		// var = sum(model_mu2 .* g .* g)
 		double var = f64_dot_sp(num_samp, model_mu2, &g[0]) * model_varRatio;
 
 		// p-value
