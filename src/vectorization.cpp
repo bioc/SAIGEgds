@@ -85,7 +85,7 @@ extern "C" SEXP saige_simd_version()
 #ifdef COREARRAY_HAVE_TARGET_CLONES
 	char buffer[256];
 	stpncpy(buffer, s, sizeof(buffer));
-	strcpy(buffer+strlen(s), " (FMV)", 6);
+	strcpy(buffer+strlen(s), " (FMV)");
 	s = buffer;
 #endif
 	return mkString(s);
