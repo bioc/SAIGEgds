@@ -67,6 +67,8 @@
 #endif
 
 
+using namespace std;
+
 // ========================================================================= //
 
 #ifdef COREARRAY_TARGET_DEFAULT
