@@ -152,12 +152,33 @@ inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 	void d_sub_mul_mat_vec(size_t n, size_t m,
 		const double *x, const double *y, const double *z, double *p)
 {
-	for (; n > 0; n--)
+	switch (m)
 	{
-		double sum = 0;
-		for (size_t i=0; i < m; i++) sum += y[i] * z[i];
-		y += m;
-		*p++ = (*x++) - sum;
+	case 0:
+		break;
+	case 1:
+		for (size_t i=0; i < n; i++) p[i] = x[i] - z[0]*y[i];
+		break;
+	case 2:
+		for (size_t i=0; i < n; i++, y+=2)
+			p[i] = x[i] - z[0]*y[0] - z[1]*y[1];
+		break;
+	case 3:
+		for (size_t i=0; i < n; i++, y+=3)
+			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2];
+		break;
+	case 4:
+		for (size_t i=0; i < n; i++, y+=4)
+			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2] - z[3]*y[3];
+		break;
+	default:
+		for (; n > 0; n--)
+		{
+			double sum = 0;
+			for (size_t i=0; i < m; i++) sum += y[i] * z[i];
+			y += m;
+			*p++ = (*x++) - sum;
+		}
 	}
 }
 
