@@ -28,8 +28,9 @@ using namespace Rcpp;
 
 /// sum_i x[i]*y[i]
 extern "C" double f64_dot(size_t n, const double *x, const double *y);
-/// sum_i x[i]*y[i]*y[i]
-extern "C" double f64_dot_sp(size_t n, const double *x, const double *y);
+/// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
+extern "C" void f64_dot_sp(size_t n, const double *x1, const double *x2,
+	const double *y, double &out1, double &out2);
 /// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
 extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, double *p);
 /// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
@@ -153,11 +154,11 @@ BEGIN_RCPP
 			&ds[0], model_t_XXVX_inv, buf_coeff, buf_adj_g);
 
 		// inner product
+		double S, var;
 		// S = sum(model_y_mu .* adj_g)
-		double S = f64_dot(model_num_samp, model_y_mu, buf_adj_g);
 		// var = sum(model_mu2 .* adj_g .* adj_g) * varRatio
-		double var = f64_dot_sp(model_num_samp, model_mu2, buf_adj_g) *
-			model_varRatio;
+		f64_dot_sp(model_num_samp, model_y_mu, model_mu2, buf_adj_g, S, var);
+		var *= model_varRatio;
 
 		// p-value
 		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);

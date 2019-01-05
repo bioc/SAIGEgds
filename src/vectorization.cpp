@@ -81,7 +81,14 @@ static COREARRAY_TARGET_AVX const char *simd_version() { return "AVX"; }
 /// SIMD version
 extern "C" SEXP saige_simd_version()
 {
-	return mkString(simd_version());
+	const char *s = simd_version();
+#ifdef COREARRAY_HAVE_TARGET_CLONES
+	char buffer[256];
+	stpncpy(buffer, s, sizeof(buffer));
+	strcpy(buffer+strlen(s), " (FMV)", 6);
+	s = buffer;
+#endif
+	return mkString(s);
 }
 
 
@@ -104,20 +111,26 @@ extern "C" double f64_dot(size_t n, const double *x, const double *y)
 
 
 // ========================================================================= //
-// sum_i x[i]*y[i]*y[i]
+// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
 
 inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
-	double d_dot_sp(size_t n, const double *x, const double *y)
+	void d_dot_sp(size_t n, const double *x1, const double *x2, const double *y,
+		double &out1, double &out2)
 {
-	double sum = 0;
-	for (size_t i=0; i < n; i++) sum += x[i] * y[i] * y[i];
-	return sum;
+	double sum1=0, sum2=0;
+	for (size_t i=0; i < n; i++)
+	{
+		sum1 += x1[i] * y[i];
+		sum2 += x2[i] * y[i] * y[i];
+	}
+	out1 = sum1; out2 = sum2;
 }
 
-/// sum_i x[i]*y[i]*y[i]
-extern "C" double f64_dot_sp(size_t n, const double *x, const double *y)
+/// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
+extern "C" void f64_dot_sp(size_t n, const double *x1, const double *x2,
+	const double *y, double &out1, double &out2)
 {
-	return d_dot_sp(n, x, y);
+	d_dot_sp(n, x1, x2, y, out1, out2);
 }
 
 
@@ -154,8 +167,6 @@ inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 {
 	switch (m)
 	{
-	case 0:
-		break;
 	case 1:
 		for (size_t i=0; i < n; i++) p[i] = x[i] - z[0]*y[i];
 		break;
@@ -204,6 +215,4 @@ extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
 {
 	d_sub_mul_mat_vec(n, m, x, y, z, p);
 }
-
-
 
