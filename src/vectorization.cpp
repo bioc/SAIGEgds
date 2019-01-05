@@ -19,7 +19,10 @@
 // License along with SAIGEgds.
 // If not, see <http://www.gnu.org/licenses/>.
 
-#ifdef __GNUC__
+#if defined(__clang__)
+#pragma GCC optimize("O3")
+#pragma clang optimize on
+#elif defined(__GNUC__)
 #pragma GCC optimize("O3")
 #endif
 
