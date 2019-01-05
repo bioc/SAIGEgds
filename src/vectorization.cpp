@@ -75,12 +75,12 @@ static COREARRAY_TARGET("default") const char *simd_version()
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-static COREARRAY_TARGET("SSE2") const char *simd_version()
+static COREARRAY_TARGET("sse2") const char *simd_version()
 	{ return "SSE2"; }
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-static COREARRAY_TARGET("AVX") const char *simd_version()
+static COREARRAY_TARGET("avx") const char *simd_version()
 	{ return "AVX"; }
 #endif
 
@@ -105,7 +105,7 @@ inline static COREARRAY_TARGET("default")
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-inline static COREARRAY_TARGET("SSE2")
+inline static COREARRAY_TARGET("sse2")
 	double d_dot(size_t n, const double *x, const double *y)
 {
 	__m128d sum2 = _mm_setzero_pd();
@@ -123,7 +123,7 @@ inline static COREARRAY_TARGET("SSE2")
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-inline static COREARRAY_TARGET("AVX")
+inline static COREARRAY_TARGET("avx")
 	double d_dot(size_t n, const double *x, const double *y)
 {
 	// AVX
@@ -173,7 +173,7 @@ inline static COREARRAY_TARGET("default")
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-inline static COREARRAY_TARGET("SSE2")
+inline static COREARRAY_TARGET("sse2")
 	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	__m128d sum2 = _mm_setzero_pd();
@@ -191,7 +191,7 @@ inline static COREARRAY_TARGET("SSE2")
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-inline static COREARRAY_TARGET("AVX")
+inline static COREARRAY_TARGET("avx")
 	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	// AVX
