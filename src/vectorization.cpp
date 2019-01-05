@@ -42,9 +42,9 @@
 #endif
 
 #ifdef COREARRAY_HAVE_TARGET
-#   define COREARRAY_TARGET_DEFAULT
-#   define COREARRAY_TARGET_SSE2
-#   define COREARRAY_TARGET_AVX
+#   define COREARRAY_TARGET_DEFAULT    COREARRAY_TARGET("default")
+#   define COREARRAY_TARGET_SSE2       COREARRAY_TARGET("sse2")
+#   define COREARRAY_TARGET_AVX        COREARRAY_TARGET("avx")
 #else
 #   if defined(__AVX__)
 #       define COREARRAY_TARGET_AVX
@@ -77,17 +77,17 @@ using namespace std;
 // ========================================================================= //
 
 #ifdef COREARRAY_TARGET_DEFAULT
-static COREARRAY_TARGET("default") const char *simd_version()
+static COREARRAY_TARGET_DEFAULT const char *simd_version()
 	{ return "generic"; }
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-static COREARRAY_TARGET("sse2") const char *simd_version()
+static COREARRAY_TARGET_SSE2 const char *simd_version()
 	{ return "SSE2"; }
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-static COREARRAY_TARGET("avx") const char *simd_version()
+static COREARRAY_TARGET_AVX const char *simd_version()
 	{ return "AVX"; }
 #endif
 
@@ -102,7 +102,7 @@ extern "C" SEXP saige_simd_version()
 // sum_i x[i]*y[i]
 
 #ifdef COREARRAY_TARGET_DEFAULT
-inline static COREARRAY_TARGET("default")
+inline static COREARRAY_TARGET_DEFAULT
 	double d_dot(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
@@ -112,7 +112,7 @@ inline static COREARRAY_TARGET("default")
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-inline static COREARRAY_TARGET("sse2")
+inline static COREARRAY_TARGET_SSE2
 	double d_dot(size_t n, const double *x, const double *y)
 {
 	__m128d sum2 = _mm_setzero_pd();
@@ -130,7 +130,7 @@ inline static COREARRAY_TARGET("sse2")
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-inline static COREARRAY_TARGET("avx")
+inline static COREARRAY_TARGET_AVX
 	double d_dot(size_t n, const double *x, const double *y)
 {
 	// AVX
@@ -170,7 +170,7 @@ extern "C" double f64_dot(size_t n, const double *x, const double *y)
 // sum_i x[i]*y[i]*y[i]
 
 #ifdef COREARRAY_TARGET_DEFAULT
-inline static COREARRAY_TARGET("default")
+inline static COREARRAY_TARGET_DEFAULT
 	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
@@ -180,7 +180,7 @@ inline static COREARRAY_TARGET("default")
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-inline static COREARRAY_TARGET("sse2")
+inline static COREARRAY_TARGET_SSE2
 	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	__m128d sum2 = _mm_setzero_pd();
@@ -198,7 +198,7 @@ inline static COREARRAY_TARGET("sse2")
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-inline static COREARRAY_TARGET("avx")
+inline static COREARRAY_TARGET_AVX
 	double d_dot_sp(size_t n, const double *x, const double *y)
 {
 	// AVX
