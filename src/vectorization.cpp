@@ -172,31 +172,31 @@ inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 		break;
 	case 2:
 		for (size_t i=0; i < n; i++, y+=2)
-			p[i] = x[i] - z[0]*y[0] - z[1]*y[1];
+			p[i] = x[i] - (z[0]*y[0] + z[1]*y[1]);
 		break;
 	case 3:
 		for (size_t i=0; i < n; i++, y+=3)
-			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2];
+			p[i] = x[i] - (z[0]*y[0] + z[1]*y[1] + z[2]*y[2]);
 		break;
 	case 4:
 		for (size_t i=0; i < n; i++, y+=4)
-			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2] - z[3]*y[3];
+			p[i] = x[i] - (z[0]*y[0] + z[1]*y[1] + z[2]*y[2] + z[3]*y[3]);
 		break;
 	case 5:
 		for (size_t i=0; i < n; i++, y+=5)
-			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2] - z[3]*y[3] - z[4]*y[4];
+			p[i] = x[i] - (z[0]*y[0] + z[1]*y[1] + z[2]*y[2] + z[3]*y[3] + z[4]*y[4]);
 		break;
 	case 6:
 		for (size_t i=0; i < n; i++, y+=6)
-			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2] - z[3]*y[3] - z[4]*y[4] - z[5]*y[5];
+			p[i] = x[i] - (z[0]*y[0] + z[1]*y[1] + z[2]*y[2] + z[3]*y[3] + z[4]*y[4] + z[5]*y[5]);
 		break;
 	case 7:
 		for (size_t i=0; i < n; i++, y+=7)
-			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2] - z[3]*y[3] - z[4]*y[4] - z[5]*y[5] - z[6]*y[6];
+			p[i] = x[i] - (z[0]*y[0] + z[1]*y[1] + z[2]*y[2] + z[3]*y[3] + z[4]*y[4] + z[5]*y[5] + z[6]*y[6]);
 		break;
 	case 8:
 		for (size_t i=0; i < n; i++, y+=8)
-			p[i] = x[i] - z[0]*y[0] - z[1]*y[1] - z[2]*y[2] - z[3]*y[3] - z[4]*y[4] - z[5]*y[5] - z[6]*y[6] - z[7]*y[7];
+			p[i] = x[i] - (z[0]*y[0] + z[1]*y[1] + z[2]*y[2] + z[3]*y[3] + z[4]*y[4] + z[5]*y[5] + z[6]*y[6] + z[7]*y[7]);
 		break;
 	default:
 		for (; n > 0; n--)
