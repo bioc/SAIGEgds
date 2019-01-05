@@ -56,15 +56,20 @@
 #endif
 
 
-// Streaming SIMD Extensions (SSE, SSE2)
-#if (defined(__SSE__) && defined(__SSE2__))
+#ifdef COREARRAY_HAVE_TARGET
 #   include <xmmintrin.h>  // SSE
 #   include <emmintrin.h>  // SSE2
+#   include <immintrin.h>  // AVX, AVX2
+#else
+#   if (defined(__SSE__) && defined(__SSE2__))
+#       include <xmmintrin.h>  // SSE
+#       include <emmintrin.h>  // SSE2
+#   endif
+#   if defined(__AVX__) || defined(__AVX2__)
+#       include <immintrin.h>  // AVX, AVX2
+#   endif
 #endif
 
-#if defined(__AVX__) || defined(__AVX2__)
-#   include <immintrin.h>  // AVX, AVX2
-#endif
 
 
 using namespace std;
