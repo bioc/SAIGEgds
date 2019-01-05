@@ -23,8 +23,10 @@
 #pragma GCC optimize("O3")
 #endif
 
-// Function multiversioning
+// Function multiversioning (requiring target_clones)
 #if (defined(__GNUC__) && (__GNUC__ >= 6))
+#   define COREARRAY_HAVE_TARGET
+#   define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
 #   define COREARRAY_HAVE_TARGET_CLONES
 #   define COREARRAY_TARGET_CLONES(opt)    __attribute__((target_clones(opt)))
 //#elif defined(__clang__)  // not support
@@ -32,7 +34,22 @@
 //#   define COREARRAY_TARGET(opt)           __attribute__((target(opt)))
 //#   define COREARRAY_TARGET_CLONES(opt)    __attribute__((target_clones(opt)))
 #else
+#   define COREARRAY_TARGET(opt)
 #   define COREARRAY_TARGET_CLONES(opt)
+#endif
+
+#ifdef COREARRAY_HAVE_TARGET
+#   define COREARRAY_TARGET_DEFAULT    COREARRAY_TARGET("default")
+#   define COREARRAY_TARGET_SSE2       COREARRAY_TARGET("sse2")
+#   define COREARRAY_TARGET_AVX        COREARRAY_TARGET("avx")
+#else
+#   if defined(__AVX__)
+#       define COREARRAY_TARGET_AVX
+#   elif defined(__SSE2__)
+#       define COREARRAY_TARGET_SSE2
+#   else
+#       define COREARRAY_TARGET_DEFAULT
+#   endif
 #endif
 
 
@@ -46,16 +63,20 @@ using namespace std;
 
 // ========================================================================= //
 
-static COREARRAY_TARGET_CLONES("avx,sse2,default") const char *simd_version()
-{
-#if defined(__AVX__)
-	return "AVX";
-#elif defined(__SSE2__)
-	return "SSE2";
-#else
-	return "generic";
+#ifdef COREARRAY_TARGET_DEFAULT
+static COREARRAY_TARGET_DEFAULT const char *simd_version()
+	{ return "generic"; }
 #endif
-}
+
+#ifdef COREARRAY_TARGET_SSE2
+static COREARRAY_TARGET_SSE2 const char *simd_version()
+	{ return "SSE2"; }
+#endif
+
+#ifdef COREARRAY_TARGET_AVX
+static COREARRAY_TARGET_AVX const char *simd_version()
+	{ return "AVX"; }
+#endif
 
 /// SIMD version
 extern "C" SEXP saige_simd_version()
