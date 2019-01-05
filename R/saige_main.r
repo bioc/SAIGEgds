@@ -108,9 +108,11 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         y = y[ii], mu = mu[ii],
         y_mu = y[ii] - mu[ii],  # y - mu
         mu2 = (mu * (1 - mu))[ii],
-        XXVX_inv = modobj$obj.noK$XXVX_inv[ii, ],  # n_samp x K
-        XV = modobj$obj.noK$XV[, ii],              # K x n_samp
-        var.ratio = mean(modobj$var.ratio, na.rm=TRUE)
+        t_XXVX_inv = t(modobj$obj.noK$XXVX_inv[ii, ]),  # K x n_samp (K << n_samp, more efficient)
+        XV = modobj$obj.noK$XV[, ii],  # K x n_samp
+        var.ratio = mean(modobj$var.ratio, na.rm=TRUE),
+        buf1 = double(nrow(modobj$obj.noK$XV)),
+        buf2 = double(length(y))
 	)
     if (!is.finite(mobj$var.ratio))
         stop("Invalid variance ratio in the SAIGE model.")

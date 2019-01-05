@@ -20,22 +20,26 @@
 // If not, see <http://www.gnu.org/licenses/>.
 
 
-#include <RcppArmadillo.h>
+#include <Rcpp.h>
 #include <algorithm>
 
 using namespace Rcpp;
-using namespace arma;
 
 
 /// sum_i x[i]*y[i]
 extern "C" double f64_dot(size_t n, const double *x, const double *y);
 /// sum_i x[i]*y[i]*y[i]
 extern "C" double f64_dot_sp(size_t n, const double *x, const double *y);
+/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
+extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, double *p);
+/// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
+extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
+	const double *x, const double *y, const double *z, double *p);
 
 
 
 /// Get the list element named str, or return NULL
-static SEXP GetListElement(SEXP list, const char *str)
+static SEXP get_item(SEXP list, const char *str)
 {
 	SEXP names = Rf_getAttrib(list, R_NamesSymbol);
 	R_xlen_t n = XLENGTH(list);
@@ -52,14 +56,17 @@ static double threshold_maf = 0;
 static double threshold_mac = 0;
 
 static int model_num_samp = 0;
+static int model_num_coeff = 0;
 static double *model_y = NULL;
 static double *model_mu = NULL;
 static double *model_y_mu = NULL;
 static double *model_mu2 = NULL;
-static SEXP model_null_XXVX_inv = NULL;
-static SEXP model_null_XV = NULL;
+static double *model_t_XXVX_inv = NULL;
+static double *model_XV = NULL;
 static double model_varRatio = 0;
 
+static double *buf_coeff = NULL;
+static double *buf_adj_g = NULL;
 
 
 /// return allele frequency and impute genotype using the mean
@@ -88,19 +95,24 @@ RcppExport SEXP saige_score_test_init(SEXP model)
 {
 BEGIN_RCPP
 	// threshold setting
-	threshold_maf = Rf_asReal(GetListElement(model, "maf"));
+	threshold_maf = Rf_asReal(get_item(model, "maf"));
 	if (!R_FINITE(threshold_maf)) threshold_maf = -1;
-	threshold_mac = Rf_asReal(GetListElement(model, "mac"));
+	threshold_mac = Rf_asReal(get_item(model, "mac"));
 	if (!R_FINITE(threshold_mac)) threshold_mac = -1;
 	// model parameters
-	model_num_samp = Rf_length(GetListElement(model, "y"));
-	model_y = REAL(GetListElement(model, "y"));
-	model_mu = REAL(GetListElement(model, "mu"));
-	model_y_mu = REAL(GetListElement(model, "y_mu"));
-	model_mu2 = REAL(GetListElement(model, "mu2"));
-	model_null_XXVX_inv = GetListElement(model, "XXVX_inv");
-	model_null_XV = GetListElement(model, "XV");
-	model_varRatio = Rf_asReal(GetListElement(model, "var.ratio"));
+	model_num_samp = Rf_length(get_item(model, "y"));
+	model_y = REAL(get_item(model, "y"));
+	model_mu = REAL(get_item(model, "mu"));
+	model_y_mu = REAL(get_item(model, "y_mu"));
+	model_mu2 = REAL(get_item(model, "mu2"));
+	model_t_XXVX_inv = REAL(get_item(model, "t_XXVX_inv"));
+	model_XV = REAL(get_item(model, "XV"));
+	model_varRatio = Rf_asReal(get_item(model, "var.ratio"));
+	NumericMatrix m(get_item(model, "XV"));
+	model_num_coeff = m.nrow();
+	// buffer
+	buf_coeff = REAL(get_item(model, "buf1"));
+	buf_adj_g = REAL(get_item(model, "buf2"));
 	return R_NilValue;
 END_RCPP
 }
@@ -133,22 +145,19 @@ BEGIN_RCPP
 	double mac = std::min(AC, 2*Num - AC);
 	if (Num>0 && maf>=threshold_maf && mac>=threshold_mac)
 	{
-		// genotype vector, reuse memory and avoid extra copy
-		colvec G(ds.begin(), num_samp, false);
-		// XV matrix, reuse memory
-		NumericMatrix mt1(model_null_XV);
-		mat XV(mt1.begin(), mt1.nrow(), mt1.ncol(), false);
-		// XXVX_inv matrix, reuse memory
-		NumericMatrix mt2(model_null_XXVX_inv);
-		mat XXVX_inv(mt2.begin(), mt2.nrow(), mt2.ncol(), false);
-		// adjusted genotypes
-		colvec g = G - XXVX_inv * (XV * G);
+		// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
+		// coeff = XV * G
+		f64_mul_mat_vec(model_num_samp, model_num_coeff, model_XV, &ds[0], buf_coeff);
+		// adj_g = G - XXVX_inv * coeff
+		f64_sub_mul_mat_vec(model_num_samp, model_num_coeff,
+			&ds[0], model_t_XXVX_inv, buf_coeff, buf_adj_g);
 
 		// inner product
-		// S = sum(model_y_mu .* g)
-		double S = f64_dot(num_samp, model_y_mu, &g[0]);
-		// var = sum(model_mu2 .* g .* g)
-		double var = f64_dot_sp(num_samp, model_mu2, &g[0]) * model_varRatio;
+		// S = sum(model_y_mu .* adj_g)
+		double S = f64_dot(model_num_samp, model_y_mu, buf_adj_g);
+		// var = sum(model_mu2 .* adj_g .* adj_g) * varRatio
+		double var = f64_dot_sp(model_num_samp, model_mu2, buf_adj_g) *
+			model_varRatio;
 
 		// p-value
 		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);

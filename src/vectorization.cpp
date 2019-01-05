@@ -67,18 +67,15 @@ using namespace std;
 // ========================================================================= //
 
 #ifdef COREARRAY_TARGET_DEFAULT
-static COREARRAY_TARGET_DEFAULT const char *simd_version()
-	{ return "generic"; }
+static COREARRAY_TARGET_DEFAULT const char *simd_version() { return "generic"; }
 #endif
 
 #ifdef COREARRAY_TARGET_SSE2
-static COREARRAY_TARGET_SSE2 const char *simd_version()
-	{ return "SSE2"; }
+static COREARRAY_TARGET_SSE2 const char *simd_version() { return "SSE2"; }
 #endif
 
 #ifdef COREARRAY_TARGET_AVX
-static COREARRAY_TARGET_AVX const char *simd_version()
-	{ return "AVX"; }
+static COREARRAY_TARGET_AVX const char *simd_version() { return "AVX"; }
 #endif
 
 /// SIMD version
@@ -125,14 +122,51 @@ extern "C" double f64_dot_sp(size_t n, const double *x, const double *y)
 
 
 // ========================================================================= //
+// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
 
-/// y[i] += alpha * x[i]
-inline static void _axpy(size_t n, double alpha, const double *x, double *y)
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	void d_mul_m_v(size_t n, size_t m, const double *x, const double *y, double *p)
 {
-	for (; n > 0; n--) (*y++) += alpha * (*x++);
+	memset(p, 0, sizeof(double)*m);
+	for (; n > 0; n--)
+	{
+		double alpha = *y++;
+		if (alpha != 0) // sparse vector
+			for (size_t i=0; i < m; i++) p[i] += alpha * x[i];
+		x += m;
+	}
+}
+
+/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
+extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x,
+	const double *y, double *p)
+{
+	d_mul_m_v(n, m, x, y, p);
 }
 
 
+// ========================================================================= //
+// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
+
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	void d_sub_mul_mat_vec(size_t n, size_t m,
+		const double *x, const double *y, const double *z, double *p)
+{
+	for (; n > 0; n--)
+	{
+		double sum = 0;
+		for (size_t i=0; i < m; i++) sum += y[i] * z[i];
+		y += m;
+		*p++ = (*x++) - sum;
+	}
+}
+
+/// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
+extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
+	const double *x, const double *y, const double *z, double *p)
+{
+	d_sub_mul_mat_vec(n, m, x, y, z, p);
+}
 
 
 
