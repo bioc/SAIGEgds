@@ -19,9 +19,9 @@
 // License along with SAIGEgds.
 // If not, see <http://www.gnu.org/licenses/>.
 
-#include <cstring>
-#include <Rdefines.h>
-#include <R.h>
+#ifdef __GNUC__
+#pragma GCC optimize("O3")
+#endif
 
 
 // Function multiversioning
@@ -69,6 +69,10 @@
 #       include <immintrin.h>  // AVX, AVX2
 #   endif
 #endif
+
+#include <cstring>
+#include <Rdefines.h>
+#include <R.h>
 
 
 using namespace std;
