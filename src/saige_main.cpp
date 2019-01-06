@@ -1,6 +1,6 @@
 // ===========================================================
 //
-// saige_main.cpp: Identity by state (IBS) Analysis on GWAS
+// saige_main.cpp: SAIGE association analyses
 //
 // Copyright (C) 2019    Xiuwen Zheng
 //
@@ -26,6 +26,10 @@
 using namespace Rcpp;
 
 
+/// y[i] = x - y[i]
+extern "C" void f64_sub(size_t n, double x, double *y);
+/// y[i] = x * y[i]
+extern "C" void f64_mul(size_t n, double x, double *y);
 /// sum_i x[i]*y[i]
 extern "C" double f64_dot(size_t n, const double *x, const double *y);
 /// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
@@ -37,6 +41,9 @@ extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x, const doubl
 extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
 	const double *x, const double *y, const double *z, double *p);
 
+
+extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
+	const double mu[], const double g[], double cutoff, bool &converged);
 
 
 /// Get the list element named str, or return NULL
@@ -74,19 +81,17 @@ static double *buf_adj_g = NULL;
 static void SummaryAndImputeGeno(double *ds, size_t n, double &AF, double &AC,
 	int &Num)
 {
-	double sum = 0;
-	int num = 0;
+	double sum = 0; int num = 0;
 	for (size_t i=0; i < n; i++)
-	{
-		if (R_FINITE(ds[i]))
-		{
-			sum += ds[i];
-			num ++;
-		}
-	}
-	AC = sum;
+		if (R_FINITE(ds[i])) { sum += ds[i]; num ++; }
 	AF = (num > 0) ? (sum/(2*num)) : R_NaN;
-	Num = num;
+	AC = sum; Num = num;
+	if (num < (int)n)
+	{
+		double d = AF * 2;
+		for (size_t i=0; i < n; i++)
+			if (!R_FINITE(ds[i])) ds[i] = d;
+	}
 }
 
 
@@ -146,6 +151,9 @@ BEGIN_RCPP
 	double mac = std::min(AC, 2*Num - AC);
 	if (Num>0 && maf>=threshold_maf && mac>=threshold_mac)
 	{
+		bool minus = (AF > 0.5);
+		if (minus) f64_sub(model_num_samp, 2, &ds[0]);
+
 		// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
 		// coeff = XV * G
 		f64_mul_mat_vec(model_num_samp, model_num_coeff, model_XV, &ds[0], buf_coeff);
@@ -155,26 +163,44 @@ BEGIN_RCPP
 
 		// inner product
 		double S, var;
-		// S = sum(model_y_mu .* adj_g)
-		// var = sum(model_mu2 .* adj_g .* adj_g) * varRatio
+		// S = sum((y - mu) .* adj_g)
+		// var = sum(mu*(1-mu) .* adj_g .* adj_g)
 		f64_dot_sp(model_num_samp, model_y_mu, model_mu2, buf_adj_g, S, var);
 		var *= model_varRatio;
 
 		// p-value
 		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
 		double pval = pval_noadj;
-		double beta = S / var;
-		double se   = abs(beta/::Rf_qnorm5(pval_noadj/2, 0, 1, TRUE, FALSE));
+		double beta = (minus ? -1 : 1) * S / var;
+		bool converged = true;
 
 		// need SPAtest or not?
 		if (pval_noadj <= 0.05)
 		{
+			double AC2 = minus ? (2*Num - AC) : AC;
+			// adj_g = adj_g / AC2
+			f64_mul(model_num_samp, 1/sqrt(AC2), buf_adj_g);
+			// q = sum(y .* adj_g)
+			double q = f64_dot(model_num_samp, model_y, buf_adj_g);
+			double m1, var2;
+			// m1 = sum(mu .* adj_g)
+			// var2 = sum(mu*(1-mu) .* adj_g .* adj_g)
+			f64_dot_sp(model_num_samp, model_mu, model_mu2, buf_adj_g, m1, var2);
+			double var1 = var2 * model_varRatio;
+			double Tstat = q - m1;
+			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;
+			// call Saddle_Prob in SPAtest
+			pval = Saddle_Prob(qtilde, m1, var1, model_num_samp, model_mu,
+				buf_adj_g, 2, converged);
+			beta = (Tstat / var1) / sqrt(AC2);
 		}
+		double SE = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
 
-		NumericVector ans(7);
+		NumericVector ans(8);
 		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
-		ans[3] = beta;  ans[4] = se;    ans[5] = pval;
+		ans[3] = beta;  ans[4] = SE;    ans[5] = pval;
 		ans[6] = pval_noadj;
+		ans[7] = converged ? 1 : 0;
 		return ans;
 	} else {
 		return R_NilValue;

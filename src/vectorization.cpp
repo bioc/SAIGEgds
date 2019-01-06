@@ -93,6 +93,38 @@ extern "C" SEXP saige_simd_version()
 
 
 // ========================================================================= //
+// y[i] = x - y[i]
+
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	void d_sub(size_t n, double x, double *y)
+{
+	for (size_t i=0; i < n; i++) y[i] = x - y[i];
+}
+
+/// y[i] = x - y[i]
+extern "C" void f64_sub(size_t n, double x, double *y)
+{
+	d_sub(n, x, y);
+}
+
+
+// ========================================================================= //
+// y[i] = x * y[i]
+
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	void d_mul(size_t n, double x, double *y)
+{
+	for (size_t i=0; i < n; i++) y[i] *= x;
+}
+
+/// y[i] = x - y[i]
+extern "C" void f64_mul(size_t n, double x, double *y)
+{
+	d_mul(n, x, y);
+}
+
+
+// ========================================================================= //
 // sum_i x[i]*y[i]
 
 inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
