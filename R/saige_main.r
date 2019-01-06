@@ -58,7 +58,7 @@
 
 
 #######################################################################
-# Open a SNP GDS file
+# SAIGE single-variant analysis
 #
 
 seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
@@ -156,7 +156,7 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         SE   = sapply(rv, `[`, i=5L),
         pval = sapply(rv, `[`, i=6L),
         pval.noadj = sapply(rv, `[`, i=7L),
-        converged  = sapply(rv, `[`, i=8L)==1,
+        SPA.converge = sapply(rv, `[`, i=8L)==1,
         stringsAsFactors = FALSE
     )
 }

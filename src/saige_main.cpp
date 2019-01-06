@@ -41,9 +41,9 @@ extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x, const doubl
 extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
 	const double *x, const double *y, const double *z, double *p);
 
-
+/// SPAtest
 extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
-	const double mu[], const double g[], double cutoff, bool &converged);
+	const double mu[], const double g[], double cutoff, bool &converge);
 
 
 /// Get the list element named str, or return NULL
@@ -60,17 +60,19 @@ static SEXP get_item(SEXP list, const char *str)
 }
 
 
-static double threshold_maf = 0;
-static double threshold_mac = 0;
+static double threshold_maf = 0;  //< the threshold of MAF filter
+static double threshold_mac = 0;  //< the threshold of MAC filter
 
-static int model_num_samp = 0;
-static int model_num_coeff = 0;
+static int model_NSamp = 0;   //< the number of samples
+static int model_NCoeff = 0;  //< the number of beta coefficients
+
 static double *model_y = NULL;
 static double *model_mu = NULL;
 static double *model_y_mu = NULL;
 static double *model_mu2 = NULL;
 static double *model_t_XXVX_inv = NULL;
 static double *model_XV = NULL;
+
 static double model_varRatio = 0;
 
 static double *buf_coeff = NULL;
@@ -106,7 +108,7 @@ BEGIN_RCPP
 	threshold_mac = Rf_asReal(get_item(model, "mac"));
 	if (!R_FINITE(threshold_mac)) threshold_mac = -1;
 	// model parameters
-	model_num_samp = Rf_length(get_item(model, "y"));
+	model_NSamp = Rf_length(get_item(model, "y"));
 	model_y = REAL(get_item(model, "y"));
 	model_mu = REAL(get_item(model, "mu"));
 	model_y_mu = REAL(get_item(model, "y_mu"));
@@ -115,7 +117,7 @@ BEGIN_RCPP
 	model_XV = REAL(get_item(model, "XV"));
 	model_varRatio = Rf_asReal(get_item(model, "var.ratio"));
 	NumericMatrix m(get_item(model, "XV"));
-	model_num_coeff = m.nrow();
+	model_NCoeff = m.nrow();
 	// buffer
 	buf_coeff = REAL(get_item(model, "buf1"));
 	buf_adj_g = REAL(get_item(model, "buf2"));
@@ -152,46 +154,46 @@ BEGIN_RCPP
 	if (Num>0 && maf>=threshold_maf && mac>=threshold_mac)
 	{
 		bool minus = (AF > 0.5);
-		if (minus) f64_sub(model_num_samp, 2, &ds[0]);
+		if (minus) f64_sub(model_NSamp, 2, &ds[0]);
 
 		// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
 		// coeff = XV * G
-		f64_mul_mat_vec(model_num_samp, model_num_coeff, model_XV, &ds[0], buf_coeff);
+		f64_mul_mat_vec(model_NSamp, model_NCoeff, model_XV, &ds[0], buf_coeff);
 		// adj_g = G - XXVX_inv * coeff
-		f64_sub_mul_mat_vec(model_num_samp, model_num_coeff,
+		f64_sub_mul_mat_vec(model_NSamp, model_NCoeff,
 			&ds[0], model_t_XXVX_inv, buf_coeff, buf_adj_g);
 
 		// inner product
 		double S, var;
 		// S = sum((y - mu) .* adj_g)
 		// var = sum(mu*(1-mu) .* adj_g .* adj_g)
-		f64_dot_sp(model_num_samp, model_y_mu, model_mu2, buf_adj_g, S, var);
+		f64_dot_sp(model_NSamp, model_y_mu, model_mu2, buf_adj_g, S, var);
 		var *= model_varRatio;
 
 		// p-value
 		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
 		double pval = pval_noadj;
 		double beta = (minus ? -1 : 1) * S / var;
-		bool converged = true;
+		bool converge = true;
 
 		// need SPAtest or not?
 		if (pval_noadj <= 0.05)
 		{
 			double AC2 = minus ? (2*Num - AC) : AC;
 			// adj_g = adj_g / AC2
-			f64_mul(model_num_samp, 1/sqrt(AC2), buf_adj_g);
+			f64_mul(model_NSamp, 1/sqrt(AC2), buf_adj_g);
 			// q = sum(y .* adj_g)
-			double q = f64_dot(model_num_samp, model_y, buf_adj_g);
+			double q = f64_dot(model_NSamp, model_y, buf_adj_g);
 			double m1, var2;
 			// m1 = sum(mu .* adj_g)
 			// var2 = sum(mu*(1-mu) .* adj_g .* adj_g)
-			f64_dot_sp(model_num_samp, model_mu, model_mu2, buf_adj_g, m1, var2);
+			f64_dot_sp(model_NSamp, model_mu, model_mu2, buf_adj_g, m1, var2);
 			double var1 = var2 * model_varRatio;
 			double Tstat = q - m1;
 			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;
 			// call Saddle_Prob in SPAtest
-			pval = Saddle_Prob(qtilde, m1, var1, model_num_samp, model_mu,
-				buf_adj_g, 2, converged);
+			pval = Saddle_Prob(qtilde, m1, var1, model_NSamp, model_mu,
+				buf_adj_g, 2, converge);
 			beta = (Tstat / var1) / sqrt(AC2);
 		}
 		double SE = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
@@ -200,7 +202,7 @@ BEGIN_RCPP
 		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
 		ans[3] = beta;  ans[4] = SE;    ans[5] = pval;
 		ans[6] = pval_noadj;
-		ans[7] = converged ? 1 : 0;
+		ans[7] = converge ? 1 : 0;
 		return ans;
 	} else {
 		return R_NilValue;
