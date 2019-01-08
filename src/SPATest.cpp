@@ -21,7 +21,6 @@
 
 #if defined(__clang__)
 #pragma clang optimize on
-#pragma GCC optimize("O3")
 #elif defined(__GNUC__)
 #pragma GCC optimize("O3")
 #endif
@@ -30,6 +29,7 @@
 #include <Rdefines.h>
 #include <R.h>
 #include <Rmath.h>
+#include <float.h>
 
 
 inline static double sq(double v) { return v*v; }
@@ -76,7 +76,7 @@ static double K2(double t, size_t n_g, const double mu[], const double g[])
 
 
 // .Machine$double.eps^0.25
-static const double root_tol = 0.0001220703125;
+static const double root_tol = sqrt(sqrt(DBL_EPSILON));
 
 static void getroot_K1(double &root, int &n_iter, bool &converge,
 	double init, size_t n_g, const double mu[],
@@ -93,7 +93,7 @@ static void getroot_K1(double &root, int &n_iter, bool &converge,
 		converge = true;
 
 	} else {
-		double t = init;
+		double t = root = init;
 		double K1_eval = K1_adj(t, n_g, mu, g, q);
 		double prevJump = R_PosInf;
 		converge = false;

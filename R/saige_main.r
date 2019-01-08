@@ -138,7 +138,7 @@ seqAssocGMMAT_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
 
     if (verbose)
     {
-        cat("# of variants after MAF/MAC filtering: ", .pretty(length(rv)),
+        cat("# of variants after filtering MAF/MAC: ", .pretty(length(rv)),
             "\n", sep="")
     }
 

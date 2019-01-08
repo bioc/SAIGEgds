@@ -177,10 +177,10 @@ BEGIN_RCPP
 		bool converge = true;
 
 		// need SPAtest or not?
-		if (pval_noadj <= 0.05)
+		if (R_FINITE(pval_noadj) && pval_noadj <= 0.05)
 		{
 			double AC2 = minus ? (2*Num - AC) : AC;
-			// adj_g = adj_g / AC2
+			// adj_g = adj_g / sqrt(AC2)
 			f64_mul(model_NSamp, 1/sqrt(AC2), buf_adj_g);
 			// q = sum(y .* adj_g)
 			double q = f64_dot(model_NSamp, model_y, buf_adj_g);
@@ -192,7 +192,7 @@ BEGIN_RCPP
 			double Tstat = q - m1;
 			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;
 			// call Saddle_Prob in SPAtest
-			pval = Saddle_Prob(qtilde, m1, var1, model_NSamp, model_mu,
+			pval = Saddle_Prob(qtilde, m1, var2, model_NSamp, model_mu,
 				buf_adj_g, 2, converge);
 			beta = (Tstat / var1) / sqrt(AC2);
 		}
