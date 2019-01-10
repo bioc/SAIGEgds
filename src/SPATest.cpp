@@ -1,6 +1,6 @@
 // ===========================================================
 //
-// SPATest.c: C implementation of part of the R SPATest package
+// SPATest.cpp: C implementation of part of the R SPATest package
 //
 // Copyright (C) 2019    Xiuwen Zheng
 //
@@ -78,7 +78,7 @@ static double K2(double t, size_t n_g, const double mu[], const double g[])
 // .Machine$double.eps^0.25
 static const double root_tol = sqrt(sqrt(DBL_EPSILON));
 
-static void getroot_K1(double &root, int &n_iter, bool &converge,
+static void getroot_K1(double &root, int &n_iter, bool &converged,
 	double init, size_t n_g, const double mu[],
 	const double g[], double q, double tol=root_tol, int maxiter=1000)
 {
@@ -90,13 +90,13 @@ static void getroot_K1(double &root, int &n_iter, bool &converge,
 	if (q>=g_pos || q<=g_neg)
 	{
 		root = R_PosInf; n_iter = 0;
-		converge = true;
+		converged = true;
 
 	} else {
 		double t = root = init;
 		double K1_eval = K1_adj(t, n_g, mu, g, q);
 		double prevJump = R_PosInf;
-		converge = false;
+		converged = false;
 		for (int n_iter=1; n_iter <= maxiter; n_iter++)
 		{
 			double K2_eval = K2(t, n_g, mu, g);
@@ -104,7 +104,7 @@ static void getroot_K1(double &root, int &n_iter, bool &converge,
 			if (!R_FINITE(tnew)) break;
 			if (abs(tnew - t) < tol)
 			{
-				converge = true;
+				converged = true;
 				break;
 			}
 			double newK1 = K1_adj(tnew, n_g, mu, g, q);
@@ -151,7 +151,7 @@ static double Get_Saddle_Prob(double zeta, size_t n_g, const double mu[],
 
 // m1<-sum(mu * g),  var1<-sum(mu * (1-mu) * g^2)
 extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
-	const double mu[], const double g[], double cutoff, bool &converge)
+	const double mu[], const double g[], double cutoff, bool &converged)
 {
 	double s = q - m1;
 	double qinv = -s + m1;
@@ -160,7 +160,7 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 
 	while (true)
 	{
-		converge = true;
+		converged = true;
 		if (cutoff < 0.1) cutoff = 0.1;
 
 		if (abs(q - m1)/sqrt(var1) < cutoff)
@@ -179,7 +179,7 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 				pval = abs(p1) + abs(p2);
 			} else {
 				pval = pval_noadj;
-				converge = false;
+				converged = false;
 			}				
 		}
 

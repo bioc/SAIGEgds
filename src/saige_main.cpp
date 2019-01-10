@@ -1,6 +1,6 @@
 // ===========================================================
 //
-// saige_main.cpp: SAIGE association analyses
+// saige_main.cpp: SAIGE association analysis for each variant
 //
 // Copyright (C) 2019    Xiuwen Zheng
 //
@@ -43,7 +43,7 @@ extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
 
 /// SPAtest
 extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
-	const double mu[], const double g[], double cutoff, bool &converge);
+	const double mu[], const double g[], double cutoff, bool &converged);
 
 
 /// Get the list element named str, or return NULL
@@ -174,7 +174,7 @@ BEGIN_RCPP
 		double pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
 		double pval = pval_noadj;
 		double beta = (minus ? -1 : 1) * S / var;
-		bool converge = true;
+		bool converged = true;
 
 		// need SPAtest or not?
 		if (R_FINITE(pval_noadj) && pval_noadj <= 0.05)
@@ -193,7 +193,7 @@ BEGIN_RCPP
 			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;
 			// call Saddle_Prob in SPAtest
 			pval = Saddle_Prob(qtilde, m1, var2, model_NSamp, model_mu,
-				buf_adj_g, 2, converge);
+				buf_adj_g, 2, converged);
 			beta = (Tstat / var1) / sqrt(AC2);
 		}
 		double SE = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
@@ -202,7 +202,7 @@ BEGIN_RCPP
 		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
 		ans[3] = beta;  ans[4] = SE;    ans[5] = pval;
 		ans[6] = pval_noadj;
-		ans[7] = converge ? 1 : 0;
+		ans[7] = converged ? 1 : 0;
 		return ans;
 	} else {
 		return R_NilValue;
