@@ -161,24 +161,24 @@ END_RCPP
 
 
 /// return AF, AC, num, beta, se, pval
-RcppExport SEXP saige_score_test_bin(SEXP Dosage)
+RcppExport SEXP saige_score_test_bin(SEXP dosage)
 {
 BEGIN_RCPP
 
 	// dosages
-	NumericVector ds(Dosage);
-	const size_t num_samp = ds.size();
+	NumericVector G(dosage);
+	const size_t num_samp = G.size();
 	// calc allele freq, and impute geno using the mean
 	double AF, AC;
 	int Num;
-	SummaryAndImputeGeno(&ds[0], num_samp, AF, AC, Num, buf_index);
+	SummaryAndImputeGeno(&G[0], num_samp, AF, AC, Num, buf_index);
 
 	double maf = std::min(AF, 1-AF);
 	double mac = std::min(AC, 2*Num - AC);
 	if (Num>0 && maf>=threshold_maf && mac>=threshold_mac)
 	{
 		bool minus = (AF > 0.5);
-		if (minus) f64_sub(mod_NSamp, 2, &ds[0]);
+		if (minus) f64_sub(mod_NSamp, 2, &G[0]);
 
 		double pval_noadj, beta;
 		if (maf <= 0.0)
@@ -186,22 +186,20 @@ BEGIN_RCPP
 			pval_noadj = beta = R_NaN;
 		} else if (maf < 0.05)
 		{
-			size_t n_nonzero = f64_non_zero_index(mod_NSamp, &ds[0], buf_index);
-			// G = ds
+			size_t n_nonzero = f64_non_zero_index(mod_NSamp, &G[0], buf_index);
 			// buf_coeff = XVX_inv_XV * G
 			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff,
-				mod_t_XVX_inv_XV, &ds[0], buf_coeff);
+				mod_t_XVX_inv_XV, &G[0], buf_coeff);
 			// buf_B = t(X) * buf_coeff
 			f64_mul_mat_vec_sub(n_nonzero, buf_index, mod_NCoeff, mod_t_X,
 				buf_coeff, buf_B);
 			// g_tilde = G - B
 			for (size_t i=0; i < n_nonzero; i++)
-				buf_g_tilde[i] = ds[buf_index[i]] - buf_B[i];
-			// sum = -sum(B^2 .* mu2) + sum(g_tilde^2 .* mu2)
-			double sum = 0;
+				buf_g_tilde[i] = G[buf_index[i]] - buf_B[i];
+			// var2 = t(buf_coeff) %*% XVX %*% buf_coeff - sum(B^2 .* mu2) + sum(g_tilde^2 .* mu2)
+			double var2 = f64_sum_mat_vec(mod_NCoeff, mod_XVX, buf_coeff);
 			for (size_t i=0; i < n_nonzero; i++)
-				sum += (sq(buf_g_tilde[i]) - sq(buf_B[i])) * mod_mu2[buf_index[i]];
-			double var2 = f64_sum_mat_vec(mod_NCoeff, mod_XVX, buf_coeff) + sum;
+				var2 += (sq(buf_g_tilde[i]) - sq(buf_B[i])) * mod_mu2[buf_index[i]];
 			double var1 = var2 * mod_varRatio;
 			// S1 = sum(y_mu .* g_tilde)
 			double S1 = 0;
@@ -223,10 +221,10 @@ BEGIN_RCPP
 			// G = ds
 			// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
 			// buf_coeff = XV * G
-			f64_mul_mat_vec(mod_NSamp, mod_NCoeff, mod_XV, &ds[0], buf_coeff);
+			f64_mul_mat_vec(mod_NSamp, mod_NCoeff, mod_XV, &G[0], buf_coeff);
 			// buf_adj_g = G - XXVX_inv * buf_coeff
 			f64_sub_mul_mat_vec(mod_NSamp, mod_NCoeff,
-				&ds[0], mod_t_XXVX_inv, buf_coeff, buf_adj_g);
+				&G[0], mod_t_XXVX_inv, buf_coeff, buf_adj_g);
 			// inner product
 			double S, var;
 			// S = sum((y - mu) .* buf_adj_g)
