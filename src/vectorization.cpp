@@ -21,7 +21,7 @@
 
 #if defined(__clang__)
 #pragma clang optimize on
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
 #pragma GCC optimize("O3")
 #endif
 
@@ -88,6 +88,25 @@ extern "C" SEXP saige_simd_version()
 	s = buffer;
 #endif
 	return mkString(s);
+}
+
+
+// ========================================================================= //
+// get the index of each nonzero value in x and return the number of nonzeros
+
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	size_t d_non_zero_index(size_t n, const double *x, int *i)
+{
+	size_t n_i = 0;
+	for (size_t j=0; j < n; j++)
+		if (x[j] != 0) i[n_i++] = j;
+	return n_i;
+}
+
+/// get the index of each nonzero value in x and return the number of nonzeros
+extern "C" size_t f64_non_zero_index(size_t n, const double *x, int *i)
+{
+	return d_non_zero_index(n, x, i);
 }
 
 
@@ -166,7 +185,9 @@ extern "C" void f64_dot_sp(size_t n, const double *x1, const double *x2,
 
 
 // ========================================================================= //
-// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
+// vec(p_m) = mat(x_{m*n}) * vec(y_n)
+// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
+// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
 
 inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 	void d_mul_m_v(size_t n, size_t m, const double *x, const double *y, double *p)
@@ -181,12 +202,56 @@ inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 	}
 }
 
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	void d_mul_mat_vec_sp(size_t n, const int *idx, size_t m, const double *x,
+		const double *y, double *p)
+{
+	memset(p, 0, sizeof(double)*m);
+	for (; n > 0; n--)
+	{
+		size_t i = *idx++;
+		double alpha = y[i];
+		const double *xx = &x[m*i];
+		for (size_t j=0; j < m; j++) p[j] += alpha * xx[j];
+	}
+}
+
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	void d_mul_mat_vec_sub(size_t n, const int *idx, size_t m,
+		const double *x, const double *y, double *p)
+{
+	for (size_t i=0; i < n; i++)
+	{
+		size_t k = idx[i];
+		const double *xx = &x[m*k];
+		double sum = 0;
+		for (size_t j=0; j < m; j++) sum += y[j] * xx[j];
+		p[i] = sum;
+	}
+}
+
+
 /// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
 extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x,
 	const double *y, double *p)
 {
 	d_mul_m_v(n, m, x, y, p);
 }
+
+// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
+extern "C" void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m,
+	const double *x, const double *y, double *p)
+{
+	d_mul_mat_vec_sp(n, idx, m, x, y, p);
+}
+
+/// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
+extern "C" void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m,
+	const double *x, const double *y, double *p)
+{
+	d_mul_mat_vec_sub(n, idx, m, x, y, p);
+}
+
 
 
 // ========================================================================= //
@@ -251,3 +316,26 @@ extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
 	d_sub_mul_mat_vec(n, m, x, y, z, p);
 }
 
+
+
+// ========================================================================= //
+// t(vec(y)) * mat(x) * vec(y)
+
+inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+	double d_sum_mat_vec(size_t n, const double *x, const double *y)
+{
+	double sum = 0;
+	for (size_t i=0; i < n; i++)
+	{
+		const double *xx = &x[n*i], a = y[i];
+		for (size_t j=0; j < n; j++)
+			sum += a * y[j] * xx[j];
+	}
+	return sum;
+}
+
+/// t(vec(y)) * mat(x) * vec(y)
+extern "C" double f64_sum_mat_vec(size_t n, const double *x, const double *y)
+{
+	return d_sum_mat_vec(n, x, y);
+}

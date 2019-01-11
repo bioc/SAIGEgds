@@ -21,7 +21,7 @@
 
 #if defined(__clang__)
 #pragma clang optimize on
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
 #pragma GCC optimize("O3")
 #endif
 
@@ -190,4 +190,3 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 	}
 	return pval;
 }
-

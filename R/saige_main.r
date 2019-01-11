@@ -55,6 +55,14 @@
 }
 
 
+getCoefficients <- function(Yvec, Xmat, wVec, tauVec, maxiterPCG, tolPCG)
+{
+    .Call('_SAIGE_getCoefficients', Yvec, Xmat, wVec, tauVec, maxiterPCG,
+        tolPCG, PACKAGE='SAIGEgds')
+}
+
+
+
 # Functon to get working vector and fixed & random coefficients
 # Run iterations to get converged alpha and eta
 Get_Coef <- function(y, X, tau, family, alpha0, eta0, offset, maxiterPCG,
@@ -70,7 +78,7 @@ Get_Coef <- function(y, X, tau, family, alpha0, eta0, offset, maxiterPCG,
     for(i in 1:maxiter)
     {
         cat("iGet_Coef: ", i, "\n", sep="")
-        re.coef <- getCoefficients(Y, X, W, tau, maxiter=maxiterPCG, tol=tolPCG)
+        re.coef <- getCoefficients(Y, X, W, tau, maxiterPCG, tol=tolPCG)
         alpha <- re.coef$alpha
         eta <- re.coef$eta + offset
         if (verbose)
@@ -210,7 +218,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             maxiterPCG, tolPCG, maxiter, verbose)
         re <- getAIScore(re.coef$Y, X, re.coef$W, tau, re.coef$Sigma_iY,
             re.coef$Sigma_iX, re.coef$cov, nrun, maxiterPCG, tolPCG,
-            traceCVcutoff = traceCVcutoff)
+            traceCVcutoff)
 
         tau[2] <- max(0, tau0[2] + tau0[2]^2 * (re$YPAPY - re$Trace)/n)
         if(verbose)
@@ -320,6 +328,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     # initialize the internal model
     y <- unname(modobj$obj.noK$y)
     mu <- unname(modobj$fitted.values)
+    X1 <- modobj$obj.noK$X1[ii, ]
+    n <- length(ii)
 	mobj <- list(
 	    maf = maf, mac = mac,
         y = y[ii], mu = mu[ii],
@@ -327,10 +337,19 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         mu2 = (mu * (1 - mu))[ii],
         t_XXVX_inv = t(modobj$obj.noK$XXVX_inv[ii, ]),  # K x n_samp (K << n_samp, more efficient)
         XV = modobj$obj.noK$XV[, ii],  # K x n_samp
+        t_XVX_inv_XV = t(modobj$obj.noK$XXVX_inv[ii, ] * modobj$obj.noK$V[ii]),  # K x n_samp
+        t_X = t(X1),  # K x n_samp
         var.ratio = mean(modobj$var.ratio, na.rm=TRUE),
-        buf1 = double(nrow(modobj$obj.noK$XV)),
-        buf2 = double(length(y))
+        buf_coeff = double(nrow(modobj$obj.noK$XV)),
+        buf_adj_g = double(n),
+        buf_index = integer(n),
+        buf_B = double(n),
+        buf_g_tilde = double(n),
+        buf_tmp = double(ncol(X1))
 	)
+    mobj$XVX <- t(X1) %*% (X1 * mobj$mu2)  # a matrix: K x K
+    mobj$S_a <- colSums(X1 * mobj$y_mu)  # a vector of size K
+
     if (!is.finite(mobj$var.ratio))
         stop("Invalid variance ratio in the SAIGE model.")
     # initialize internally
