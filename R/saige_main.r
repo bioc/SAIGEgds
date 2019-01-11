@@ -391,7 +391,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         SE   = sapply(rv, `[`, i=5L),
         pval = sapply(rv, `[`, i=6L),
         pval.noadj = sapply(rv, `[`, i=7L),
-        SPA.converged = sapply(rv, `[`, i=8L)==1,
+        converged = sapply(rv, `[`, i=8L)==1,
         stringsAsFactors = FALSE
     )
 }

@@ -95,7 +95,7 @@ extern "C" SEXP saige_simd_version()
 // get the index of each nonzero value in x and return the number of nonzeros
 
 inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
-	size_t d_non_zero_index(size_t n, const double *x, int *i)
+	size_t d_nonzero_index(size_t n, const double *x, int *i)
 {
 	size_t n_i = 0;
 	for (size_t j=0; j < n; j++)
@@ -104,9 +104,9 @@ inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 }
 
 /// get the index of each nonzero value in x and return the number of nonzeros
-extern "C" size_t f64_non_zero_index(size_t n, const double *x, int *i)
+extern "C" size_t f64_nonzero_index(size_t n, const double *x, int *i)
 {
-	return d_non_zero_index(n, x, i);
+	return d_nonzero_index(n, x, i);
 }
 
 

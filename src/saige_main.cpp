@@ -30,7 +30,7 @@ using namespace Rcpp;
 // ========================================================================= //
 
 /// get the index of each nonzero value in x and return the number of nonzeros
-extern "C" size_t f64_non_zero_index(size_t n, const double *x, int *i);
+extern "C" size_t f64_nonzero_index(size_t n, const double *x, int *i);
 /// y[i] = x - y[i]
 extern "C" void f64_sub(size_t n, double x, double *y);
 /// y[i] = x * y[i]
@@ -87,6 +87,8 @@ static int *buf_index = NULL;
 static double *buf_B = NULL;
 static double *buf_g_tilde = NULL;
 static double *buf_tmp = NULL;
+
+#define IDX_i    buf_index[i]
 
 
 /// initialize internal parameters from the model object
@@ -186,7 +188,8 @@ BEGIN_RCPP
 			pval_noadj = beta = R_NaN;
 		} else if (maf < 0.05)
 		{
-			size_t n_nonzero = f64_non_zero_index(mod_NSamp, &G[0], buf_index);
+			// get the number of nonzeros and the nonzero indices
+			size_t n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
 			// buf_coeff = XVX_inv_XV * G
 			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff,
 				mod_t_XVX_inv_XV, &G[0], buf_coeff);
@@ -195,19 +198,19 @@ BEGIN_RCPP
 				buf_coeff, buf_B);
 			// g_tilde = G - B
 			for (size_t i=0; i < n_nonzero; i++)
-				buf_g_tilde[i] = G[buf_index[i]] - buf_B[i];
+				buf_g_tilde[i] = G[IDX_i] - buf_B[i];
 			// var2 = t(buf_coeff) %*% XVX %*% buf_coeff - sum(B^2 .* mu2) + sum(g_tilde^2 .* mu2)
 			double var2 = f64_sum_mat_vec(mod_NCoeff, mod_XVX, buf_coeff);
 			for (size_t i=0; i < n_nonzero; i++)
-				var2 += (sq(buf_g_tilde[i]) - sq(buf_B[i])) * mod_mu2[buf_index[i]];
+				var2 += (sq(buf_g_tilde[i]) - sq(buf_B[i])) * mod_mu2[IDX_i];
 			double var1 = var2 * mod_varRatio;
 			// S1 = sum(y_mu .* g_tilde)
 			double S1 = 0;
 			for (size_t i=0; i < n_nonzero; i++)
-				S1 += mod_y_mu[buf_index[i]] * buf_g_tilde[i];
+				S1 += mod_y_mu[IDX_i] * buf_g_tilde[i];
 			// buf_tmp = t(X1) * (y-mu)
-			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff,
-				mod_t_X, mod_y_mu, buf_tmp);
+			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff, mod_t_X,
+				mod_y_mu, buf_tmp);
 			// S2 = sum((buf_tmp - mod_S_a) .* buf_coeff)
 			double S2 = 0;
 			for (int i=0; i < mod_NCoeff; i++)
@@ -218,7 +221,6 @@ BEGIN_RCPP
 			beta = (minus ? -1 : 1) * S / var1;
 
 		} else {
-			// G = ds
 			// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
 			// buf_coeff = XV * G
 			f64_mul_mat_vec(mod_NSamp, mod_NCoeff, mod_XV, &G[0], buf_coeff);
