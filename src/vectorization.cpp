@@ -30,22 +30,26 @@
 #   define COREARRAY_HAVE_TARGET
 #   define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
 #   define COREARRAY_HAVE_TARGET_CLONES
-#   define COREARRAY_TARGET_CLONES(opt)    __attribute__((target_clones(opt)))
+#   define COREARRAY_TARGET_CLONES    \
+        __attribute__((target_clones("avx2","avx","sse2","default")))
 //#elif defined(__clang__)  // not support
 //#   define COREARRAY_HAVE_TARGET
 //#   define COREARRAY_TARGET(opt)           __attribute__((target(opt)))
 //#   define COREARRAY_TARGET_CLONES(opt)    __attribute__((target_clones(opt)))
 #else
 #   define COREARRAY_TARGET(opt)
-#   define COREARRAY_TARGET_CLONES(opt)
+#   define COREARRAY_TARGET_CLONES
 #endif
 
 #ifdef COREARRAY_HAVE_TARGET
 #   define COREARRAY_TARGET_DEFAULT    COREARRAY_TARGET("default")
 #   define COREARRAY_TARGET_SSE2       COREARRAY_TARGET("sse2")
 #   define COREARRAY_TARGET_AVX        COREARRAY_TARGET("avx")
+#   define COREARRAY_TARGET_AVX2       COREARRAY_TARGET("avx2")
 #else
-#   if defined(__AVX__)
+#   if defined(__AVX2__)
+#       define COREARRAY_TARGET_AVX2
+#   elif defined(__AVX__)
 #       define COREARRAY_TARGET_AVX
 #   elif defined(__SSE2__)
 #       define COREARRAY_TARGET_SSE2
@@ -77,6 +81,10 @@ static COREARRAY_TARGET_SSE2 const char *simd_version() { return "SSE2"; }
 static COREARRAY_TARGET_AVX const char *simd_version() { return "AVX"; }
 #endif
 
+#ifdef COREARRAY_TARGET_AVX2
+static COREARRAY_TARGET_AVX2 const char *simd_version() { return "AVX2"; }
+#endif
+
 /// SIMD version
 extern "C" SEXP saige_simd_version()
 {
@@ -94,7 +102,7 @@ extern "C" SEXP saige_simd_version()
 // ========================================================================= //
 // get the index of each nonzero value in x and return the number of nonzeros
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	size_t d_nonzero_index(size_t n, const double *x, int *i)
 {
 	size_t n_i = 0;
@@ -113,7 +121,7 @@ extern "C" size_t f64_nonzero_index(size_t n, const double *x, int *i)
 // ========================================================================= //
 // y[i] = x - y[i]
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	void d_sub(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] = x - y[i];
@@ -129,7 +137,7 @@ extern "C" void f64_sub(size_t n, double x, double *y)
 // ========================================================================= //
 // y[i] = x * y[i]
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	void d_mul(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] *= x;
@@ -145,7 +153,7 @@ extern "C" void f64_mul(size_t n, double x, double *y)
 // ========================================================================= //
 // sum_i x[i]*y[i]
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	double d_dot(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
@@ -163,7 +171,7 @@ extern "C" double f64_dot(size_t n, const double *x, const double *y)
 // ========================================================================= //
 // out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	void d_dot_sp(size_t n, const double *x1, const double *x2, const double *y,
 		double &out1, double &out2)
 {
@@ -189,7 +197,7 @@ extern "C" void f64_dot_sp(size_t n, const double *x1, const double *x2,
 // vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
 // vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	void d_mul_m_v(size_t n, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
@@ -202,7 +210,7 @@ inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 	}
 }
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	void d_mul_mat_vec_sp(size_t n, const int *idx, size_t m, const double *x,
 		const double *y, double *p)
 {
@@ -216,7 +224,7 @@ inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
 	}
 }
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	void d_mul_mat_vec_sub(size_t n, const int *idx, size_t m,
 		const double *x, const double *y, double *p)
 {
@@ -257,7 +265,7 @@ extern "C" void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m,
 // ========================================================================= //
 // vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	void d_sub_mul_mat_vec(size_t n, size_t m,
 		const double *x, const double *y, const double *z, double *p)
 {
@@ -321,7 +329,7 @@ extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
 // ========================================================================= //
 // t(vec(y)) * mat(x) * vec(y)
 
-inline static COREARRAY_TARGET_CLONES("avx,sse2,default")
+inline static COREARRAY_TARGET_CLONES
 	double d_sum_mat_vec(size_t n, const double *x, const double *y)
 {
 	double sum = 0;

@@ -10,7 +10,7 @@ Imports: methods, Rcpp, RcppParallel, SPAtest
 Suggests: parallel, Matrix, RUnit, knitr, MASS, BiocGenerics
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
         email="xiuwen.zheng@abbvie.com"),
-        person("Wei", "Zhou", role=c("aut"), email="zhowei@umich.edu",
+        person("Wei", "Zhou", role=c("aut"),
         comment="the original author of the SAIGE package"))
 Description: Scalable and Accurate Implementation of Generalized mixed models
         (SAIGE) with the support of GDS files.

@@ -177,16 +177,13 @@ BEGIN_RCPP
 
 	double maf = std::min(AF, 1-AF);
 	double mac = std::min(AC, 2*Num - AC);
-	if (Num>0 && maf>=threshold_maf && mac>=threshold_mac)
+	if (Num>0 && maf>0 && maf>=threshold_maf && mac>=threshold_mac)
 	{
 		bool minus = (AF > 0.5);
 		if (minus) f64_sub(mod_NSamp, 2, &G[0]);
 
 		double pval_noadj, beta;
-		if (maf <= 0.0)
-		{
-			pval_noadj = beta = R_NaN;
-		} else if (maf < 0.05)
+		if (maf < 0.05)
 		{
 			// get the number of nonzeros and the nonzero indices
 			size_t n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);

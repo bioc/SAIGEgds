@@ -373,8 +373,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     }
     if (verbose)
     {
-        cat("# of variants after filtering MAF/MAC: ", .pretty(length(rv)),
-            "\n", sep="")
+        cat("# of variants after filtering MAF/MAC threshold: ",
+            .pretty(length(rv)), "\n", sep="")
     }
 
     # output
@@ -384,8 +384,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         pos = seqGetData(f, "position"),
         ref = seqGetData(f, "$ref"),
         alt   = seqGetData(f, "$alt"),
-        AF   = sapply(rv, `[`, i=1L),
-        AC   = sapply(rv, `[`, i=2L),
+        AF.alt = sapply(rv, `[`, i=1L),
+        AC.alt = sapply(rv, `[`, i=2L),
         num  = as.integer(sapply(rv, `[`, i=3L)),
         beta = sapply(rv, `[`, i=4L),
         SE   = sapply(rv, `[`, i=5L),
