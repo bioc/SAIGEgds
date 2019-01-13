@@ -100,6 +100,38 @@ extern "C" SEXP saige_simd_version()
 
 
 // ========================================================================= //
+// return allele frequency and impute genotype using the mean
+
+inline static COREARRAY_TARGET_CLONES
+	void d_af_ac_impute(double *ds, size_t n, double &AF, double &AC,
+		int &Num, int buf_idx[])
+{
+	double sum = 0;
+	int num = 0, *pIdx = buf_idx;
+	for (size_t i=0; i < n; i++)
+	{
+		if (isfinite(ds[i]))
+			{ sum += ds[i]; num ++; }
+		else
+			*pIdx++ = i;
+	}
+	AF = (num > 0) ? (sum/(2*num)) : R_NaN;
+	AC = sum; Num = num;
+	if (num < (int)n)
+	{
+		double d = AF * 2;
+		for (; buf_idx < pIdx; ) ds[*buf_idx++] = d;
+	}
+}
+
+extern "C" void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC,
+	int &Num, int buf_idx[])
+{
+	d_af_ac_impute(ds, n, AF, AC, Num, buf_idx);
+}
+
+
+// ========================================================================= //
 // get the index of each nonzero value in x and return the number of nonzeros
 
 inline static COREARRAY_TARGET_CLONES
@@ -143,7 +175,7 @@ inline static COREARRAY_TARGET_CLONES
 	for (size_t i=0; i < n; i++) y[i] *= x;
 }
 
-/// y[i] = x - y[i]
+/// y[i] = x * y[i]
 extern "C" void f64_mul(size_t n, double x, double *y)
 {
 	d_mul(n, x, y);
@@ -246,7 +278,7 @@ extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x,
 	d_mul_m_v(n, m, x, y, p);
 }
 
-// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
+/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
 extern "C" void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m,
 	const double *x, const double *y, double *p)
 {

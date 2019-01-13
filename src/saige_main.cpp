@@ -22,41 +22,20 @@
 
 #include <Rcpp.h>
 #include <algorithm>
+#include "vectorization.h"
 
 using namespace Rcpp;
 
 
 
 // ========================================================================= //
-
-/// get the index of each nonzero value in x and return the number of nonzeros
-extern "C" size_t f64_nonzero_index(size_t n, const double *x, int *i);
-/// y[i] = x - y[i]
-extern "C" void f64_sub(size_t n, double x, double *y);
-/// y[i] = x * y[i]
-extern "C" void f64_mul(size_t n, double x, double *y);
-/// sum_i x[i]*y[i]
-extern "C" double f64_dot(size_t n, const double *x, const double *y);
-/// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
-extern "C" void f64_dot_sp(size_t n, const double *x1, const double *x2,
-	const double *y, double &out1, double &out2);
-/// vec(p_m) = mat(x_{m*n}) * vec(y_n)
-extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, double *p);
-/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
-extern "C" void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p);
-/// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
-extern "C" void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p);
-/// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
-extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
-	const double *x, const double *y, const double *z, double *p);
-/// t(vec(y)) * mat(x) * vec(y)
-extern "C" double f64_sum_mat_vec(size_t n, const double *x, const double *y);
+// internal functions
 
 /// SPAtest
 extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], double cutoff, bool &converged);
 
-
+/// square
 inline double sq(double v) { return v*v; }
 
 
@@ -129,29 +108,6 @@ END_RCPP
 
 // ========================================================================= //
 
-/// return allele frequency and impute genotype using the mean
-static void SummaryAndImputeGeno(double *ds, size_t n, double &AF, double &AC,
-	int &Num, int buf_idx[])
-{
-	double sum = 0;
-	int num = 0, *pIdx = buf_idx;
-	for (size_t i=0; i < n; i++)
-	{
-		if (R_FINITE(ds[i]))
-			{ sum += ds[i]; num ++; }
-		else
-			*pIdx++ = i;
-	}
-	AF = (num > 0) ? (sum/(2*num)) : R_NaN;
-	AC = sum; Num = num;
-	if (num < (int)n)
-	{
-		double d = AF * 2;
-		for (; buf_idx < pIdx; ) ds[*buf_idx++] = d;
-	}
-}
-
-
 /// 
 RcppExport SEXP saige_score_test_quant(SEXP Dosage)
 {
@@ -159,7 +115,6 @@ BEGIN_RCPP
 	return R_NilValue;
 END_RCPP
 }
-
 
 
 /// return AF, AC, num, beta, se, pval
@@ -173,7 +128,7 @@ BEGIN_RCPP
 	// calc allele freq, and impute geno using the mean
 	double AF, AC;
 	int Num;
-	SummaryAndImputeGeno(&G[0], num_samp, AF, AC, Num, buf_index);
+	f64_af_ac_impute(&G[0], num_samp, AF, AC, Num, buf_index);
 
 	double maf = std::min(AF, 1-AF);
 	double mac = std::min(AC, 2*Num - AC);
