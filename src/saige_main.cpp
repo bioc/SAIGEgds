@@ -19,6 +19,12 @@
 // with SNPRelate.
 // If not, see <http://www.gnu.org/licenses/>.
 
+#if defined(__clang__)
+#pragma clang optimize on
+#elif defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
+#pragma GCC optimize("O3")
+#endif
+
 
 #include <Rcpp.h>
 #include <algorithm>
