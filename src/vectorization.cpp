@@ -27,11 +27,13 @@
 
 // Function multiversioning (requiring target_clones)
 #if (defined(__GNUC__) && (__GNUC__ >= 6))
-#   define COREARRAY_HAVE_TARGET
-#   define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
-#   define COREARRAY_HAVE_TARGET_CLONES
-#   define COREARRAY_TARGET_CLONES    \
-        __attribute__((target_clones("avx2","avx","sse2","default")))
+#   if defined(__x86_64__) || defined(__i386__)
+#       define COREARRAY_HAVE_TARGET
+#       define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
+#       define COREARRAY_HAVE_TARGET_CLONES
+#       define COREARRAY_TARGET_CLONES    \
+            __attribute__((target_clones("avx512f","avx2","avx","sse3","sse2","default")))
+#   endif
 //#elif defined(__clang__)  // not support
 //#   define COREARRAY_HAVE_TARGET
 //#   define COREARRAY_TARGET(opt)           __attribute__((target(opt)))
@@ -44,13 +46,19 @@
 #ifdef COREARRAY_HAVE_TARGET
 #   define COREARRAY_TARGET_DEFAULT    COREARRAY_TARGET("default")
 #   define COREARRAY_TARGET_SSE2       COREARRAY_TARGET("sse2")
+#   define COREARRAY_TARGET_SSE3       COREARRAY_TARGET("sse3")
 #   define COREARRAY_TARGET_AVX        COREARRAY_TARGET("avx")
 #   define COREARRAY_TARGET_AVX2       COREARRAY_TARGET("avx2")
+#   define COREARRAY_TARGET_AVX512F    COREARRAY_TARGET("avx512f")
 #else
-#   if defined(__AVX2__)
+#   if defined(__AVX512F__)
+#       define COREARRAY_TARGET_AVX512F
+#   elif defined(__AVX2__)
 #       define COREARRAY_TARGET_AVX2
 #   elif defined(__AVX__)
 #       define COREARRAY_TARGET_AVX
+#   elif defined(__SSE3__)
+#       define COREARRAY_TARGET_SSE3
 #   elif defined(__SSE2__)
 #       define COREARRAY_TARGET_SSE2
 #   else
@@ -77,12 +85,20 @@ static COREARRAY_TARGET_DEFAULT const char *simd_version() { return "generic"; }
 static COREARRAY_TARGET_SSE2 const char *simd_version() { return "SSE2"; }
 #endif
 
+#ifdef COREARRAY_TARGET_SSE3
+static COREARRAY_TARGET_SSE3 const char *simd_version() { return "SSE3"; }
+#endif
+
 #ifdef COREARRAY_TARGET_AVX
 static COREARRAY_TARGET_AVX const char *simd_version() { return "AVX"; }
 #endif
 
 #ifdef COREARRAY_TARGET_AVX2
 static COREARRAY_TARGET_AVX2 const char *simd_version() { return "AVX2"; }
+#endif
+
+#ifdef COREARRAY_TARGET_AVX512F
+static COREARRAY_TARGET_AVX512F const char *simd_version() { return "AVX512F"; }
 #endif
 
 /// SIMD version
