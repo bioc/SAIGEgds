@@ -4,8 +4,8 @@ Title: Scalable and Accurate Implementation of Generalized mixed models with
         the support of GDS files
 Version: 0.9.0
 Date: 2019-01-01
-Depends: R (>= 2.15), Rcpp, gdsfmt, SeqArray (>= 1.23.5), RcppParallel
-LinkingTo: Rcpp, RcppArmadillo, RcppParallel
+Depends: R (>= 2.15), gdsfmt, SeqArray (>= 1.23.5), Rcpp
+LinkingTo: Rcpp, RcppArmadillo
 Imports: methods, Rcpp, RcppParallel, SPAtest
 Suggests: parallel, Matrix, RUnit, knitr, MASS, BiocGenerics
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),

@@ -287,15 +287,14 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 #
 
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
-    parallel=FALSE, verbose=TRUE)
+    dsnode="", parallel=FALSE, verbose=TRUE)
 {
-    stopifnot(inherits(gdsfile, "SeqVarGDSClass"))
+    stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(mac), length(mac)==1L)
+    stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
+    stopifnot(!is.na(dsnode))
     stopifnot(is.logical(verbose), length(verbose)==1L)
-
-    if (verbose)
-        cat("SAIGE association analyses:\n")
 
     # check model
     if (is.character(modobj))
@@ -304,6 +303,36 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         modobj <- get(load(modobj))
     }
     .check_saige_model(modobj)
+
+    # GDS file
+    if (is.character(gdsfile))
+    {
+        gdsfile <- seqOpen(gdsfile)
+        if (verbose)
+            cat("Open '", gdsfile, "'\n", sep="")
+        on.exit(seqClose(gdsfile))    
+    }
+
+    # determine the GDS node for dosages
+    if (dsnode == "")
+    {
+        n <- index.gdsn(gdsfile, "genotype/data", silent=TRUE)
+        if (!is.null(n))
+        {
+            dsnode <- "genotype"
+        } else {
+            n <- index.gdsn(gdsfile, "annotation/format/DS", silent=TRUE)
+            if (!is.null(n))
+            {
+                dsnode <- "annotation/format/DS"
+            } else {
+                stop("Dosages should be stored in genotype or annotation/format/DS.")
+            }
+        }
+    }
+
+    if (verbose)
+        cat("SAIGE association analyses:\n")
 
     # save the current filter
     seqSetFilter(gdsfile, action="push", verbose=FALSE)
@@ -348,7 +377,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         buf_tmp = double(ncol(X1))
 	)
     mobj$XVX <- t(X1) %*% (X1 * mobj$mu2)  # a matrix: K x K
-    mobj$S_a <- colSums(X1 * mobj$y_mu)  # a vector of size K
+    mobj$S_a <- colSums(X1 * mobj$y_mu)    # a vector of size K
 
     if (!is.finite(mobj$var.ratio))
         stop("Invalid variance ratio in the SAIGE model.")
@@ -358,9 +387,9 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     # scan all (selected) variants
     if (modobj$trait.type == "binary")
     {
-        rv <- seqApply(gdsfile, "annotation/format/DS",
-            .cfunction("saige_score_test_bin"), as.is="list",
-            parallel=parallel, .progress=verbose, .list_dup=FALSE)
+        rv <- seqApply(gdsfile, dsnode, .cfunction("saige_score_test_bin"),
+            as.is="list", parallel=parallel, .progress=verbose,
+            .list_dup=FALSE)
     }
 
     # if any maf/mac filter

@@ -53,16 +53,16 @@ static double threshold_mac = 0;  //< the threshold of MAC filter
 static int mod_NSamp = 0;   //< the number of samples
 static int mod_NCoeff = 0;  //< the number of beta coefficients
 
-static double *mod_y = NULL;
-static double *mod_mu = NULL;
-static double *mod_y_mu = NULL;
-static double *mod_mu2 = NULL;
-static double *mod_t_XXVX_inv = NULL;
-static double *mod_XV = NULL;
-static double *mod_t_XVX_inv_XV = NULL;
-static double *mod_XVX = NULL;
-static double *mod_t_X = NULL;
-static double *mod_S_a = NULL;
+static double *mod_y = NULL;             //< a n_samp-length vector
+static double *mod_mu = NULL;            //< a n_samp-length vector
+static double *mod_y_mu = NULL;          //< a n_samp-length vector, y-mu
+static double *mod_mu2 = NULL;           //< a n_samp-length vector, mu*(1-mu)
+static double *mod_t_XXVX_inv = NULL;    //< a K-by-n_samp matrix
+static double *mod_XV = NULL;            //< a K-by-n_samp matrix
+static double *mod_t_XVX_inv_XV = NULL;  //< a K-by-n_samp matrix
+static double *mod_XVX = NULL;           //< a K-by-K matrix
+static double *mod_t_X = NULL;           //< a K-by-n_samp matrix
+static double *mod_S_a = NULL;           //< a K-length vector
 
 static double mod_varRatio = 0;
 
