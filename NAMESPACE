@@ -1,7 +1,11 @@
 # Export the following names
 useDynLib(SAIGEgds,
     saige_score_test_init,
-    saige_simd_version
+    saige_simd_version,
+    saige_store_geno,
+    saige_get_coeff,
+    saige_get_AI_score,
+    saige_fitglmmaiRPCG
 )
 
 # Export all names

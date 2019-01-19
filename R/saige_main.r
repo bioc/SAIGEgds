@@ -55,51 +55,55 @@ SIMD <- function() .Call(saige_simd_version)
 }
 
 
-getCoefficients <- function(Yvec, Xmat, wVec, tauVec, maxiterPCG, tolPCG)
+##suggested by Shawn 01-19-2018
+Covariate_Transform <- function(formula, data)
 {
-    .Call('_SAIGE_getCoefficients', Yvec, Xmat, wVec, tauVec, maxiterPCG,
-        tolPCG, PACKAGE='SAIGEgds')
+  X1<-model.matrix(formula,data=data)
+#  X1=X1[,c(2:ncol(X1))] #remove intercept
+  formula.frame<-model.frame(formula,data=data)
+  Y = model.response(formula.frame, type = "any")
+  X_name = colnames(X1)
+		
+  # First run linear regression to identify multi collinearity 
+  out.lm<-lm(Y ~ X1 - 1, data=data)
+#  out.lm<-lm(Y ~ X1, data=data)
+  idx.na<-which(is.na(out.lm$coef))
+  if(length(idx.na)> 0){
+	X1<-X1[, -idx.na]
+	X_name = X_name[-idx.na]		
+        cat("Warning: multi collinearity is detected in covariates! ", X_name[idx.na], " will be excluded in the model\n")
+  }
+  if(!(1 %in% idx.na)){
+    X_name[1] = "minus1"
+  }
+
+	
+ # QR decomposition
+  Xqr = qr(X1)
+  X1_Q = qr.Q(Xqr)
+  qrr = qr.R(Xqr)
+	
+  N<-nrow(X1)
+	
+  # Make square summation=N (so mean=1)
+  X1_new<-X1_Q * sqrt(N)	
+  Param.transform<-list(qrr=qrr, N=N, X_name = X_name, idx.na=idx.na)
+  re<-list(Y =Y, X1 = X1_new, Param.transform=Param.transform)
 }
 
 
-
-# Functon to get working vector and fixed & random coefficients
-# Run iterations to get converged alpha and eta
-Get_Coef <- function(y, X, tau, family, alpha0, eta0, offset, maxiterPCG,
-    tolPCG, maxiter, verbose=FALSE)
-{
-    tol.coef <- 0.1
-    mu <- family$linkinv(eta0)
-    mu.eta <- family$mu.eta(eta0)
-    Y <- eta0 - offset + (y - mu)/mu.eta
-    sqrtW <- mu.eta / sqrt(family$variance(mu))
-    W <- sqrtW^2
-
-    for(i in 1:maxiter)
-    {
-        cat("iGet_Coef: ", i, "\n", sep="")
-        re.coef <- getCoefficients(Y, X, W, tau, maxiterPCG, tol=tolPCG)
-        alpha <- re.coef$alpha
-        eta <- re.coef$eta + offset
-        if (verbose)
-        {
-            cat("Tau: "); print(tau)
-            cat("Fixed-effect coefficients: "); print(alpha)
-        }
-        mu <- family$linkinv(eta)
-        mu.eta <- family$mu.eta(eta)
-        Y <- eta - offset + (y - mu)/mu.eta
-        sqrtW <- mu.eta/sqrt(family$variance(mu))
-        W <- sqrtW^2
-        if (max(abs(alpha-alpha0)/(abs(alpha)+abs(alpha0)+tol.coef)) < tol.coef)
-            break
-        alpha0 = alpha
-    }
-
-    list(Y=Y, alpha=alpha, eta=eta, W=W, cov=re.coef$cov, sqrtW=sqrtW,
-        Sigma_iY=re.coef$Sigma_iY, Sigma_iX=re.coef$Sigma_iX, mu=mu)
+# In case to recover original scale coefficients
+# X \beta = Q R \beta = (Q \sqrt(N)) ( R \beta / \sqrt(N))
+# So coefficient from fit.new is the same as R \beta / \sqrt(N)
+Covariate_Transform_Back<-function(coef, Param.transform)
+{	
+	#coef<-fit.new$coef; Param.transform=out.transform$Param.transform
+	coef1<-coef * sqrt(Param.transform$N)
+	coef.org<-solve(Param.transform$qrr, coef1)
+	
+	names(coef.org)<-Param.transform$X_name
+	return(coef.org)
 }
-
 
 
 #######################################################################
@@ -164,19 +168,47 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         setSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
     }
 
+    dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
+    n_samp <- dm[2L]
+    n_var  <- dm[3L]
     if (verbose)
     {
         cat("Fit the null model: ")
         print(formula)
-        dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)
-        cat("    # of samples: ", .pretty(dm$seldim[2L]), "\n", sep="")
-        cat("    # of variants: ", .pretty(dm$seldim[3L]), "\n", sep="")
+        cat("    # of samples: ", .pretty(n_samp), "\n", sep="")
+        cat("    # of variants: ", .pretty(n_var), "\n", sep="")
     }
 
+
+	out.transform<-Covariate_Transform(formula, data=data)
+	formulaNewList = c("Y ~ ", out.transform$Param.transform$X_name[1])
+	if(length(out.transform$Param.transform$X_name) > 1){
+	for(i in c(2:length(out.transform$Param.transform$X_name))){
+	  formulaNewList = c(formulaNewList, "+", out.transform$Param.transform$X_name[i])
+	}
+	}
+	formulaNewList = paste0(formulaNewList, collapse="")
+	formulaNewList = paste0(formulaNewList, "-1")
+	formula.new = as.formula(paste0(formulaNewList, collapse=""))
+	data.new = data.frame(cbind(out.transform$Y, out.transform$X1))
+	colnames(data.new) = c("Y",out.transform$Param.transform$X_name)
+	cat("colnames(data.new) is ", colnames(data.new), "\n")
+	cat("out.transform$Param.transform$qrr: ", dim(out.transform$Param.transform$qrr), "\n")
+
+
     # 2-bit packed genotypes
-    if (verbose) cat("Start reading genotypes")
+    if (verbose) cat("Start loading genotypes")
     PackedGeno <- SeqArray:::.seqGet2bGeno(gdsfile)
-    if (verbose) cat(" [done].\n")
+    if (verbose)
+    {
+        cat(" [done] ")
+        print(object.size(PackedGeno))
+    }
+
+    # initialize internal variables and buffers
+    buf_geno <- double(4*n_var)
+    buf_sigma <- double(n_samp)
+    .Call(saige_store_geno, PackedGeno, n_samp, buf_geno, buf_sigma)
 
     # fit the model
     if (trait.type == "binary")
@@ -184,9 +216,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # binary outcome
         cat(phenovar, " is a binary trait:\n")
 
-        fit0 <- glm(formula, data=data, family=binomial)
+        fit0 <- glm(formula.new, data=data.new, family=binomial)
         if (verbose) print(fit0)
-        obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula, data)
+        obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula.new, data.new)
 
         y <- fit0$y
         n <- length(y)
@@ -201,22 +233,23 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         Y <- eta - offset + (y - mu)/mu.eta
         alpha0 <- fit0$coef
         eta0 <- eta
+        tau <- fixtau <- c(0,0)
         if (family$family %in% c("binomial", "poisson"))
             tau[1] = fixtau[1] = 1
 
         # change, use 0.5 as a default value, and use Get_Coef before getAIScore
         q = 1
 
-        if (tauInit[fixtau==0] == 0)
+        if (tau.init[fixtau==0] == 0)
             tau[fixtau==0] = 0.5
         else
-            tau[fixtau==0] = tauInit[fixtau==0]
-        cat("Inital tau is ", tau, "\n", sep="")
+            tau[fixtau==0] = tau.init[fixtau==0]
+        cat("initial tau is ", paste(tau, collapse=", "), "\n", sep="")
         tau0 <- tau
 
-        re.coef <- Get_Coef(y, X, tau, family, alpha0, eta0,  offset,
-            maxiterPCG, tolPCG, maxiter, verbose)
-        re <- getAIScore(re.coef$Y, X, re.coef$W, tau, re.coef$Sigma_iY,
+        re.coef <- .Call(SAIGEgds:::saige_get_coeff, y, X, tau, family, alpha0, eta0,
+            offset, maxiterPCG, maxiter, tolPCG, verbose)
+        re <- .Call(SAIGEgds:::saige_get_AI_score, re.coef$Y, X, re.coef$W, tau, re.coef$Sigma_iY,
             re.coef$Sigma_iX, re.coef$cov, nrun, maxiterPCG, tolPCG,
             traceCVcutoff)
 
@@ -233,9 +266,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             alpha0 <- re.coef$alpha
             tau0 = tau
             eta0 = eta
-            re.coef <- Get_Coef(y, X, tau, family, alpha0, eta0,  offset,
-                maxiterPCG, tolPCG, maxiter, verbose)
-            fit = fitglmmaiRPCG(re.coef$Y, X, re.coef$W, tau, re.coef$Sigma_iY,
+            re.coef <- .Call(saige_get_coeff, y, X, tau, family, alpha0, eta0,
+                offset, maxiterPCG, maxiter, tolPCG, verbose)
+            fit <- fitglmmaiRPCG(re.coef$Y, X, re.coef$W, tau, re.coef$Sigma_iY,
                 re.coef$Sigma_iX, re.coef$cov, nrun, maxiterPCG, tolPCG,
                 tol, traceCVcutoff)
 
@@ -258,8 +291,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         }
         if (verbose) cat("Final:" ,tau, "\n")
 
-        re.coef <- Get_Coef(y, X, tau, family, alpha0, eta0,  offset,
-            maxiterPCG, tolPCG, maxiter, verbose)
+        re.coef <- .Call(saige_get_coeff, y, X, tau, family, alpha0, eta0,  offset,
+            maxiterPCG, maxiter, tolPCG, verbose)
         cov <- re.coef$cov
         alpha <- re.coef$alpha
         eta <- re.coef$eta
