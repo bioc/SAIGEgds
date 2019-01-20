@@ -1,11 +1,13 @@
-#include <RcppArmadillo.h>
-#include "vectorization.h"
 
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <cmath>
+#if defined(__clang__)
+#pragma clang optimize on
+#elif defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
+#pragma GCC optimize("O3")
+#endif
+
+#include <RcppArmadillo.h>
+#include <algorithm>
+#include "vectorization.h"
 
 using namespace Rcpp;
 using namespace arma;
@@ -192,7 +194,6 @@ static dcolvec get_crossprod(const dcolvec &b, const dvec& w, const dvec& tau)
 {
 	const double tau0 = tau[0];
 	const double tau1 = tau[1];
-Rprintf("tau0: %g, tau1: %g\n", tau0, tau1);
 	if (tau1 == 0)
 	{
 		dcolvec rv = tau0 * (b % (1/w));
@@ -217,9 +218,6 @@ static dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 	dvec minvVec;
 	get_diag_sigma(w, tau, minvVec);
 	minvVec = 1 / minvVec;
-
-Rprintf("sum of minvVec: %g\n", sum(minvVec));
-
 	double sumr2 = sum(r % r);
 
 	dvec zVec = minvVec % r;
@@ -259,6 +257,12 @@ Rprintf("sum of minvVec: %g\n", sum(minvVec));
 }
 
 
+void set_seed(unsigned int seed) {
+	Rcpp::Environment base_env("package:base");
+  	Rcpp::Function set_seed_r = base_env["set.seed"];
+  	set_seed_r(seed);  
+}
+
 // [[export]]
 NumericVector nb(int n) {
   	return(rbinom(n,1,0.5));
@@ -281,7 +285,7 @@ static double get_trace(const dmat &Sigma_iX, const dmat& Xmat,
 	const dvec& wVec, const dvec& tauVec, const dmat& cov1,
 	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff)
 {
-	// set_seed(200);
+	set_seed(200);
 	dmat Sigma_iXt = Sigma_iX.t();
 	dvec Sigma_iu;  
 	dcolvec Pu;
@@ -354,77 +358,41 @@ static void get_coefficients(const dvec &Y, const dmat &X, const dvec &w,
 
 // ========================================================================= //
 
-static List get_coeff(const dvec &y, const dmat &X, const dvec &tau,
+static void get_coeff(const dvec &y, const dmat &X, const dvec &tau,
 	const List &family, const dvec &alpha0, const dvec &eta0,
 	const dvec &offset, int maxiterPCG, int maxiter, double tolPCG,
-	bool verbose)
+	bool verbose,
+	dvec &Y, dvec &mu, dvec &alpha, dvec &eta, dvec &W, dmat &cov,
+	dvec &Sigma_iY, dmat &Sigma_iX)
 {
 	// initialize
 	const double tol_coef = 0.1;
 	Function fc_linkinv = wrap(family["linkinv"]);
 	Function fc_mu_eta = wrap(family["mu.eta"]);
 	Function fc_variance = wrap(family["variance"]);
-	dvec mu = as<dvec>(fc_linkinv(eta0));
-	dvec mu_eta = as<dvec>(fc_mu_eta(eta0));
-	dvec Y = eta0 - offset + (y - mu)/mu_eta;
-	dvec v = as<dvec>(fc_variance(mu));
-	dvec W = (mu_eta % mu_eta) / v;
 
-	dvec Sigma_iY, alpha, eta, a0=alpha0;
-	dmat Sigma_iX, cov;
+	mu = as<dvec>(fc_linkinv(eta0));
+	dvec mu_eta = as<dvec>(fc_mu_eta(eta0));
+	Y = eta0 - offset + (y - mu)/mu_eta;
+	W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
 
 	// iteration
+	dvec a0 = alpha0;
 	for (int i=0; i < maxiter; i++)
 	{
 		get_coefficients(Y, X, W, tau, maxiterPCG, tolPCG,
 			Sigma_iY, Sigma_iX, cov, alpha, eta);
+
 		eta += offset;
 		mu = as<dvec>(fc_linkinv(eta));
 		mu_eta = as<dvec>(fc_mu_eta(eta));
-		Y = eta0 - offset + (y - mu)/mu_eta;
-		v = as<dvec>(fc_variance(mu));
-		W = (mu_eta % mu_eta) / v;
+		Y = eta - offset + (y - mu)/mu_eta;
+		W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
 
 		if (max(abs(alpha - a0)/(abs(alpha) + abs(a0) + tol_coef)) < tol_coef)
 			break;
 		a0 = alpha;
-
-Rprintf("iter: %d\n", i);
 	}
-
-	// output
-	return List::create(
-		_["Y"]   = Y,   _["mu"] = mu, _["alpha"] = alpha,
-		_["eta"] = eta, _["W"]  = W,  _["cov"]   = cov,
-		_["Sigma_iY"] = Sigma_iY,
-		_["Sigma_iX"] = Sigma_iX);
-}
-
-
-// Functon to get working vector and fixed & random coefficients
-// Run iterations to get converged alpha and eta
-RcppExport SEXP saige_get_coeff(SEXP r_y, SEXP r_X, SEXP r_tau, SEXP r_family,
-	SEXP r_alpha0, SEXP r_eta0, SEXP r_offset, SEXP r_maxiterPCG,
-	SEXP r_maxiter, SEXP r_tolPCG, SEXP r_verbose)
-{
-BEGIN_RCPP
-	RObject rcpp_result_gen;
-	RNGScope rcpp_rngScope_gen;
-	traits::input_parameter< const dvec& >::type y(r_y);
-	traits::input_parameter< const dmat& >::type X(r_X);
-	traits::input_parameter< const dvec& >::type tau(r_tau);
-	traits::input_parameter< const List& >::type family(r_family);
-	traits::input_parameter< const dvec& >::type alpha0(r_alpha0);
-	traits::input_parameter< const dvec& >::type eta0(r_eta0);
-	traits::input_parameter< const dvec& >::type offset(r_offset);
-	int maxiterPCG = Rf_asInteger(r_maxiterPCG);
-	int maxiter = Rf_asInteger(r_maxiter);
-	double tolPCG = Rf_asReal(r_tolPCG);
-	bool verbose = Rf_asLogical(r_verbose)==TRUE;
-	rcpp_result_gen = wrap(get_coeff(y, X, tau, family, alpha0, eta0,
-		offset, maxiterPCG, maxiter, tolPCG, verbose));
-	return rcpp_result_gen;
-END_RCPP
 }
 
 
@@ -432,49 +400,22 @@ END_RCPP
 
 // Modified that (Sigma_iY, Sigma_iX, cov) are input parameters. Previously they are calculated in the function
 //      This function needs the function getPCG1ofSigmaAndVector and function getCrossprod and GetTrace
-static List get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
+static void get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
 	const dvec &tau, const dvec &Sigma_iY, const dmat &Sigma_iX, const dmat &cov,
-	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff)
+	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff,
+	double &YPAPY, double &Trace, double &AI)
 {
 	dmat Sigma_iXt = Sigma_iX.t();
 	dvec PY = Sigma_iY - Sigma_iX * (cov * (Sigma_iXt * Y));
 	dvec APY;
 	get_crossprod_b_grm(PY, APY);
-	double YPAPY = dot(PY, APY);
+	YPAPY = dot(PY, APY);
 
-	double Trace = get_trace(Sigma_iX, X, w, tau, cov, nrun, maxiterPCG,
+	Trace = get_trace(Sigma_iX, X, w, tau, cov, nrun, maxiterPCG,
 		tolPCG, traceCVcutoff);
 	dvec PAPY_1 = get_PCG_diag_sigma(w, tau, APY, maxiterPCG, tolPCG);
 	dvec PAPY = PAPY_1 - Sigma_iX * (cov * (Sigma_iXt * PAPY_1));
-	double AI = dot(APY, PAPY);
-
-	return List::create(Named("YPAPY") = YPAPY, Named("Trace") = Trace,
-		Named("PY") = PY, Named("AI") = AI);
-}
-
-
-RcppExport SEXP saige_get_AI_score(SEXP r_Y, SEXP r_X, SEXP r_w,
-	SEXP r_tau, SEXP r_Sigma_iY, SEXP r_Sigma_iX, SEXP r_cov,
-	SEXP r_nrun, SEXP r_maxiterPCG, SEXP r_tolPCG, SEXP r_traceCVcutoff)
-{
-BEGIN_RCPP
-	RObject rcpp_result_gen;
-	RNGScope rcpp_rngScope_gen;
-	traits::input_parameter< const dvec& >::type Y(r_Y);
-	traits::input_parameter< const dmat& >::type X(r_X);
-	traits::input_parameter< const dvec& >::type w(r_w);
-	traits::input_parameter< const dvec& >::type tau(r_tau);
-	traits::input_parameter< const dvec& >::type Sigma_iY(r_Sigma_iY);
-	traits::input_parameter< const dmat& >::type Sigma_iX(r_Sigma_iX);
-	traits::input_parameter< const dmat& >::type cov(r_cov);
-	int nrun = Rf_asInteger(r_nrun);
-	int maxiterPCG = Rf_asInteger(r_maxiterPCG);
-	double tolPCG = Rf_asReal(r_tolPCG);
-	double traceCVcutoff = Rf_asReal(r_traceCVcutoff);
-	rcpp_result_gen = wrap(get_AI_score(Y, X, w, tau, Sigma_iY, Sigma_iX, cov,
-		nrun, maxiterPCG, tolPCG, traceCVcutoff));
-	return rcpp_result_gen;
-END_RCPP
+	AI = dot(APY, PAPY);
 }
 
 
@@ -482,18 +423,17 @@ END_RCPP
 
 // Modified that (Sigma_iY, Sigma_iX, cov) are input parameters. Previously they are calculated in the function
 // This function needs the function get_PCG_diag_sigma and function get_crossprod, get_AI_score
-static List fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
+static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
 	const dvec &in_tau, const dvec &Sigma_iY, const dmat &Sigma_iX,
 	const dmat &cov,
 	int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff)
 {
-	List re = get_AI_score(Y, X, w, in_tau, Sigma_iY, Sigma_iX, cov,
-		nrun, maxiterPCG, tolPCG, traceCVcutoff);
-  	double YPAPY = re["YPAPY"];
-  	double Trace = re["Trace"];
-  	double score1 = YPAPY - Trace;
-  	double AI1 = re["AI"];
-  	double Dtau = score1/AI1;
+	double YPAPY, Trace, AI;
+	get_AI_score(Y, X, w, in_tau, Sigma_iY, Sigma_iX, cov, nrun, maxiterPCG,
+		tolPCG, traceCVcutoff,
+		YPAPY, Trace, AI);
+  	double score = YPAPY - Trace;
+  	double Dtau = score / AI;
   	dvec tau = in_tau;
   	dvec tau0 = in_tau;
   	tau(1) = tau0(1) + Dtau;
@@ -515,31 +455,128 @@ static List fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
 		if (tau(i) < tol) tau(i) = 0;
   	}
 
-  	return List::create(Named("tau") = tau);
+  	return tau;
 }
 
 
-RcppExport SEXP saige_fitglmmaiRPCG(SEXP r_Y, SEXP r_X, SEXP r_w, SEXP r_tau,
-	SEXP r_Sigma_iY, SEXP r_Sigma_iX, SEXP r_cov, SEXP r_nrun,
-	SEXP r_maxiterPCG, SEXP r_tolPCG, SEXP r_tol, SEXP r_traceCVcutoff)
+// ========================================================================= //
+
+inline static void print_vec(const char *s, dvec &x)
+{
+	Rprintf("%s(", s);
+	for (int i=0; i < x.n_elem; i++)
+	{
+		if (i > 0) Rprintf(", ");
+		Rprintf("%0.7g", x[i]);
+	}
+	Rprintf(")\n");
+}
+
+
+RcppExport SEXP saige_fit_AI_PCG_binary(SEXP r_fit0, SEXP r_X, SEXP r_tau,
+	SEXP r_param)
 {
 BEGIN_RCPP
-	RObject rcpp_result_gen;
-	RNGScope rcpp_rngScope_gen;
-	traits::input_parameter< const dvec& >::type Y(r_Y);
-	traits::input_parameter< const dmat& >::type X(r_X);
-	traits::input_parameter< const dvec& >::type w(r_w);
-	traits::input_parameter< const dvec& >::type tau(r_tau);
-	traits::input_parameter< const dvec& >::type Sigma_iY(r_Sigma_iY);
-	traits::input_parameter< const dmat& >::type Sigma_iX(r_Sigma_iX);
-	traits::input_parameter< const dmat& >::type cov(r_cov);
-	int nrun = Rf_asInteger(r_nrun);
-	int maxiterPCG = Rf_asInteger(r_maxiterPCG);
-	double tolPCG = Rf_asReal(r_tolPCG);
-	double tol = Rf_asReal(r_tol);
-	double traceCVcutoff = Rf_asReal(r_traceCVcutoff);
-	rcpp_result_gen = wrap(fitglmmaiRPCG(Y, X, w, tau, Sigma_iY, Sigma_iX,
-		cov, nrun, maxiterPCG, tolPCG, tol, traceCVcutoff));
-	return rcpp_result_gen;
+
+	// parameters for fitting the model
+	List param(r_param);
+	const double tol = Rf_asReal(param["tol"]);
+	const double tol_inv_2 = 1 / (tol*tol);
+	const double tolPCG = Rf_asReal(param["tolPCG"]);
+	const int maxiter = Rf_asInteger(param["maxiter"]);
+	const int maxiterPCG = Rf_asInteger(param["maxiterPCG"]);
+	const int nrun = Rf_asInteger(param["nrun"]);
+	const double traceCVcutoff = Rf_asReal(param["traceCVcutoff"]);
+	const bool verbose = Rf_asLogical(param["verbose"])==TRUE;
+
+	List fit0(r_fit0);
+	dvec y = as<dvec>(fit0["y"]);
+	dmat X = as<dmat>(r_X);
+	dvec offset(y.size());
+	if (Rf_isNull(fit0["offset"]))
+		offset.zeros();
+	else
+		offset = as<dvec>(fit0["offset"]);
+
+	List family = fit0["family"];
+	Function fc_mu_eta = wrap(family["mu.eta"]);
+	dvec eta = as<dvec>(fit0["linear.predictors"]);
+	dvec eta0 = eta;
+	dvec mu = as<dvec>(fit0["fitted.values"]);
+	dvec mu_eta = as<dvec>(fc_mu_eta(eta0));
+	dvec Y = eta - offset + (y - mu) / mu_eta;
+	dvec alpha0 = as<dvec>(fit0["coefficients"]);
+
+	dvec alpha;
+	dmat cov;
+
+	dvec tau = as<dvec>(r_tau);
+	dvec tau0 = tau;
+
+	dvec re_Y, re_mu, re_alpha, re_eta, re_W, re_Sigma_iY;
+	dmat re_cov, re_Sigma_iX;
+	get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+		tolPCG, verbose,
+		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
+
+	double YPAPY, Trace, AI;
+	get_AI_score(re_Y, X, re_W, tau, re_Sigma_iY, re_Sigma_iX, re_cov, nrun,
+		maxiterPCG, tolPCG, traceCVcutoff,
+		YPAPY, Trace, AI);
+
+	tau[1] = std::max(0.0, tau0[1] + tau0[1]*tau0[1]*(YPAPY - Trace)/y.size());
+	if (verbose)
+		print_vec("Variance component estimates: ", tau);
+
+	int iter = 1;
+	for (; iter <= maxiter; iter++)
+	{
+		if (verbose)
+		{
+			Rprintf("Iteration %d, tau: ", iter);
+			print_vec("", tau);
+		}
+
+		alpha0 = re_alpha;
+		tau0 = tau;
+		eta0 = eta;
+		get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+			tolPCG, verbose,
+			re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
+		tau = fitglmmaiRPCG(re_Y, X, re_W, tau, re_Sigma_iY,
+			re_Sigma_iX, re_cov, nrun, maxiterPCG, tolPCG,
+			tol, traceCVcutoff);
+
+		cov = re_cov; alpha = re_alpha; eta = re_eta;
+		Y = re_Y; mu = re_mu;
+
+		if (tau[1] == 0) break;
+		if (max(abs(tau-tau0)/(abs(tau)+abs(tau0)+tol)) < tol) break;
+		if (max(tau) > tol_inv_2)
+		{
+			Rprintf("Large variance estimate observed in the iterations, model not converged ...");
+			iter = maxiter + 1;
+			break;
+		}
+	}
+
+	if (verbose) print_vec("Final tau: " ,tau);
+
+	get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+		tolPCG, verbose,
+		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
+	cov = re_cov; alpha = re_alpha; eta = re_eta;
+	Y = re_Y; mu = re_mu;
+
+	return List::create(
+		_["theta"] = tau,
+		_["coefficients"] = alpha,
+		_["linear.predictors"] = eta,
+		_["fitted.values"] = mu,
+		_["Y"] = Y,
+		_["residuals"] = y - mu,
+		_["cov"] = cov,
+		_["converged"] = bool(iter <= maxiter));
+
 END_RCPP
 }

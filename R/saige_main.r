@@ -113,7 +113,7 @@ Covariate_Transform_Back<-function(coef, Param.transform)
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     trait.type=c("binary", "quantitative"), invNormalize=FALSE,
     maf=0.01, missing.rate=0.01, max.num.snp=100000L, variant.id=NULL,
-    tol=0.02, maxiter=20L, tolPCG=1e-5, maxiterPCG=500L,
+    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     nThreads=1, Cutoff=2,  numMarkers=30, tau.init = c(0,0),
     traceCVcutoff=1, ratioCVcutoff=1, model.save.fn=NA_character_,
     verbose=TRUE)
@@ -210,105 +210,52 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     buf_sigma <- double(n_samp)
     .Call(saige_store_geno, PackedGeno, n_samp, buf_geno, buf_sigma)
 
+    # parameters for fitting the model
+    param <- list(
+        tol = tol, tolPCG = tolPCG,
+        maxiter = maxiter, maxiterPCG = maxiterPCG,
+        nrun = nrun,
+        traceCVcutoff = traceCVcutoff,
+        verbose = verbose
+    )
+
     # fit the model
     if (trait.type == "binary")
     {
         # binary outcome
-        cat(phenovar, " is a binary trait:\n")
+        cat(phenovar, "is a binary trait:\n")
 
+        # fit the null model
         fit0 <- glm(formula.new, data=data.new, family=binomial)
         if (verbose) print(fit0)
         obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula.new, data.new)
 
-        y <- fit0$y
-        n <- length(y)
-        X <- model.matrix(fit0)
-        offset = fit0$offset
-        if (is.null(offset)) offset <- rep(0, n)
-
-        family <- fit0$family
-        eta <- fit0$linear.predictors
-        mu <- fit0$fitted.values
-        mu.eta <- family$mu.eta(eta)
-        Y <- eta - offset + (y - mu)/mu.eta
-        alpha0 <- fit0$coef
-        eta0 <- eta
+        # initial tau
         tau <- fixtau <- c(0,0)
-        if (family$family %in% c("binomial", "poisson"))
+        if (fit0$family$family %in% c("binomial", "poisson"))
             tau[1] = fixtau[1] = 1
-
-        # change, use 0.5 as a default value, and use Get_Coef before getAIScore
-        q = 1
-
         if (tau.init[fixtau==0] == 0)
             tau[fixtau==0] = 0.5
         else
             tau[fixtau==0] = tau.init[fixtau==0]
-        cat("initial tau is ", paste(tau, collapse=", "), "\n", sep="")
-        tau0 <- tau
+        if (verbose)
+	        cat("Initial tau is (", paste(tau, collapse=", "), ")\n", sep="")
 
-        re.coef <- .Call(SAIGEgds:::saige_get_coeff, y, X, tau, family, alpha0, eta0,
-            offset, maxiterPCG, maxiter, tolPCG, verbose)
-        re <- .Call(SAIGEgds:::saige_get_AI_score, re.coef$Y, X, re.coef$W, tau, re.coef$Sigma_iY,
-            re.coef$Sigma_iX, re.coef$cov, nrun, maxiterPCG, tolPCG,
-            traceCVcutoff)
+        # iterate
+        ans <- .Call(saige_fit_AI_PCG_binary, fit0, model.matrix(fit0), tau,
+            param)
 
-        tau[2] <- max(0, tau0[2] + tau0[2]^2 * (re$YPAPY - re$Trace)/n)
-        if(verbose)
-        {
-            cat("Variance component estimates: ")
-            print(tau)
-        }
-
-        for (i in 1:maxiter)
-        {
-            if (verbose) cat("Iteration", i, ":", tau, "\n")
-            alpha0 <- re.coef$alpha
-            tau0 = tau
-            eta0 = eta
-            re.coef <- .Call(saige_get_coeff, y, X, tau, family, alpha0, eta0,
-                offset, maxiterPCG, maxiter, tolPCG, verbose)
-            fit <- fitglmmaiRPCG(re.coef$Y, X, re.coef$W, tau, re.coef$Sigma_iY,
-                re.coef$Sigma_iX, re.coef$cov, nrun, maxiterPCG, tolPCG,
-                tol, traceCVcutoff)
-
-            tau <- as.numeric(fit$tau)
-            cov <- re.coef$cov
-            alpha <- re.coef$alpha
-            eta <- re.coef$eta
-            Y <- re.coef$Y
-            mu <- re.coef$mu
-
-            if (tau[2] == 0) break
-            if (max(abs(tau-tau0)/(abs(tau)+abs(tau0)+tol)) < tol) break
-            if (max(tau) > tol^(-2))
-            {
-                warning("Large variance estimate observed in the iterations, model not converged ...",
-                    call.=FALSE, immediate.=TRUE)
-                i = maxiter
-                break
-            }
-        }
-        if (verbose) cat("Final:" ,tau, "\n")
-
-        re.coef <- .Call(saige_get_coeff, y, X, tau, family, alpha0, eta0,  offset,
-            maxiterPCG, maxiter, tolPCG, verbose)
-        cov <- re.coef$cov
-        alpha <- re.coef$alpha
-        eta <- re.coef$eta
-        Y <- re.coef$Y
-        mu <- re.coef$mu
-        converged <- ifelse(i < maxiter, TRUE, FALSE)
-        res <- y - mu
-        # coef.alpha <- Covariate_Transform_Back(alpha, out.transform$Param.transform)
-        coef.alpha <- alpha
-
-        ans <- list(theta=tau, coefficients=coef.alpha, linear.predictors=eta,
-  	        fitted.values=mu, Y=Y, residuals=res, cov=cov, converged=converged,
-  	        obj.glm.null=fit0, obj.noK=obj.noK, traitType=trait.type,
-  	        sample.id=data$sample.id)
+        ans$coefficients <- Covariate_Transform_Back(ans$coefficients,
+            out.transform$Param.transform)
+        ans$obj.glm.null <- fit0
+        ans$obj.noK <- obj.noK
     }
 
+    ans$trait.type <- trait.type
+    ans$sample.id <- data$sample.id
+
+    if (!is.na(model.save.fn))
+        save(ans, file=model.save.fn)
     ans
 }
 
