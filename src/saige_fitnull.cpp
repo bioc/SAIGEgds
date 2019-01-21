@@ -9,9 +9,9 @@
 #include <algorithm>
 #include "vectorization.h"
 
+using namespace std;
 using namespace Rcpp;
 using namespace arma;
-using namespace std;
 
 
 // ========================================================================= //
@@ -87,7 +87,7 @@ BEGIN_RCPP
 
 	// calculate diag(grm)
 	buf_diag_grm = REAL(buf_sigma);
-	memset(buf_sigma, 0, sizeof(double)*Geno_NumSamp);
+	memset(buf_diag_grm, 0, sizeof(double)*Geno_NumSamp);
 	for (size_t i=0; i < Geno_NumVariant; i++)
 	{
 		unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;

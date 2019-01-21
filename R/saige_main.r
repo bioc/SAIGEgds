@@ -127,6 +127,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (is.character(gdsfile))
     {
+        if (verbose)
+            cat("Open the file '", gdsfile, "'\n")
         gdsfile <- seqOpen(gdsfile)
         on.exit(seqClose(gdsfile))
     }
@@ -165,7 +167,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         seqSetFilter(gdsfile, sample.id=data$sample.id, verbose=FALSE)
         seqSetFilterCond(gdsfile, maf=maf, missing.rate=missing.rate, verbose=FALSE)
     } else {
-        setSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
+        seqSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
     }
 
     dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
@@ -195,20 +197,16 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 	cat("colnames(data.new) is ", colnames(data.new), "\n")
 	cat("out.transform$Param.transform$qrr: ", dim(out.transform$Param.transform$qrr), "\n")
 
-
     # 2-bit packed genotypes
-    if (verbose) cat("Start loading genotypes")
-    PackedGeno <- SeqArray:::.seqGet2bGeno(gdsfile)
+    if (verbose) cat("Start loading packed genotypes: ")
+    packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile)
     if (verbose)
-    {
-        cat(" [done] ")
-        print(object.size(PackedGeno))
-    }
+        print(object.size(packed.geno))
 
     # initialize internal variables and buffers
-    buf_geno <- double(4*n_var)
+    buf_std_geno <- double(4*n_var)
     buf_sigma <- double(n_samp)
-    .Call(saige_store_geno, PackedGeno, n_samp, buf_geno, buf_sigma)
+    .Call(saige_store_geno, packed.geno, n_samp, buf_std_geno, buf_sigma)
 
     # parameters for fitting the model
     param <- list(
@@ -242,8 +240,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 	        cat("Initial tau is (", paste(tau, collapse=", "), ")\n", sep="")
 
         # iterate
-        ans <- .Call(saige_fit_AI_PCG_binary, fit0, model.matrix(fit0), tau,
-            param)
+        X <- model.matrix(fit0)
+        ans <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
 
         ans$coefficients <- Covariate_Transform_Back(ans$coefficients,
             out.transform$Param.transform)
