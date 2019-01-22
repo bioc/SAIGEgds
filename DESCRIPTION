@@ -5,7 +5,7 @@ Title: Scalable and Accurate Implementation of Generalized mixed models with
 Version: 0.9.0
 Date: 2019-01-01
 Depends: R (>= 2.15), gdsfmt, SeqArray (>= 1.23.5), Rcpp
-LinkingTo: Rcpp, RcppArmadillo
+LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, Rcpp, RcppParallel, SPAtest
 Suggests: parallel, Matrix, RUnit, knitr, MASS, BiocGenerics
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),

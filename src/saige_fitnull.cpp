@@ -6,12 +6,30 @@
 #endif
 
 #include <RcppArmadillo.h>
+#include <RcppParallel.h>
 #include <algorithm>
 #include "vectorization.h"
 
 using namespace std;
 using namespace Rcpp;
 using namespace arma;
+using namespace RcppParallel;
+
+
+// ========================================================================= //
+// R functions for random numbers
+
+inline static void set_seed(unsigned int seed)
+{
+	Environment base_env("package:base");
+	Function set_seed_r = base_env["set.seed"];
+	set_seed_r(seed);
+}
+
+inline static NumericVector random_binary(int n)
+{
+	return(rbinom(n, 1, 0.5));
+}
 
 
 // ========================================================================= //
@@ -117,54 +135,78 @@ END_RCPP
 
 // ========================================================================= //
 
+// see the example (http://rcppcore.github.io/RcppParallel/#parallelreduce)
+struct CrossProd: public Worker
+{   
+	// source vector
+	const dvec &b;
+	// accumulated value
+	dvec value;
+   
+	// constructors
+	CrossProd(const dvec &input): b(input), value(Geno_NumSamp)
+		{ value.zeros(); }
+	CrossProd(const CrossProd &val, Split): b(val.b), value(Geno_NumSamp)
+		{ value.zeros(); }
+   
+	// accumulate just the element of the range
+	void operator()(size_t begin, size_t end)
+	{
+		for (size_t i=begin; i < end; i++)
+		{
+			unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+			const double *base = buf_std_geno + 4*i;
+
+			// get dot = sum(std.geno .* b)
+			double dot = 0;
+			const double *pb = &b[0];
+			size_t n = Geno_NumSamp;
+			for (; n >= 4; n-=4, pb+=4)
+			{
+				unsigned char gg = *g++;
+				dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
+					base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
+			}
+			for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
+			{
+				dot += base[gg & 0x03] * (*pb++);
+				gg >>= 2;
+			}
+
+			// update the output rv += dot .* std.geno
+			double *pbb = &value[0];
+			g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+			n = Geno_NumSamp;
+			for (; n >= 4; n-=4, pbb+=4)
+			{
+				unsigned char gg = *g++;
+				pbb[0] += dot * base[gg & 0x03];
+				pbb[1] += dot * base[(gg >> 2) & 0x03];
+				pbb[2] += dot * base[(gg >> 4) & 0x03];
+				pbb[3] += dot * base[gg >> 6];
+			}
+			for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
+			{
+				(*pbb++) += dot * base[gg & 0x03];
+				gg >>= 2;
+			}
+		}
+	}
+     
+	// join the value with that of another CrossProd
+	void join(const CrossProd &rhs)
+		{ value += rhs.value; }
+};
+
+
 /// Cross-product of standardized genotypes and a numeric vector
 /// Input: b (n_samp-length)
 /// Output: out_b (n_samp-length)
 static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 {
-	out_b.resize(Geno_NumSamp);
-	memset(&out_b[0], 0, sizeof(double)*Geno_NumSamp);
-
-	for (size_t i=0; i < Geno_NumVariant; i++)
-	{
-		unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
-		const double *base = buf_std_geno + 4*i;
-
-		// get dot = sum(std.geno .* b)
-		double dot = 0;
-		const double *pb = &b[0];
-		size_t n = Geno_NumSamp;
-		for (; n >= 4; n-=4, pb+=4)
-		{
-			unsigned char gg = *g++;
-			dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
-				base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
-		}
-		for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
-		{
-			dot += base[gg & 0x03] * (*pb++);
-			gg >>= 2;
-		}
-
-		// update the output rv += dot .* std.geno
-		double *pbb = &out_b[0];
-		g = Geno_PackedRaw + Geno_PackedNumSamp*i;
-		n = Geno_NumSamp;
-		for (; n >= 4; n-=4, pbb+=4)
-		{
-			unsigned char gg = *g++;
-			pbb[0] += dot * base[gg & 0x03];
-			pbb[1] += dot * base[(gg >> 2) & 0x03];
-			pbb[2] += dot * base[(gg >> 4) & 0x03];
-			pbb[3] += dot * base[gg >> 6];
-		}
-		for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
-		{
-			(*pbb++) += dot * base[gg & 0x03];
-			gg >>= 2;
-		}
-	}
-
+	CrossProd obj(b);
+	parallelReduce(0, Geno_NumVariant, obj);
+	out_b = obj.value;
 	// normalize
 	f64_mul(Geno_NumSamp, 1.0/Geno_NumVariant, &out_b[0]);
 }
@@ -190,19 +232,17 @@ static void get_diag_sigma(const dvec& w, const dvec& tau, dvec &out_sigma)
 /// Sigma = tau[0] * b * diag(1/W) + tau[1] * diag(grm, b)
 /// Input: w, tau
 /// Output: out_sigma
-static dcolvec get_crossprod(const dcolvec &b, const dvec& w, const dvec& tau)
+static dvec get_crossprod(const dcolvec &b, const dvec& w, const dvec& tau)
 {
 	const double tau0 = tau[0];
 	const double tau1 = tau[1];
 	if (tau1 == 0)
 	{
-		dcolvec rv = tau0 * (b % (1/w));
-		return(rv);
+		return(tau0 * (b % (1/w)));
 	} else {
 		dvec out_b;
 		get_crossprod_b_grm(b, out_b);
-		dcolvec rv = tau0 * (b % (1/w)) + tau1 * out_b;
-		return(rv);
+		return(tau0 * (b % (1/w)) + tau1 * out_b);
 	}
 }
 
@@ -212,37 +252,29 @@ static dcolvec get_crossprod(const dcolvec &b, const dvec& w, const dvec& tau)
 static dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 	int maxiterPCG, double tolPCG)
 {
-	dvec r = b, r1;
-
-	dvec crossProdVec(Geno_NumSamp);
-	dvec minvVec;
-	get_diag_sigma(w, tau, minvVec);
-	minvVec = 1 / minvVec;
+	dvec r = b, r1, minv;
+	get_diag_sigma(w, tau, minv);
+	minv = 1 / minv;
 	double sumr2 = sum(r % r);
 
-	dvec zVec = minvVec % r;
-	dvec z1Vec;
-	dvec pVec = zVec;
-
-	dvec xVec(Geno_NumSamp);
-	xVec.zeros();
+	dvec z = minv % r, z1;
+	dvec p = z;
+	dvec x(Geno_NumSamp);
+	x.zeros();
 
 	int iter = 0;
 	while (sumr2 > tolPCG && iter < maxiterPCG)
 	{
 		iter = iter + 1;
-		dcolvec ApVec = get_crossprod(pVec, w, tau);
-		dvec preA = (r.t() * zVec)/(pVec.t() * ApVec);
+		dvec Ap = get_crossprod(p, w, tau);
+		double a = sum(r % z) / sum(p % Ap);
+		x += a * p;
+		r1 = r - a * Ap;
+		z1 = minv % r1;
 
-		double a = preA(0);
-		xVec = xVec + a * pVec;
-		r1 = r - a * ApVec;
-
-		z1Vec = minvVec % r1;
-		dvec Prebet = (z1Vec.t() * r1)/(zVec.t() * r);
-		double bet = Prebet(0);
-		pVec = z1Vec+ bet*pVec;
-		zVec = z1Vec;
+		double bet = sum(z1 % r1) / sum(z % r);
+		p = z1 + bet*p;
+		z = z1;
 		r = r1;
 
 		sumr2 = sum(r % r);
@@ -252,85 +284,61 @@ static dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 	{
 		cout << "pcg did not converge. You may increase maxiter number." << endl;
 	}
-	// cout << "iter from get_PCG_diag_sigma " << iter << endl;
-	return(xVec);
+	return(x);
 }
 
 
-void set_seed(unsigned int seed) {
-	Rcpp::Environment base_env("package:base");
-  	Rcpp::Function set_seed_r = base_env["set.seed"];
-  	set_seed_r(seed);  
+/// Calculate the coefficient of variation for mean of a vector
+static double calcCV(const dvec& x)
+{
+	double x_mean = mean(x);
+	double x_sd = stddev(x);
+	double vecCV = (x_sd / x_mean) / int(x.n_elem);
+	return(vecCV);
 }
-
-// [[export]]
-NumericVector nb(int n) {
-  	return(rbinom(n,1,0.5));
-}
-
-//This function calculates the coefficients of variation for mean of a vector
-// [[export]]
-float calCV(dvec& xVec){
-  int veclen = xVec.n_elem;
-  float vecMean = mean(xVec);
-  float vecSd = stddev(xVec);
-  float vecCV = (vecSd/vecMean)/veclen;
-  return(vecCV);
-}
-
 
 
 // [[export]]
-static double get_trace(const dmat &Sigma_iX, const dmat& Xmat,
-	const dvec& wVec, const dvec& tauVec, const dmat& cov1,
+static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
+	const dvec& tau, const dmat& cov,
 	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff)
 {
 	set_seed(200);
 	dmat Sigma_iXt = Sigma_iX.t();
 	dvec Sigma_iu;  
 	dcolvec Pu;
-	dvec Au;
-	dvec uVec;
+	dvec Au, u;
 
 	int nrunStart = 0;
 	int nrunEnd = nrun;
 	double traceCV = traceCVcutoff + 0.1;
-	dvec tempVec(nrun);
-	tempVec.zeros();
+	dvec buf(nrun);
+	buf.zeros();
 
 	while(traceCV > traceCVcutoff)
 	{
-		//dvec tempVec(nrun);
-		//tempVec.zeros();
 		for(int i = nrunStart; i < nrunEnd; i++)
 		{
-			NumericVector uVec0;
-			uVec0 = nb(Geno_NumSamp);
-			uVec = as<dvec>(uVec0);
-			uVec = uVec*2 - 1;
-			Sigma_iu = get_PCG_diag_sigma(wVec, tauVec, uVec, maxiterPCG, tolPCG);
-			Pu = Sigma_iu - Sigma_iX * (cov1 *  (Sigma_iXt * uVec));
-			get_crossprod_b_grm(uVec, Au);
-			tempVec(i) = dot(Au, Pu);
-			Au.clear();
-			Pu.clear();
-			Sigma_iu.clear();
-			uVec.clear();
+			u = as<dvec>(random_binary(Geno_NumSamp));
+			u = 2*u - 1;
+			Sigma_iu = get_PCG_diag_sigma(w, tau, u, maxiterPCG, tolPCG);
+			Pu = Sigma_iu - Sigma_iX * (cov *  (Sigma_iXt * u));
+			get_crossprod_b_grm(u, Au);
+			buf(i) = dot(Au, Pu);
 		}
-		traceCV = calCV(tempVec);
+		traceCV = calcCV(buf);
 		if(traceCV > traceCVcutoff)
 		{
 			nrunStart = nrunEnd;
 			nrunEnd = nrunEnd + 10;
-			tempVec.resize(nrunEnd);
-			cout << "CV for trace random estimator using "<< nrun << " runs is " << traceCV <<  " > " << traceCVcutoff << endl;
+			buf.resize(nrunEnd);
+			cout << "CV for trace random estimator using "<< nrun <<
+				" runs is " << traceCV <<  " > " << traceCVcutoff << endl;
 			cout << "try " << nrunEnd << " runs" << endl;
 		}
 	}
 
-	double tra = mean(tempVec);
-	tempVec.clear();
-	return(tra);
+	return(mean(buf));
 }
 
 
@@ -396,8 +404,6 @@ static void get_coeff(const dvec &y, const dmat &X, const dvec &tau,
 }
 
 
-// ========================================================================= //
-
 // Modified that (Sigma_iY, Sigma_iX, cov) are input parameters. Previously they are calculated in the function
 //      This function needs the function getPCG1ofSigmaAndVector and function getCrossprod and GetTrace
 static void get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
@@ -418,8 +424,6 @@ static void get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
 	AI = dot(APY, PAPY);
 }
 
-
-// ========================================================================= //
 
 // Modified that (Sigma_iY, Sigma_iX, cov) are input parameters. Previously they are calculated in the function
 // This function needs the function get_PCG_diag_sigma and function get_crossprod, get_AI_score
@@ -533,8 +537,9 @@ BEGIN_RCPP
 	{
 		if (verbose)
 		{
-			Rprintf("Iteration %d, tau: ", iter);
-			print_vec("", tau);
+			Rprintf("Iteration %d:\n", iter);
+			print_vec("    tau: ", tau);
+			print_vec("    fixed coeff: ", alpha);
 		}
 
 		alpha0 = re_alpha;
@@ -560,13 +565,17 @@ BEGIN_RCPP
 		}
 	}
 
-	if (verbose) print_vec("Final tau: " ,tau);
-
 	get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
 		tolPCG, verbose,
 		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
 	cov = re_cov; alpha = re_alpha; eta = re_eta;
 	Y = re_Y; mu = re_mu;
+
+	if (verbose)
+	{
+		print_vec("Final tau: " ,tau);
+		print_vec("    fixed coeff: ", alpha);
+	}
 
 	return List::create(
 		_["theta"] = tau,

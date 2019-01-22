@@ -114,7 +114,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     trait.type=c("binary", "quantitative"), invNormalize=FALSE,
     maf=0.01, missing.rate=0.01, max.num.snp=100000L, variant.id=NULL,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    nThreads=1, Cutoff=2,  numMarkers=30, tau.init = c(0,0),
+    num.thread=1, Cutoff=2, numMarkers=30, tau.init = c(0,0),
     traceCVcutoff=1, ratioCVcutoff=1, model.save.fn=NA_character_,
     verbose=TRUE)
 {
@@ -122,6 +122,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.data.frame(data))
     stopifnot(is.character(gdsfile) | inherits(gdsfile, "SeqVarGDSClass"))
     trait.type <- match.arg(trait.type)
+    stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.save.fn), length(model.save.fn)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
@@ -197,8 +198,12 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 	cat("colnames(data.new) is ", colnames(data.new), "\n")
 	cat("out.transform$Param.transform$qrr: ", dim(out.transform$Param.transform$qrr), "\n")
 
+
+formula.new <- formula
+data.new <- data
+
     # 2-bit packed genotypes
-    if (verbose) cat("Start loading packed genotypes: ")
+    if (verbose) cat("start loading packed genotypes: ")
     packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile)
     if (verbose)
         print(object.size(packed.geno))
@@ -216,6 +221,16 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         traceCVcutoff = traceCVcutoff,
         verbose = verbose
     )
+
+    # set the number of internal threads
+    if (is.na(num.thread) || num.thread < 1L)
+        num.thread <- 1L
+    setThreadOptions(num.thread)
+    if (verbose)
+    {
+        cat("using ", num.thread, " thread",
+            ifelse(num.thread>1L, "s", ""), "\n", sep="")
+    }
 
     # fit the model
     if (trait.type == "binary")
@@ -243,8 +258,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         X <- model.matrix(fit0)
         ans <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
 
-        ans$coefficients <- Covariate_Transform_Back(ans$coefficients,
-            out.transform$Param.transform)
+        # ans$coefficients <- Covariate_Transform_Back(ans$coefficients,
+        #     out.transform$Param.transform)
         ans$obj.glm.null <- fit0
         ans$obj.noK <- obj.noK
     }
