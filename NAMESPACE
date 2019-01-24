@@ -3,7 +3,8 @@ useDynLib(SAIGEgds,
     saige_score_test_init,
     saige_simd_version,
     saige_store_geno,
-    saige_fit_AI_PCG_binary
+    saige_fit_AI_PCG_binary,
+    saige_calc_var_ratio_binary
 )
 
 # Export all names

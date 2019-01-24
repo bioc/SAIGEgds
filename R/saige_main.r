@@ -114,8 +114,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     trait.type=c("binary", "quantitative"), invNormalize=FALSE,
     maf=0.01, missing.rate=0.01, max.num.snp=100000L, variant.id=NULL,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    num.thread=1, Cutoff=2, numMarkers=30, tau.init = c(0,0),
-    traceCVcutoff=1, ratioCVcutoff=1, model.save.fn=NA_character_,
+    num.thread=1, Cutoff=2, num.marker=30, tau.init = c(0,0),
+    traceCVcutoff=1, ratioCVcutoff=1, model.save.fn=NA_character_, seed=200,
     verbose=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
@@ -124,6 +124,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     trait.type <- match.arg(trait.type)
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.save.fn), length(model.save.fn)==1L)
+    stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (is.character(gdsfile))
@@ -182,6 +183,15 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         cat("    # of variants: ", .pretty(n_var), "\n", sep="")
     }
 
+    # set the number of internal threads
+    if (is.na(num.thread) || num.thread < 1L)
+        num.thread <- 1L
+    setThreadOptions(num.thread)
+    if (verbose)
+    {
+        cat("    using ", num.thread, " thread",
+            ifelse(num.thread>1L, "s", ""), "\n", sep="")
+    }
 
 	out.transform<-Covariate_Transform(formula, data=data)
 	formulaNewList = c("Y ~ ", out.transform$Param.transform$X_name[1])
@@ -208,16 +218,6 @@ data.new <- data
     if (verbose)
         print(object.size(packed.geno))
 
-    # set the number of internal threads
-    if (is.na(num.thread) || num.thread < 1L)
-        num.thread <- 1L
-    setThreadOptions(num.thread)
-    if (verbose)
-    {
-        cat("using ", num.thread, " thread",
-            ifelse(num.thread>1L, "s", ""), "\n", sep="")
-    }
-
     # initialize internal variables and buffers
     buf_std_geno <- double(4*n_var)
     buf_sigma <- double(n_samp)
@@ -231,7 +231,9 @@ data.new <- data
         tol = tol, tolPCG = tolPCG,
         maxiter = maxiter, maxiterPCG = maxiterPCG,
         nrun = nrun,
+        num.marker = num.marker,
         traceCVcutoff = traceCVcutoff,
+        ratioCVcutoff = ratioCVcutoff,
         verbose = verbose
     )
 
@@ -239,11 +241,17 @@ data.new <- data
     if (trait.type == "binary")
     {
         # binary outcome
-        cat(phenovar, "is a binary trait:\n")
+        cat("Binary outcome: ", phenovar, "\n", sep="")
 
         # fit the null model
         fit0 <- glm(formula.new, data=data.new, family=binomial)
-        if (verbose) print(fit0)
+        if (verbose)
+        {
+            cat("Initial fixed coefficients:\n")
+            v <- fit0$coefficients
+            names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
+            print(v)
+        }
         obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula.new, data.new)
 
         # initial tau
@@ -259,20 +267,33 @@ data.new <- data
 
         # iterate
         X <- model.matrix(fit0)
-        ans <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
+        glmm <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
+
+        # calculate the variance ratio
+        if (verbose)
+            cat("Calculating the average ratio of variances ...\n")
+        set.seed(seed)
+        var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
+            param, sample.int(n_var, n_var))
+		var.ratio <- var.ratio[order(var.ratio$id), ]
+		var.ratio$id <- seqGetData(gdsfile, "variant.id")[var.ratio$id]
+		rownames(var.ratio) <- NULL
+		if (verbose)
+		    cat("    avg. of ratios is ", mean(var.ratio$ratio), "\n", sep="")
 
         # ans$coefficients <- Covariate_Transform_Back(ans$coefficients,
         #     out.transform$Param.transform)
-        ans$obj.glm.null <- fit0
-        ans$obj.noK <- obj.noK
+        # ans$obj.glm.null <- fit0
+        glmm$obj.noK <- obj.noK
+        glmm$var.ratio <- var.ratio
     }
 
-    ans$trait.type <- trait.type
-    ans$sample.id <- data$sample.id
+    glmm$trait.type <- trait.type
+    glmm$sample.id <- data$sample.id
 
     if (!is.na(model.save.fn))
-        save(ans, file=model.save.fn)
-    ans
+        save(glmm, file=model.save.fn)
+    glmm
 }
 
 
@@ -364,7 +385,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         XV = modobj$obj.noK$XV[, ii],  # K x n_samp
         t_XVX_inv_XV = t(modobj$obj.noK$XXVX_inv[ii, ] * modobj$obj.noK$V[ii]),  # K x n_samp
         t_X = t(X1),  # K x n_samp
-        var.ratio = mean(modobj$var.ratio, na.rm=TRUE),
+        var.ratio = mean(modobj$var.ratio$ratio, na.rm=TRUE),
         buf_coeff = double(nrow(modobj$obj.noK$XV)),
         buf_adj_g = double(n),
         buf_index = integer(n),

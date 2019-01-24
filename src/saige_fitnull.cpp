@@ -9,6 +9,7 @@
 #include <RcppArmadillo.h>
 #include <RcppParallel.h>
 #include <tbb/parallel_for.h>
+#include <vector>
 #include <algorithm>
 #include "vectorization.h"
 
@@ -74,14 +75,16 @@ inline static NumericVector random_binary(int n)
 
 
 // ========================================================================= //
-// Store packed SNP genotypes
+// Store 2-bit packed SNP genotypes
+
+#define BYTE    unsigned char
 
 static int NumThreads = 0;  //< the number of threads
 
-static unsigned char *Geno_PackedRaw = NULL;
-static size_t Geno_NumSamp = 0;
-static size_t Geno_PackedNumSamp = 0;
-static size_t Geno_NumVariant = 0;
+static BYTE *Geno_PackedRaw = NULL;    //< the pointer to the 2-bit packed genotypes
+static size_t Geno_NumSamp = 0;        //< the number of samples
+static size_t Geno_PackedNumSamp = 0;  //< the number of bytes for packed samples
+static size_t Geno_NumVariant = 0;     //< the number of variants
 
 static double *buf_std_geno = NULL;   //< a 4-by-n_variant look-up matrix
 static double *buf_diag_grm = NULL;   //< n_samp-length, sigma_i = sum_j adj.g[i,j]^2
@@ -89,7 +92,7 @@ static double *buf_crossprod = NULL;  //< nThread-by-n_samp matrix
 
 // Internal 2-bit genotype lookup tables
 static bool lookup_has_init = false;
-static unsigned char num_valid[256], num_sum[256];
+static BYTE num_valid[256], num_sum[256];
 
 static void init_lookup_table()
 {
@@ -108,10 +111,10 @@ static void init_lookup_table()
 	}
 }
 
-
 inline static double sq(double v) { return v*v; }
+inline static double ds_nan(BYTE g) { return (g < 3) ? g : R_NaN; }
 
-/// store SNP genotype in the 2-bit packed format
+/// Store SNP genotype in the 2-bit packed format
 RcppExport SEXP saige_store_geno(SEXP rawgeno, SEXP num_samp, SEXP r_buf_geno,
 	SEXP r_buf_sigma, SEXP r_buf_crossprod)
 {
@@ -119,7 +122,7 @@ BEGIN_RCPP
 
 	// initialize the basic genotype variables
 	RawMatrix RawGeno(rawgeno);
-	Geno_PackedRaw = (unsigned char*)&RawGeno[0];
+	Geno_PackedRaw = (BYTE*)&RawGeno[0];
 	Geno_NumSamp = Rf_asInteger(num_samp);
 	Geno_PackedNumSamp = RawGeno.nrow();
 	Geno_NumVariant = RawGeno.ncol();
@@ -129,7 +132,7 @@ BEGIN_RCPP
 	buf_std_geno = REAL(r_buf_geno);
 	for (size_t i=0; i < Geno_NumVariant; i++)
 	{
-		unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+		BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 		// calculate allele frequency
 		int n_valid=0, sum=0;
 		for (size_t j=0; j < Geno_PackedNumSamp; j++)
@@ -151,19 +154,19 @@ BEGIN_RCPP
 	memset(buf_diag_grm, 0, sizeof(double)*Geno_NumSamp);
 	for (size_t i=0; i < Geno_NumVariant; i++)
 	{
-		unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+		BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 		const double *base = buf_std_geno + 4*i;
 		size_t n = Geno_NumSamp;
 		double *p = buf_diag_grm;
 		for (; n >= 4; n-=4, p+=4)
 		{
-			unsigned char gg = *g++;
+			BYTE gg = *g++;
 			p[0] += sq(base[gg & 0x03]);
 			p[1] += sq(base[(gg >> 2) & 0x03]);
 			p[2] += sq(base[(gg >> 4) & 0x03]);
 			p[3] += sq(base[gg >> 6]);
 		}
-		for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
+		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 		{
 			(*p++) += sq(base[gg & 0x03]);
 			gg >>= 2;
@@ -175,13 +178,35 @@ BEGIN_RCPP
 	NumericMatrix mat(r_buf_crossprod);
 	buf_crossprod = REAL(r_buf_crossprod);
 	NumThreads = mat.ncol();
-	if (NumThreads > Geno_NumSamp) NumThreads = Geno_NumSamp;
-	if (NumThreads > Geno_NumVariant) NumThreads = Geno_NumVariant;
+	if (NumThreads > (int)Geno_NumSamp) NumThreads = Geno_NumSamp;
+	if (NumThreads > (int)Geno_NumVariant) NumThreads = Geno_NumVariant;
 	if (NumThreads < 1) NumThreads = 1;
 
 END_RCPP
 }
 
+
+/// 
+static void get_geno_ds(int snp_idx, dvec &ds)
+{
+	ds.resize(Geno_NumSamp);
+	const BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*snp_idx;
+	double *p = &ds[0];
+	size_t n = Geno_NumSamp;
+	for (; n >= 4; n-=4, p+=4)
+	{
+		BYTE gg = *g++;
+		p[0] = ds_nan(gg & 0x03);
+		p[1] = ds_nan((gg >> 2) & 0x03);
+		p[2] = ds_nan((gg >> 4) & 0x03);
+		p[3] = ds_nan(gg >> 6);
+	}
+	for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
+	{
+		*p++ = ds_nan(gg & 0x03);
+		gg >>= 2;
+	}
+}
 
 
 // ========================================================================= //
@@ -194,9 +219,10 @@ static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 	// initialize
 	memset(buf_crossprod, 0, sizeof(double)*Geno_NumSamp*NumThreads);
 
+	// crossprod with b
 	PARALLEL_FOR(i, Geno_NumVariant)
 	{
-		unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+		const BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 		const double *base = buf_std_geno + 4*i;
 
 		// get dot = sum(std.geno .* b)
@@ -205,11 +231,11 @@ static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 		size_t n = Geno_NumSamp;
 		for (; n >= 4; n-=4, pb+=4)
 		{
-			unsigned char gg = *g++;
+			BYTE gg = *g++;
 			dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
 				base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
 		}
-		for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
+		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 		{
 			dot += base[gg & 0x03] * (*pb++);
 			gg >>= 2;
@@ -221,13 +247,13 @@ static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 		n = Geno_NumSamp;
 		for (; n >= 4; n-=4, pbb+=4)
 		{
-			unsigned char gg = *g++;
+			BYTE gg = *g++;
 			pbb[0] += dot * base[gg & 0x03];
 			pbb[1] += dot * base[(gg >> 2) & 0x03];
 			pbb[2] += dot * base[(gg >> 4) & 0x03];
 			pbb[3] += dot * base[gg >> 6];
 		}
-		for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
+		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 		{
 			(*pbb++) += dot * base[gg & 0x03];
 			gg >>= 2;
@@ -235,9 +261,10 @@ static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 	}
 	PARALLEL_END
 
-	// initialize out_b
+	// normalize out_b
 	out_b.resize(Geno_NumSamp);
 	PARALLEL_RANGE(st, ed, Geno_NumSamp)
+	{
 		size_t len = ed - st;
 		const double *s = buf_crossprod + st;
 		double *p = &out_b[st];
@@ -248,6 +275,7 @@ static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 			s += Geno_NumSamp;
 		}
 		f64_mul(len, 1.0/Geno_NumVariant, p);
+	}
 	PARALLEL_END
 }
 
@@ -257,15 +285,18 @@ static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 /// Output: out_sigma
 static void get_diag_sigma(const dvec& w, const dvec& tau, dvec &out_sigma)
 {
-	const double tau0 = tau[0];
-	const double tau1 = tau[1];
 	out_sigma.resize(Geno_NumSamp);
-	for (size_t i=0; i < Geno_NumSamp; i++)
+	PARALLEL_RANGE(st, ed, Geno_NumSamp)
 	{
-		double v = tau0 / w[i] + tau1 * buf_diag_grm[i];
-		if (v < 1e-4) v = 1e-4;
-		out_sigma[i] = v;
+		const double tau0 = tau[0], tau1 = tau[1];
+		for (size_t i=st; i < ed; i++)
+		{
+			double v = tau0 / w[i] + tau1 * buf_diag_grm[i];
+			if (v < 1e-4) v = 1e-4;
+			out_sigma[i] = v;
+		}
 	}
+	PARALLEL_END
 }
 
 
@@ -329,12 +360,11 @@ static dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 
 
 /// Calculate the coefficient of variation for mean of a vector
-static double calcCV(const dvec& x)
+static double calcCV(const dvec &x)
 {
 	double x_mean = mean(x);
 	double x_sd = stddev(x);
-	double vecCV = (x_sd / x_mean) / int(x.n_elem);
-	return(vecCV);
+	return((x_sd / x_mean) / int(x.n_elem));
 }
 
 
@@ -401,6 +431,17 @@ static void get_coefficients(const dvec &Y, const dmat &X, const dvec &w,
 	cov = inv_sympd(X.t() * Sigma_iX);
 	alpha = cov * (Sigma_iX.t() * Y);
 	eta = Y - tau(0) * (Sigma_iY - Sigma_iX * alpha) / w;
+}
+
+
+///
+static dmat get_sigma_X(dvec &w, dvec &tau, dmat &X, int maxiterPCG, double tolPCG)
+{
+	int ncol = X.n_cols;
+	dmat Sigma_iX1(Geno_NumSamp, ncol);
+	for(int i = 0; i < ncol; i++)
+		Sigma_iX1.col(i) = get_PCG_diag_sigma(w, tau, X.col(i), maxiterPCG, tolPCG);
+	return(Sigma_iX1);
 }
 
 
@@ -482,7 +523,7 @@ static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
   	dvec tau0 = in_tau;
   	tau[1] = tau0[1] + Dtau;
 
-  	for(int i=0; i < tau.n_elem; i++)
+  	for(size_t i=0; i < tau.n_elem; i++)
 		if (tau[i] < tol) tau[i] = 0;
 
   	double step = 1.0;
@@ -492,7 +533,7 @@ static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
 		tau[1] = tau0[1] + step * Dtau;
   	}
 
-  	for(int i=0; i < tau.n_elem; i++)
+  	for(size_t i=0; i < tau.n_elem; i++)
 		if (tau[i] < tol) tau[i] = 0;
 
   	return tau;
@@ -504,7 +545,7 @@ static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
 inline static void print_vec(const char *s, dvec &x)
 {
 	Rprintf("%s(", s);
-	for (int i=0; i < x.n_elem; i++)
+	for (size_t i=0; i < x.n_elem; i++)
 	{
 		if (i > 0) Rprintf(", ");
 		Rprintf("%0.7g", x[i]);
@@ -622,6 +663,115 @@ BEGIN_RCPP
 		_["residuals"] = y - mu,
 		_["cov"] = cov,
 		_["converged"] = bool(iter <= maxiter));
+
+END_RCPP
+}
+
+
+RcppExport SEXP saige_calc_var_ratio_binary(SEXP r_fit0, SEXP r_glmm,
+	SEXP r_noK, SEXP r_param, SEXP r_marker_list)
+{
+BEGIN_RCPP
+
+	List fit0(r_fit0);
+	List glmm(r_glmm);
+	List obj_noK(r_noK);
+	List param(r_param);
+	IntegerVector rand_index(r_marker_list);
+
+	// parameters for fitting the model
+	const double tolPCG = Rf_asReal(param["tolPCG"]);
+	const int maxiterPCG = Rf_asInteger(param["maxiterPCG"]);
+	const double ratioCVcutoff = Rf_asReal(param["ratioCVcutoff"]);
+	int num_marker = Rf_asInteger(param["num.marker"]);
+	const bool verbose = Rf_asLogical(param["verbose"])==TRUE;
+
+	List family = fit0["family"];
+	Function fc_mu_eta = wrap(family["mu.eta"]);
+	Function fc_variance = wrap(family["variance"]);
+
+	dvec eta = as<dvec>(fit0["linear.predictors"]);
+	dvec mu = as<dvec>(fit0["fitted.values"]);
+	dvec mu_eta = as<dvec>(fc_mu_eta(eta));
+	dvec W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+	dvec tau = as<dvec>(glmm["theta"]);
+	dmat X1 = as<dmat>(obj_noK["X1"]);
+	dmat Sigma_iX = get_sigma_X(W, tau, X1, maxiterPCG, tolPCG);
+
+	dvec y = as<dvec>(fit0["y"]);
+	dmat noK_XXVX_inv = as<dmat>(obj_noK["XXVX_inv"]);
+	dmat noK_XV = as<dmat>(obj_noK["XV"]);
+
+	double ratioCV = ratioCVcutoff + 0.1;
+	int num_tested = 0, snp_idx = 0;
+	const int num_rand_snp = rand_index.length();
+
+	dvec G0(Geno_NumSamp);
+	vector<int> buf_idx(Geno_NumSamp);
+	vector<int> lst_idx;
+	vector<double> lst_maf, lst_var1, lst_var2, lst_ratio;
+
+	while (ratioCV > ratioCVcutoff && snp_idx < num_rand_snp)
+	{
+		while (num_tested < num_marker && snp_idx < num_rand_snp)
+		{
+			const int i_snp = rand_index[snp_idx++];
+			get_geno_ds(i_snp - 1, G0);
+
+			double AF, AC;
+			int Num;
+			f64_af_ac_impute(&G0[0], Geno_NumSamp, AF, AC, Num, &buf_idx[0]);
+			if (AF > 0.5)
+			{
+				f64_sub(Geno_NumSamp, 2, &G0[0]);
+				AC = 2*Num - AC;
+				AF = 1 - AF;
+			}
+			if (AC <= 20) continue;
+
+			// adjusted genotypes
+			dvec G = G0 - noK_XXVX_inv * (noK_XV * G0);
+			dvec g = G / sqrt(AC);
+			dvec Sigma_iG = get_PCG_diag_sigma(W, tau, G, maxiterPCG, tolPCG);
+			dvec adj = Sigma_iX * inv_sympd(X1.t() * Sigma_iX) * X1.t() * Sigma_iG;
+
+			double var1 = (sum(G % Sigma_iG) - sum(G % adj)) / AC;
+			double var2 = sum(mu % (1-mu) % g % g);
+			double ratio = var1 / var2;
+
+			num_tested ++;
+			lst_idx.push_back(i_snp);
+			lst_maf.push_back(AF);
+			lst_var1.push_back(var1);
+			lst_var2.push_back(var2);
+			lst_ratio.push_back(ratio);
+			if (verbose)
+			{
+				Rprintf("%6d, maf: %0.3f, var1: %.3g, var2: %.3g, ratio: %0.5f\n",
+					num_tested, AF, var1, var2, ratio);
+			}
+		}
+
+		ratioCV = calcCV(lst_ratio);
+		if (ratioCV > ratioCVcutoff)
+		{
+			if (verbose)
+			{
+				Rprintf(
+					"CV for variance ratio estimate using %d markers is %g > ratioCVcutoff (%g)\n",
+					num_marker, ratioCV, ratioCVcutoff);
+			}
+			num_marker += 10;
+			if (verbose) Rprintf("try %d markers ...\n", num_marker);
+		}
+	}
+
+	return DataFrame::create(
+		_["id"] = lst_idx,
+		_["maf"] = lst_maf,
+		_["var1"] = lst_var1,
+		_["var2"] = lst_var2,
+		_["ratio"] = lst_ratio);
 
 END_RCPP
 }
