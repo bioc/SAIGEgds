@@ -5,15 +5,56 @@
 #pragma GCC optimize("O3")
 #endif
 
+
 #include <RcppArmadillo.h>
 #include <RcppParallel.h>
+#include <tbb/parallel_for.h>
 #include <algorithm>
 #include "vectorization.h"
+
 
 using namespace std;
 using namespace Rcpp;
 using namespace arma;
 using namespace RcppParallel;
+
+
+// ========================================================================= //
+// Define Intel TBB macro with a thread index starting from 0
+
+#if RCPP_PARALLEL_USE_TBB
+
+#define PARALLEL_HEAD(SIZE)    \
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, SIZE,  \
+		SIZE/NumThreads + (SIZE % NumThreads ? 1 : 0)),  \
+		[&](const tbb::blocked_range<size_t> &r)  \
+	{  \
+		const int th_idx = tbb::this_task_arena::current_thread_index();  \
+		if (th_idx < 0 || th_idx >= NumThreads)  \
+			throw "Invalid tbb::this_task_arena::current_thread_index()!";
+
+#define PARALLEL_FOR(i, SIZE)    \
+		PARALLEL_HEAD(SIZE)    \
+		for (size_t i=r.begin(); i < r.end(); i++)
+
+#define PARALLEL_RANGE(st, ed, SIZE)    \
+		PARALLEL_HEAD(SIZE)    \
+		const size_t st = r.begin(), ed = r.end();
+
+#define PARALLEL_END    });
+
+#else
+
+#define PARALLEL_FOR(i, SIZE)    \
+		const int th_idx = 0;  \
+		for (size_t i=0; i < SIZE; i++)
+#define PARALLEL_RANGE(st, ed, SIZE)    \
+		const int th_idx = 0;  \
+		const size_t st = 0, ed = SIZE;
+#define PARALLEL_END
+
+#endif
+
 
 
 // ========================================================================= //
@@ -35,14 +76,16 @@ inline static NumericVector random_binary(int n)
 // ========================================================================= //
 // Store packed SNP genotypes
 
+static int NumThreads = 0;  //< the number of threads
+
 static unsigned char *Geno_PackedRaw = NULL;
 static size_t Geno_NumSamp = 0;
 static size_t Geno_PackedNumSamp = 0;
 static size_t Geno_NumVariant = 0;
 
-static double *buf_std_geno = NULL;  //< a 4-by-n_variant look-up matrix
-static double *buf_diag_grm = NULL;  //< n_samp-length, sigma_i = sum_j adj.g[i,j]^2
-
+static double *buf_std_geno = NULL;   //< a 4-by-n_variant look-up matrix
+static double *buf_diag_grm = NULL;   //< n_samp-length, sigma_i = sum_j adj.g[i,j]^2
+static double *buf_crossprod = NULL;  //< nThread-by-n_samp matrix
 
 // Internal 2-bit genotype lookup tables
 static bool lookup_has_init = false;
@@ -69,8 +112,8 @@ static void init_lookup_table()
 inline static double sq(double v) { return v*v; }
 
 /// store SNP genotype in the 2-bit packed format
-RcppExport SEXP saige_store_geno(SEXP rawgeno, SEXP num_samp, SEXP buf_geno,
-	SEXP buf_sigma)
+RcppExport SEXP saige_store_geno(SEXP rawgeno, SEXP num_samp, SEXP r_buf_geno,
+	SEXP r_buf_sigma, SEXP r_buf_crossprod)
 {
 BEGIN_RCPP
 
@@ -83,7 +126,7 @@ BEGIN_RCPP
 
 	// build the look-up table of standardized genotypes
 	init_lookup_table();
-	buf_std_geno = REAL(buf_geno);
+	buf_std_geno = REAL(r_buf_geno);
 	for (size_t i=0; i < Geno_NumVariant; i++)
 	{
 		unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
@@ -104,7 +147,7 @@ BEGIN_RCPP
 	}
 
 	// calculate diag(grm)
-	buf_diag_grm = REAL(buf_sigma);
+	buf_diag_grm = REAL(r_buf_sigma);
 	memset(buf_diag_grm, 0, sizeof(double)*Geno_NumSamp);
 	for (size_t i=0; i < Geno_NumVariant; i++)
 	{
@@ -128,6 +171,14 @@ BEGIN_RCPP
 	}
 	f64_mul(Geno_NumSamp, 1.0 / Geno_NumVariant, buf_diag_grm);
 
+	// set the buffer for get_crossprod_b_grm()
+	NumericMatrix mat(r_buf_crossprod);
+	buf_crossprod = REAL(r_buf_crossprod);
+	NumThreads = mat.ncol();
+	if (NumThreads > Geno_NumSamp) NumThreads = Geno_NumSamp;
+	if (NumThreads > Geno_NumVariant) NumThreads = Geno_NumVariant;
+	if (NumThreads < 1) NumThreads = 1;
+
 END_RCPP
 }
 
@@ -135,80 +186,69 @@ END_RCPP
 
 // ========================================================================= //
 
-// see the example (http://rcppcore.github.io/RcppParallel/#parallelreduce)
-struct CrossProd: public Worker
-{   
-	// source vector
-	const dvec &b;
-	// accumulated value
-	dvec value;
-   
-	// constructors
-	CrossProd(const dvec &input): b(input), value(Geno_NumSamp)
-		{ value.zeros(); }
-	CrossProd(const CrossProd &val, Split): b(val.b), value(Geno_NumSamp)
-		{ value.zeros(); }
-   
-	// accumulate just the element of the range
-	void operator()(size_t begin, size_t end)
-	{
-		for (size_t i=begin; i < end; i++)
-		{
-			unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
-			const double *base = buf_std_geno + 4*i;
-
-			// get dot = sum(std.geno .* b)
-			double dot = 0;
-			const double *pb = &b[0];
-			size_t n = Geno_NumSamp;
-			for (; n >= 4; n-=4, pb+=4)
-			{
-				unsigned char gg = *g++;
-				dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
-					base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
-			}
-			for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
-			{
-				dot += base[gg & 0x03] * (*pb++);
-				gg >>= 2;
-			}
-
-			// update the output rv += dot .* std.geno
-			double *pbb = &value[0];
-			g = Geno_PackedRaw + Geno_PackedNumSamp*i;
-			n = Geno_NumSamp;
-			for (; n >= 4; n-=4, pbb+=4)
-			{
-				unsigned char gg = *g++;
-				pbb[0] += dot * base[gg & 0x03];
-				pbb[1] += dot * base[(gg >> 2) & 0x03];
-				pbb[2] += dot * base[(gg >> 4) & 0x03];
-				pbb[3] += dot * base[gg >> 6];
-			}
-			for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
-			{
-				(*pbb++) += dot * base[gg & 0x03];
-				gg >>= 2;
-			}
-		}
-	}
-     
-	// join the value with that of another CrossProd
-	void join(const CrossProd &rhs)
-		{ value += rhs.value; }
-};
-
-
 /// Cross-product of standardized genotypes and a numeric vector
 /// Input: b (n_samp-length)
 /// Output: out_b (n_samp-length)
 static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 {
-	CrossProd obj(b);
-	parallelReduce(0, Geno_NumVariant, obj);
-	out_b = obj.value;
-	// normalize
-	f64_mul(Geno_NumSamp, 1.0/Geno_NumVariant, &out_b[0]);
+	// initialize
+	memset(buf_crossprod, 0, sizeof(double)*Geno_NumSamp*NumThreads);
+
+	PARALLEL_FOR(i, Geno_NumVariant)
+	{
+		unsigned char *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+		const double *base = buf_std_geno + 4*i;
+
+		// get dot = sum(std.geno .* b)
+		double dot = 0;
+		const double *pb = &b[0];
+		size_t n = Geno_NumSamp;
+		for (; n >= 4; n-=4, pb+=4)
+		{
+			unsigned char gg = *g++;
+			dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
+				base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
+		}
+		for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
+		{
+			dot += base[gg & 0x03] * (*pb++);
+			gg >>= 2;
+		}
+
+		// update the output rv += dot .* std.geno
+		double *pbb = buf_crossprod + Geno_NumSamp * th_idx;
+		g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+		n = Geno_NumSamp;
+		for (; n >= 4; n-=4, pbb+=4)
+		{
+			unsigned char gg = *g++;
+			pbb[0] += dot * base[gg & 0x03];
+			pbb[1] += dot * base[(gg >> 2) & 0x03];
+			pbb[2] += dot * base[(gg >> 4) & 0x03];
+			pbb[3] += dot * base[gg >> 6];
+		}
+		for (unsigned char gg = (n>0 ? *g : 0); n > 0; n--)
+		{
+			(*pbb++) += dot * base[gg & 0x03];
+			gg >>= 2;
+		}
+	}
+	PARALLEL_END
+
+	// initialize out_b
+	out_b.resize(Geno_NumSamp);
+	PARALLEL_RANGE(st, ed, Geno_NumSamp)
+		size_t len = ed - st;
+		const double *s = buf_crossprod + st;
+		double *p = &out_b[st];
+		memset(p, 0, sizeof(double)*len);
+		for (int i=0; i < NumThreads; i++)
+		{
+			f64_add(len, s, p);
+			s += Geno_NumSamp;
+		}
+		f64_mul(len, 1.0/Geno_NumVariant, p);
+	PARALLEL_END
 }
 
   
@@ -282,7 +322,7 @@ static dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 
 	if (iter >= maxiterPCG)
 	{
-		cout << "pcg did not converge. You may increase maxiter number." << endl;
+		cout << "PCG does not converge. You may increase maxiter number." << endl;
 	}
 	return(x);
 }
@@ -432,32 +472,28 @@ static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
 	const dmat &cov,
 	int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff)
 {
-	double YPAPY, Trace, AI;
-	get_AI_score(Y, X, w, in_tau, Sigma_iY, Sigma_iX, cov, nrun, maxiterPCG,
-		tolPCG, traceCVcutoff,
-		YPAPY, Trace, AI);
-  	double score = YPAPY - Trace;
+	double YPAPY, trace, AI;
+	get_AI_score(Y, X, w, in_tau, Sigma_iY, Sigma_iX, cov, nrun,
+		maxiterPCG, tolPCG, traceCVcutoff,
+		YPAPY, trace, AI);
+  	double score = YPAPY - trace;
   	double Dtau = score / AI;
   	dvec tau = in_tau;
   	dvec tau0 = in_tau;
-  	tau(1) = tau0(1) + Dtau;
+  	tau[1] = tau0[1] + Dtau;
 
-  	for(int i=0; i<tau.n_elem; ++i)
-  	{
-		if (tau(i) < tol) tau(i) = 0;
-  	}
+  	for(int i=0; i < tau.n_elem; i++)
+		if (tau[i] < tol) tau[i] = 0;
 
   	double step = 1.0;
-  	while (tau(1) < 0.0)
+  	while (tau[1] < 0.0)
   	{
-		step = step*0.5;
-		tau(1) = tau0(1) + step * Dtau;
+		step *= 0.5;
+		tau[1] = tau0[1] + step * Dtau;
   	}
 
-  	for(int i=0; i<tau.n_elem; ++i)
-  	{
-		if (tau(i) < tol) tau(i) = 0;
-  	}
+  	for(int i=0; i < tau.n_elem; i++)
+		if (tau[i] < tol) tau[i] = 0;
 
   	return tau;
 }

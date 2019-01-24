@@ -126,6 +126,22 @@ extern "C" size_t f64_nonzero_index(size_t n, const double *x, int *i)
 
 
 // ========================================================================= //
+// y[i] += x[i]
+
+inline static COREARRAY_TARGET_CLONES
+	void d_add(size_t n, const double *x, double *y)
+{
+	for (size_t i=0; i < n; i++) y[i] += x[i];
+}
+
+/// y[i] += x[i]
+extern "C" void f64_add(size_t n, const double *x, double *y)
+{
+	d_add(n, x, y);
+}
+
+
+// ========================================================================= //
 // y[i] = x - y[i]
 
 inline static COREARRAY_TARGET_CLONES

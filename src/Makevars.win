@@ -6,7 +6,6 @@
 CXX_STD = CXX11
 
 # additional preprocessor options
-PKG_CPPFLAGS = -DUSING_R
 PKG_CXXFLAGS += -DRCPP_PARALLEL_USE_TBB=1
 
 # to set flags for the linker

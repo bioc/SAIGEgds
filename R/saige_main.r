@@ -208,20 +208,6 @@ data.new <- data
     if (verbose)
         print(object.size(packed.geno))
 
-    # initialize internal variables and buffers
-    buf_std_geno <- double(4*n_var)
-    buf_sigma <- double(n_samp)
-    .Call(saige_store_geno, packed.geno, n_samp, buf_std_geno, buf_sigma)
-
-    # parameters for fitting the model
-    param <- list(
-        tol = tol, tolPCG = tolPCG,
-        maxiter = maxiter, maxiterPCG = maxiterPCG,
-        nrun = nrun,
-        traceCVcutoff = traceCVcutoff,
-        verbose = verbose
-    )
-
     # set the number of internal threads
     if (is.na(num.thread) || num.thread < 1L)
         num.thread <- 1L
@@ -231,6 +217,23 @@ data.new <- data
         cat("using ", num.thread, " thread",
             ifelse(num.thread>1L, "s", ""), "\n", sep="")
     }
+
+    # initialize internal variables and buffers
+    buf_std_geno <- double(4*n_var)
+    buf_sigma <- double(n_samp)
+    buf_crossprod <- matrix(0.0, nrow=n_samp, ncol=num.thread)
+    .Call(saige_store_geno, packed.geno, n_samp, buf_std_geno, buf_sigma,
+        buf_crossprod)
+
+    # parameters for fitting the model
+    param <- list(
+        num.thread = num.thread,
+        tol = tol, tolPCG = tolPCG,
+        maxiter = maxiter, maxiterPCG = maxiterPCG,
+        nrun = nrun,
+        traceCVcutoff = traceCVcutoff,
+        verbose = verbose
+    )
 
     # fit the model
     if (trait.type == "binary")
