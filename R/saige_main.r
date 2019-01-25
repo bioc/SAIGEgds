@@ -15,15 +15,6 @@
 #######################################################################
 # Internal functions
 #
-.cfunction0 <- function(name)
-{
-    fn <- function() NULL
-    f <- quote(.Call(SEQ_ExternalName0))
-    f[[1L]] <- .Call
-    f[[2L]] <- getNativeSymbolInfo(name, "SAIGEgds")$address
-    body(fn) <- f
-    fn
-}
 
 .cfunction <- function(name)
 {
@@ -38,6 +29,20 @@
 .pretty <- function(x) prettyNum(x, big.mark=",", scientific=FALSE)
 
 SIMD <- function() .Call(saige_simd_version)
+
+.crayon_inverse <- function(s)
+{
+    if (requireNamespace("crayon", quietly=TRUE))
+        s <- crayon::inverse(s)
+    s
+}
+
+.crayon_underline <- function(s)
+{
+    if (requireNamespace("crayon", quietly=TRUE))
+        s <- crayon::underline(s)
+    s
+}
 
 
 # Internal model checking
@@ -180,8 +185,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     n_var  <- dm[3L]
     if (verbose)
     {
-        cat("Fit the null model: ")
-        print(formula)
+        cat(.crayon_inverse("SAIGE association analysis:\n"))
+        cat("Fit the null model:", format(formula), "+ var(GRM)\n")
         cat("    # of samples: ", .pretty(n_samp), "\n", sep="")
         cat("    # of variants: ", .pretty(n_var), "\n", sep="")
     }
@@ -276,7 +281,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
         # calculate the variance ratio
         if (verbose)
-            cat("Calculate the average ratio of variances ...\n")
+            cat(.crayon_underline("Calculate the average ratio of variances ...\n"))
         set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
@@ -301,7 +306,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         cat("Save the model to '", model.save.fn, "'\n", sep="")
         save(glmm, file=model.save.fn)
     }
-    if (verbose) cat("Done.\n")
+    if (verbose)
+        cat(.crayon_inverse("Done."), "\n", sep="")
     glmm
 }
 
@@ -358,7 +364,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     }
 
     if (verbose)
-        cat("SAIGE association analyses:\n")
+        cat("SAIGE association analysis:\n")
 
     # save the current filter
     seqSetFilter(gdsfile, action="push", verbose=FALSE)

@@ -7,7 +7,7 @@ Date: 2019-01-01
 Depends: R (>= 2.15), gdsfmt, SeqArray (>= 1.23.5), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, Rcpp, RcppParallel, SPAtest
-Suggests: parallel, Matrix, RUnit, knitr, MASS, BiocGenerics
+Suggests: parallel, crayon, RUnit, knitr, BiocGenerics
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
         email="xiuwen.zheng@abbvie.com"),
         person("Wei", "Zhou", role=c("aut"),
