@@ -127,10 +127,18 @@ BEGIN_RCPP
 	Geno_PackedNumSamp = RawGeno.nrow();
 	Geno_NumVariant = RawGeno.ncol();
 
+	// set the buffer for get_crossprod_b_grm()
+	NumericMatrix mat(r_buf_crossprod);
+	buf_crossprod = REAL(r_buf_crossprod);
+	NumThreads = mat.ncol();
+	if (NumThreads > (int)Geno_NumSamp) NumThreads = Geno_NumSamp;
+	if (NumThreads > (int)Geno_NumVariant) NumThreads = Geno_NumVariant;
+	if (NumThreads < 1) NumThreads = 1;
+
 	// build the look-up table of standardized genotypes
 	init_lookup_table();
 	buf_std_geno = REAL(r_buf_geno);
-	for (size_t i=0; i < Geno_NumVariant; i++)
+	PARALLEL_FOR(i, Geno_NumVariant)
 	{
 		BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 		// calculate allele frequency
@@ -148,6 +156,7 @@ BEGIN_RCPP
 		p[0] = (0 - 2*af) * inv; p[1] = (1 - 2*af) * inv;
 		p[2] = (2 - 2*af) * inv; p[3] = 0;
 	}
+	PARALLEL_END
 
 	// calculate diag(grm)
 	buf_diag_grm = REAL(r_buf_sigma);
@@ -173,14 +182,6 @@ BEGIN_RCPP
 		}
 	}
 	f64_mul(Geno_NumSamp, 1.0 / Geno_NumVariant, buf_diag_grm);
-
-	// set the buffer for get_crossprod_b_grm()
-	NumericMatrix mat(r_buf_crossprod);
-	buf_crossprod = REAL(r_buf_crossprod);
-	NumThreads = mat.ncol();
-	if (NumThreads > (int)Geno_NumSamp) NumThreads = Geno_NumSamp;
-	if (NumThreads > (int)Geno_NumVariant) NumThreads = Geno_NumVariant;
-	if (NumThreads < 1) NumThreads = 1;
 
 END_RCPP
 }
@@ -214,7 +215,8 @@ static void get_geno_ds(int snp_idx, dvec &ds)
 /// Cross-product of standardized genotypes and a numeric vector
 /// Input: b (n_samp-length)
 /// Output: out_b (n_samp-length)
-static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
+static COREARRAY_TARGET_CLONES
+	void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 {
 	// initialize
 	memset(buf_crossprod, 0, sizeof(double)*Geno_NumSamp*NumThreads);
@@ -283,7 +285,8 @@ static void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 /// Sigma = tau[0] * diag(1/W) + tau[1] * diag(grm)
 /// Input: w, tau
 /// Output: out_sigma
-static void get_diag_sigma(const dvec& w, const dvec& tau, dvec &out_sigma)
+static COREARRAY_TARGET_CLONES
+	void get_diag_sigma(const dvec& w, const dvec& tau, dvec &out_sigma)
 {
 	out_sigma.resize(Geno_NumSamp);
 	PARALLEL_RANGE(st, ed, Geno_NumSamp)
@@ -303,7 +306,8 @@ static void get_diag_sigma(const dvec& w, const dvec& tau, dvec &out_sigma)
 /// Sigma = tau[0] * b * diag(1/W) + tau[1] * diag(grm, b)
 /// Input: w, tau
 /// Output: out_sigma
-static dvec get_crossprod(const dcolvec &b, const dvec& w, const dvec& tau)
+static COREARRAY_TARGET_CLONES
+	dvec get_crossprod(const dcolvec &b, const dvec& w, const dvec& tau)
 {
 	const double tau0 = tau[0];
 	const double tau1 = tau[1];
@@ -320,8 +324,9 @@ static dvec get_crossprod(const dcolvec &b, const dvec& w, const dvec& tau)
 
 /// Sigma = tau[0] * diag(1/W) + tau[1] * grm
 /// Input: wVec, tauVec, bVec, maxiterPCG, tolPCG
-static dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
-	int maxiterPCG, double tolPCG)
+static COREARRAY_TARGET_CLONES
+	dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
+		int maxiterPCG, double tolPCG)
 {
 	dvec r = b, r1, minv;
 	get_diag_sigma(w, tau, minv);
@@ -352,9 +357,8 @@ static dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 	}
 
 	if (iter >= maxiterPCG)
-	{
-		cout << "PCG does not converge. You may increase maxiter number." << endl;
-	}
+		Rprintf("PCG does not converge. You may increase maxiter number.\n");
+
 	return(x);
 }
 
@@ -587,8 +591,7 @@ BEGIN_RCPP
 	dvec mu_eta = as<dvec>(fc_mu_eta(eta0));
 	dvec Y = eta - offset + (y - mu) / mu_eta;
 	dvec alpha0 = as<dvec>(fit0["coefficients"]);
-
-	dvec alpha;
+	dvec alpha = alpha0;
 	dmat cov;
 
 	dvec tau = as<dvec>(r_tau);
@@ -666,6 +669,7 @@ BEGIN_RCPP
 
 END_RCPP
 }
+
 
 
 RcppExport SEXP saige_calc_var_ratio_binary(SEXP r_fit0, SEXP r_glmm,

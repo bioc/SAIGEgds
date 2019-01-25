@@ -111,17 +111,20 @@ Covariate_Transform_Back<-function(coef, Param.transform)
 #
 
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
-    trait.type=c("binary", "quantitative"), invNormalize=FALSE,
-    maf=0.01, missing.rate=0.01, max.num.snp=100000L, variant.id=NULL,
+    trait.type=c("binary", "quantitative"), maf=0.01, missing.rate=0.01,
+    max.num.snp=100000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    num.thread=1, Cutoff=2, num.marker=30, tau.init = c(0,0),
-    traceCVcutoff=1, ratioCVcutoff=1, model.save.fn=NA_character_, seed=200,
-    verbose=TRUE)
+    num.marker=30, tau.init = c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
+    num.thread=1L, model.save.fn="", seed=200, verbose=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
     stopifnot(is.data.frame(data))
     stopifnot(is.character(gdsfile) | inherits(gdsfile, "SeqVarGDSClass"))
     trait.type <- match.arg(trait.type)
+
+    stopifnot(is.logical(inv.norm), length(inv.norm)==1L)
+    stopifnot(is.logical(X.transform), length(X.transform)==1L)
+
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.save.fn), length(model.save.fn)==1L)
     stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
@@ -193,27 +196,29 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             ifelse(num.thread>1L, "s", ""), "\n", sep="")
     }
 
-	out.transform<-Covariate_Transform(formula, data=data)
-	formulaNewList = c("Y ~ ", out.transform$Param.transform$X_name[1])
-	if(length(out.transform$Param.transform$X_name) > 1){
-	for(i in c(2:length(out.transform$Param.transform$X_name))){
-	  formulaNewList = c(formulaNewList, "+", out.transform$Param.transform$X_name[i])
-	}
-	}
-	formulaNewList = paste0(formulaNewList, collapse="")
-	formulaNewList = paste0(formulaNewList, "-1")
-	formula.new = as.formula(paste0(formulaNewList, collapse=""))
-	data.new = data.frame(cbind(out.transform$Y, out.transform$X1))
-	colnames(data.new) = c("Y",out.transform$Param.transform$X_name)
-	cat("colnames(data.new) is ", colnames(data.new), "\n")
-	cat("out.transform$Param.transform$qrr: ", dim(out.transform$Param.transform$qrr), "\n")
+    if (isTRUE(X.transform))
+    {
+        out.transform<-Covariate_Transform(formula, data=data)
+        formulaNewList = c("Y ~ ", out.transform$Param.transform$X_name[1])
+        if(length(out.transform$Param.transform$X_name) > 1){
+        for(i in c(2:length(out.transform$Param.transform$X_name))){
+            formulaNewList = c(formulaNewList, "+", out.transform$Param.transform$X_name[i])
+        }
+        }
+        formulaNewList = paste0(formulaNewList, collapse="")
+        formulaNewList = paste0(formulaNewList, "-1")
+        formula.new = as.formula(paste0(formulaNewList, collapse=""))
+        data.new = data.frame(cbind(out.transform$Y, out.transform$X1))
+        colnames(data.new) = c("Y",out.transform$Param.transform$X_name)
+        cat("colnames(data.new) is ", colnames(data.new), "\n")
+        cat("out.transform$Param.transform$qrr: ", dim(out.transform$Param.transform$qrr), "\n")
 
-
-formula.new <- formula
-data.new <- data
+        formula <- formula.new
+        data <- data.new
+    }
 
     # 2-bit packed genotypes
-    if (verbose) cat("start loading packed genotypes: ")
+    if (verbose) cat("Start loading SNP genotypes: ")
     packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile)
     if (verbose)
         print(object.size(packed.geno))
@@ -244,7 +249,7 @@ data.new <- data
         cat("Binary outcome: ", phenovar, "\n", sep="")
 
         # fit the null model
-        fit0 <- glm(formula.new, data=data.new, family=binomial)
+        fit0 <- glm(formula, data=data, family=binomial)
         if (verbose)
         {
             cat("Initial fixed coefficients:\n")
@@ -252,7 +257,7 @@ data.new <- data
             names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
             print(v)
         }
-        obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula.new, data.new)
+        obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula, data)
 
         # initial tau
         tau <- fixtau <- c(0,0)
@@ -271,7 +276,7 @@ data.new <- data
 
         # calculate the variance ratio
         if (verbose)
-            cat("Calculating the average ratio of variances ...\n")
+            cat("Calculate the average ratio of variances ...\n")
         set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
@@ -291,8 +296,12 @@ data.new <- data
     glmm$trait.type <- trait.type
     glmm$sample.id <- data$sample.id
 
-    if (!is.na(model.save.fn))
+    if (!is.na(model.save.fn) && model.save.fn!="")
+    {
+        cat("Save the model to '", model.save.fn, "'\n", sep="")
         save(glmm, file=model.save.fn)
+    }
+    if (verbose) cat("Done.\n")
     glmm
 }
 
@@ -371,7 +380,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         cat("    # of variants: ", .pretty(dm[3L]), "\n", sep="")
     }
 
-    # initialize the internal model
+    # initialize the internal model parameters
     y <- unname(modobj$obj.noK$y)
     mu <- unname(modobj$fitted.values)
     X1 <- modobj$obj.noK$X1[ii, ]
