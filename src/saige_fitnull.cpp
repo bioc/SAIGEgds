@@ -59,7 +59,12 @@ using namespace RcppParallel;
 
 
 // ========================================================================= //
-// R functions for random numbers
+// R functions
+
+inline static NumericVector SEXP_VEC(const dvec &x)
+{
+	return NumericVector(x.begin(), x.end());
+}
 
 inline static void set_seed(unsigned int seed)
 {
@@ -323,7 +328,7 @@ static COREARRAY_TARGET_CLONES
 
 
 /// Sigma = tau[0] * diag(1/W) + tau[1] * grm
-/// Input: wVec, tauVec, bVec, maxiterPCG, tolPCG
+/// Input: w, tau, b, maxiterPCG, tolPCG
 static COREARRAY_TARGET_CLONES
 	dvec get_PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 		int maxiterPCG, double tolPCG)
@@ -389,19 +394,19 @@ static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
 	dvec buf(nrun);
 	buf.zeros();
 
-	while(traceCV > traceCVcutoff)
+	while (traceCV > traceCVcutoff)
 	{
-		for(int i = nrunStart; i < nrunEnd; i++)
+		for (int i=nrunStart; i < nrunEnd; i++)
 		{
 			u = as<dvec>(random_binary(Geno_NumSamp));
 			u = 2*u - 1;
 			Sigma_iu = get_PCG_diag_sigma(w, tau, u, maxiterPCG, tolPCG);
 			Pu = Sigma_iu - Sigma_iX * (cov *  (Sigma_iXt * u));
 			get_crossprod_b_grm(u, Au);
-			buf(i) = dot(Au, Pu);
+			buf[i] = dot(Au, Pu);
 		}
 		traceCV = calcCV(buf);
-		if(traceCV > traceCVcutoff)
+		if (traceCV > traceCVcutoff)
 		{
 			nrunStart = nrunEnd;
 			nrunEnd = nrunEnd + 10;
@@ -653,17 +658,17 @@ BEGIN_RCPP
 
 	if (verbose)
 	{
-		print_vec("Final tau: " ,tau);
+		print_vec("Final tau: " , tau);
 		print_vec("    fixed coeff: ", alpha);
 	}
 
 	return List::create(
-		_["theta"] = tau,
-		_["coefficients"] = alpha,
-		_["linear.predictors"] = eta,
-		_["fitted.values"] = mu,
-		_["Y"] = Y,
-		_["residuals"] = y - mu,
+		_["coefficients"] = SEXP_VEC(alpha),
+		_["tau"] = SEXP_VEC(tau),
+		_["linear.predictors"] = SEXP_VEC(eta),
+		_["fitted.values"] = SEXP_VEC(mu),
+		_["Y"] = SEXP_VEC(Y),
+		_["residuals"] = SEXP_VEC(y - mu),
 		_["cov"] = cov,
 		_["converged"] = bool(iter <= maxiter));
 
@@ -698,7 +703,7 @@ BEGIN_RCPP
 	dvec mu = as<dvec>(fit0["fitted.values"]);
 	dvec mu_eta = as<dvec>(fc_mu_eta(eta));
 	dvec W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
-	dvec tau = as<dvec>(glmm["theta"]);
+	dvec tau = as<dvec>(glmm["tau"]);
 	dmat X1 = as<dmat>(obj_noK["X1"]);
 	dmat Sigma_iX = get_sigma_X(W, tau, X1, maxiterPCG, tolPCG);
 

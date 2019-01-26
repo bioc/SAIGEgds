@@ -9,8 +9,9 @@ useDynLib(SAIGEgds,
 
 # Export all names
 exportPattern("^seq*")
-export(.onAttach)
 
 # Import all packages listed as Imports or Depends
-import(gdsfmt)
+importFrom(gdsfmt, index.gdsn)
+importFrom(SeqArray, seqOpen, seqClose, seqGetData, seqApply, seqSummary,
+    seqResetFilter, seqSetFilter, seqSetFilterCond)
 importFrom(RcppParallel, setThreadOptions, RcppParallelLibs)

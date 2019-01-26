@@ -6,9 +6,8 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019        Xiuwen Zheng
+# Copyright (C) 2019        Xiuwen Zheng (xiuwen.zheng@abbvie.com)
 # License: GPL-3
-# Email: xiuwen.zheng@abbvie.com
 #
 
 
@@ -60,56 +59,6 @@ SIMD <- function() .Call(saige_simd_version)
 }
 
 
-##suggested by Shawn 01-19-2018
-Covariate_Transform <- function(formula, data)
-{
-  X1<-model.matrix(formula,data=data)
-#  X1=X1[,c(2:ncol(X1))] #remove intercept
-  formula.frame<-model.frame(formula,data=data)
-  Y = model.response(formula.frame, type = "any")
-  X_name = colnames(X1)
-		
-  # First run linear regression to identify multi collinearity 
-  out.lm<-lm(Y ~ X1 - 1, data=data)
-#  out.lm<-lm(Y ~ X1, data=data)
-  idx.na<-which(is.na(out.lm$coef))
-  if(length(idx.na)> 0){
-	X1<-X1[, -idx.na]
-	X_name = X_name[-idx.na]		
-        cat("Warning: multi collinearity is detected in covariates! ", X_name[idx.na], " will be excluded in the model\n")
-  }
-  if(!(1 %in% idx.na)){
-    X_name[1] = "minus1"
-  }
-
-	
- # QR decomposition
-  Xqr = qr(X1)
-  X1_Q = qr.Q(Xqr)
-  qrr = qr.R(Xqr)
-	
-  N<-nrow(X1)
-	
-  # Make square summation=N (so mean=1)
-  X1_new<-X1_Q * sqrt(N)	
-  Param.transform<-list(qrr=qrr, N=N, X_name = X_name, idx.na=idx.na)
-  re<-list(Y =Y, X1 = X1_new, Param.transform=Param.transform)
-}
-
-
-# In case to recover original scale coefficients
-# X \beta = Q R \beta = (Q \sqrt(N)) ( R \beta / \sqrt(N))
-# So coefficient from fit.new is the same as R \beta / \sqrt(N)
-Covariate_Transform_Back<-function(coef, Param.transform)
-{	
-	#coef<-fit.new$coef; Param.transform=out.transform$Param.transform
-	coef1<-coef * sqrt(Param.transform$N)
-	coef.org<-solve(Param.transform$qrr, coef1)
-	
-	names(coef.org)<-Param.transform$X_name
-	return(coef.org)
-}
-
 
 #######################################################################
 # Fit the null model
@@ -117,21 +66,31 @@ Covariate_Transform_Back<-function(coef, Param.transform)
 
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     trait.type=c("binary", "quantitative"), maf=0.01, missing.rate=0.01,
-    max.num.snp=100000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
+    max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    num.marker=30, tau.init = c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
-    num.thread=1L, model.save.fn="", seed=200, verbose=TRUE)
+    num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
+    num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
     stopifnot(is.data.frame(data))
     stopifnot(is.character(gdsfile) | inherits(gdsfile, "SeqVarGDSClass"))
     trait.type <- match.arg(trait.type)
-
+    stopifnot(is.numeric(maf), length(maf)==1L)
+    stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
+    stopifnot(is.numeric(max.num.snp), length(max.num.snp)==1L)
     stopifnot(is.logical(inv.norm), length(inv.norm)==1L)
     stopifnot(is.logical(X.transform), length(X.transform)==1L)
-
+    stopifnot(is.numeric(tol), length(tol)==1L)
+    stopifnot(is.numeric(maxiter), length(maxiter)==1L)
+    stopifnot(is.numeric(nrun), length(nrun)==1L)
+    stopifnot(is.numeric(tolPCG), length(tolPCG)==1L)
+    stopifnot(is.numeric(maxiterPCG), length(maxiterPCG)==1L)
+    stopifnot(is.numeric(num.marker), length(num.marker)==1L)
+    stopifnot(is.numeric(tau.init), length(tau.init)==2L)
+    stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
+    stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
-    stopifnot(is.character(model.save.fn), length(model.save.fn)==1L)
+    stopifnot(is.character(model.savefn), length(model.savefn)==1L)
     stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
@@ -180,6 +139,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         seqSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
     }
 
+    # get the number of samples / variants
     dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
     n_samp <- dm[2L]
     n_var  <- dm[3L]
@@ -203,23 +163,34 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (isTRUE(X.transform))
     {
-        out.transform<-Covariate_Transform(formula, data=data)
-        formulaNewList = c("Y ~ ", out.transform$Param.transform$X_name[1])
-        if(length(out.transform$Param.transform$X_name) > 1){
-        for(i in c(2:length(out.transform$Param.transform$X_name))){
-            formulaNewList = c(formulaNewList, "+", out.transform$Param.transform$X_name[i])
+        if (verbose)
+            cat("Transform on the design matrix with QR decomposition:\n")
+        X <- model.matrix(formula, data)
+        frm <- model.frame(formula, data)
+        y <- model.response(frm, type="any")
+        # check multi-collinearity
+        m <- lm(y ~ X - 1)
+        i_na <- which(is.na(m$coefficients))
+        if (length(i_na) > 0L)
+        {
+            X <- X[, -i_na]
+            if (verbose)
+            {
+                cat("    exclude ", length(i_na), " covariates (",
+                    paste(colnames(X)[i_na], collapse=", "),
+                    ") to avoid multi collinearity.\n", sep="")
+            }
         }
-        }
-        formulaNewList = paste0(formulaNewList, collapse="")
-        formulaNewList = paste0(formulaNewList, "-1")
-        formula.new = as.formula(paste0(formulaNewList, collapse=""))
-        data.new = data.frame(cbind(out.transform$Y, out.transform$X1))
-        colnames(data.new) = c("Y",out.transform$Param.transform$X_name)
-        cat("colnames(data.new) is ", colnames(data.new), "\n")
-        cat("out.transform$Param.transform$qrr: ", dim(out.transform$Param.transform$qrr), "\n")
-
-        formula <- formula.new
-        data <- data.new
+        X_name <- colnames(X)
+        Xqr = qr(X)  # QR decomposition
+        X_new <- qr.Q(Xqr) * sqrt(nrow(X))
+        X_qrr <- qr.R(Xqr)
+        data <- data.frame(cbind(y, X_new))
+        nm <- paste0("x", seq_len(ncol(X_new))-1L)
+        colnames(data) <- c("y", nm)
+        formula <- as.formula(paste("y ~", paste(nm, collapse=" + "), "-1"))
+        if (verbose)
+            cat("    new formula: ", format(formula), "\n", sep="")
     }
 
     # 2-bit packed genotypes
@@ -273,7 +244,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         else
             tau[fixtau==0] = tau.init[fixtau==0]
         if (verbose)
-	        cat("Initial tau is (", paste(tau, collapse=", "), ")\n", sep="")
+            cat("Initial tau is (", paste(tau, collapse=", "), ")\n", sep="")
 
         # iterate
         X <- model.matrix(fit0)
@@ -281,30 +252,43 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
         # calculate the variance ratio
         if (verbose)
-            cat(.crayon_underline("Calculate the average ratio of variances ...\n"))
+            cat(.crayon_underline("Calculate the average ratio of variances:\n"))
         set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
-		var.ratio <- var.ratio[order(var.ratio$id), ]
-		var.ratio$id <- seqGetData(gdsfile, "variant.id")[var.ratio$id]
-		rownames(var.ratio) <- NULL
-		if (verbose)
-		    cat("    avg. of ratios is ", mean(var.ratio$ratio), "\n", sep="")
+        var.ratio <- var.ratio[order(var.ratio$id), ]
+        var.ratio$id <- seqGetData(gdsfile, "variant.id")[var.ratio$id]
+        rownames(var.ratio) <- NULL
 
-        # ans$coefficients <- Covariate_Transform_Back(ans$coefficients,
-        #     out.transform$Param.transform)
         # ans$obj.glm.null <- fit0
         glmm$obj.noK <- obj.noK
         glmm$var.ratio <- var.ratio
     }
 
+    if (verbose)
+    {
+        cat("    ratio avg. is ", mean(var.ratio$ratio),
+            ", sd: ", sd(var.ratio$ratio), "\n", sep="")
+    }
+
+    # tweak the result
+    if (!isTRUE(X.transform))
+    {
+        names(glmm$coefficients) <- colnames(obj.noK$X1)
+    } else {
+        coef <- solve(X_qrr, glmm$coefficients * sqrt(nrow(data)))
+        names(coef) <- X_name
+        glmm$coefficients <- coef
+    }
+    names(glmm$tau) <- c("Sigma_E", "Sigma_G")
     glmm$trait.type <- trait.type
     glmm$sample.id <- data$sample.id
 
-    if (!is.na(model.save.fn) && model.save.fn!="")
+    if (!is.na(model.savefn) && model.savefn!="")
     {
-        cat("Save the model to '", model.save.fn, "'\n", sep="")
-        save(glmm, file=model.save.fn)
+        cat("Save the model to '", model.savefn, "'\n", sep="")
+        save(glmm, file=model.savefn)
+        glmm <- invisible(glmm)
     }
     if (verbose)
         cat(.crayon_inverse("Done."), "\n", sep="")
@@ -391,8 +375,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     mu <- unname(modobj$fitted.values)
     X1 <- modobj$obj.noK$X1[ii, ]
     n <- length(ii)
-	mobj <- list(
-	    maf = maf, mac = mac,
+    mobj <- list(
+        maf = maf, mac = mac,
         y = y[ii], mu = mu[ii],
         y_mu = y[ii] - mu[ii],  # y - mu
         mu2 = (mu * (1 - mu))[ii],
@@ -407,7 +391,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         buf_B = double(n),
         buf_g_tilde = double(n),
         buf_tmp = double(ncol(X1))
-	)
+    )
     mobj$XVX <- t(X1) %*% (X1 * mobj$mu2)  # a matrix: K x K
     mobj$S_a <- colSums(X1 * mobj$y_mu)    # a vector of size K
 
