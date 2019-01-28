@@ -1,17 +1,34 @@
+// ===========================================================
+//
+// saige_fitnull.cpp: C++ implementation of fitting the null model
+//
+// Copyright (C) 2019    Xiuwen Zheng
+//
+// This file is part of SAIGEgds. It was created based on the original SAIGE
+// C++ and R codes in the SAIGE package. Compared with the original SAIGE,
+// I changed all single-precision floating-point numbers to double precision,
+// and a more efficient algorithm with packed 2-bit genotypes is provided here
+// to calculate the cross product of GRM.
+//
+// SAIGEgds is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License Version 3 as published
+// by the Free Software Foundation.
+//
+// SAIGEgds is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along
+// with SNPRelate.
+// If not, see <http://www.gnu.org/licenses/>.
 
-#if defined(__clang__)
-#pragma clang optimize on
-#elif defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
-#pragma GCC optimize("O3")
-#endif
-
-
+#include "vectorization.h"
 #include <RcppArmadillo.h>
 #include <RcppParallel.h>
 #include <tbb/parallel_for.h>
 #include <vector>
 #include <algorithm>
-#include "vectorization.h"
 
 
 using namespace std;
@@ -71,11 +88,6 @@ inline static void set_seed(unsigned int seed)
 	Environment base_env("package:base");
 	Function set_seed_r = base_env["set.seed"];
 	set_seed_r(seed);
-}
-
-inline static NumericVector random_binary(int n)
-{
-	return(rbinom(n, 1, 0.5));
 }
 
 
@@ -380,9 +392,9 @@ static double calcCV(const dvec &x)
 // [[export]]
 static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
 	const dvec& tau, const dmat& cov,
-	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff)
+	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff, int seed)
 {
-	set_seed(200);
+	set_seed(seed);
 	dmat Sigma_iXt = Sigma_iX.t();
 	dvec Sigma_iu;  
 	dcolvec Pu;
@@ -398,8 +410,7 @@ static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
 	{
 		for (int i=nrunStart; i < nrunEnd; i++)
 		{
-			u = as<dvec>(random_binary(Geno_NumSamp));
-			u = 2*u - 1;
+			u = 2 * as<dvec>(rbinom(Geno_NumSamp, 1, 0.5)) - 1;
 			Sigma_iu = get_PCG_diag_sigma(w, tau, u, maxiterPCG, tolPCG);
 			Pu = Sigma_iu - Sigma_iX * (cov *  (Sigma_iXt * u));
 			get_crossprod_b_grm(u, Au);
@@ -498,7 +509,7 @@ static void get_coeff(const dvec &y, const dmat &X, const dvec &tau,
 //      This function needs the function getPCG1ofSigmaAndVector and function getCrossprod and GetTrace
 static void get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
 	const dvec &tau, const dvec &Sigma_iY, const dmat &Sigma_iX, const dmat &cov,
-	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff,
+	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff, int seed,
 	double &YPAPY, double &Trace, double &AI)
 {
 	dmat Sigma_iXt = Sigma_iX.t();
@@ -508,7 +519,7 @@ static void get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
 	YPAPY = dot(PY, APY);
 
 	Trace = get_trace(Sigma_iX, X, w, tau, cov, nrun, maxiterPCG,
-		tolPCG, traceCVcutoff);
+		tolPCG, traceCVcutoff, seed);
 	dvec PAPY_1 = get_PCG_diag_sigma(w, tau, APY, maxiterPCG, tolPCG);
 	dvec PAPY = PAPY_1 - Sigma_iX * (cov * (Sigma_iXt * PAPY_1));
 	AI = dot(APY, PAPY);
@@ -520,13 +531,14 @@ static void get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
 static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
 	const dvec &in_tau, const dvec &Sigma_iY, const dmat &Sigma_iX,
 	const dmat &cov,
-	int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff)
+	int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff,
+	int seed)
 {
-	double YPAPY, trace, AI;
+	double YPAPY, Trace, AI;
 	get_AI_score(Y, X, w, in_tau, Sigma_iY, Sigma_iX, cov, nrun,
-		maxiterPCG, tolPCG, traceCVcutoff,
-		YPAPY, trace, AI);
-  	double score = YPAPY - trace;
+		maxiterPCG, tolPCG, traceCVcutoff, seed,
+		YPAPY, Trace, AI);
+  	double score = YPAPY - Trace;
   	double Dtau = score / AI;
   	dvec tau = in_tau;
   	dvec tau0 = in_tau;
@@ -573,6 +585,7 @@ BEGIN_RCPP
 	const double tol = Rf_asReal(param["tol"]);
 	const double tol_inv_2 = 1 / (tol*tol);
 	const double tolPCG = Rf_asReal(param["tolPCG"]);
+	const int seed = Rf_asInteger(param["seed"]);
 	const int maxiter = Rf_asInteger(param["maxiter"]);
 	const int maxiterPCG = Rf_asInteger(param["maxiterPCG"]);
 	const int nrun = Rf_asInteger(param["nrun"]);
@@ -610,7 +623,7 @@ BEGIN_RCPP
 
 	double YPAPY, Trace, AI;
 	get_AI_score(re_Y, X, re_W, tau, re_Sigma_iY, re_Sigma_iX, re_cov, nrun,
-		maxiterPCG, tolPCG, traceCVcutoff,
+		maxiterPCG, tolPCG, traceCVcutoff, seed,
 		YPAPY, Trace, AI);
 
 	tau[1] = std::max(0.0, tau0[1] + tau0[1]*tau0[1]*(YPAPY - Trace)/y.size());
@@ -635,7 +648,7 @@ BEGIN_RCPP
 			re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
 		tau = fitglmmaiRPCG(re_Y, X, re_W, tau, re_Sigma_iY,
 			re_Sigma_iX, re_cov, nrun, maxiterPCG, tolPCG,
-			tol, traceCVcutoff);
+			tol, traceCVcutoff, seed);
 
 		cov = re_cov; alpha = re_alpha; eta = re_eta;
 		Y = re_Y; mu = re_mu;
@@ -776,10 +789,8 @@ BEGIN_RCPP
 	}
 
 	return DataFrame::create(
-		_["id"] = lst_idx,
-		_["maf"] = lst_maf,
-		_["var1"] = lst_var1,
-		_["var2"] = lst_var2,
+		_["id"] = lst_idx,    _["maf"] = lst_maf,
+		_["var1"] = lst_var1, _["var2"] = lst_var2,
 		_["ratio"] = lst_ratio);
 
 END_RCPP

@@ -209,6 +209,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # parameters for fitting the model
     param <- list(
         num.thread = num.thread,
+        seed = seed,
         tol = tol, tolPCG = tolPCG,
         maxiter = maxiter, maxiterPCG = maxiterPCG,
         nrun = nrun,

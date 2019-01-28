@@ -19,6 +19,12 @@
 // License along with SAIGEgds.
 // If not, see <http://www.gnu.org/licenses/>.
 
+#if defined(__clang__)
+#pragma clang optimize on
+#elif defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
+#pragma GCC optimize("O3")
+#endif
+
 
 // Function multiversioning (requiring target_clones)
 #if (defined(__GNUC__) && (__GNUC__ >= 6))
@@ -100,4 +106,3 @@ extern "C"
 	/// t(vec(y)) * mat(x) * vec(y)
 	double f64_sum_mat_vec(size_t n, const double *x, const double *y);
 }
-
