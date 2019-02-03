@@ -229,7 +229,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         fit0 <- glm(formula, data=data, family=binomial)
         if (verbose)
         {
-            cat("Initial fixed coefficients:\n")
+            cat("Initial fixed-effect coefficients:\n")
             v <- fit0$coefficients
             names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
             print(v)
@@ -239,13 +239,11 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # initial tau
         tau <- fixtau <- c(0,0)
         if (fit0$family$family %in% c("binomial", "poisson"))
-            tau[1] = fixtau[1] = 1
+            tau[1] <- fixtau[1] <- 1
         if (tau.init[fixtau==0] == 0)
-            tau[fixtau==0] = 0.5
+            tau[fixtau==0] <- 0.5
         else
-            tau[fixtau==0] = tau.init[fixtau==0]
-        if (verbose)
-            cat("Initial tau is (", paste(tau, collapse=", "), ")\n", sep="")
+            tau[fixtau==0] <- tau.init[fixtau==0]
 
         # iterate
         X <- model.matrix(fit0)

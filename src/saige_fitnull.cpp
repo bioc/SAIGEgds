@@ -628,7 +628,11 @@ BEGIN_RCPP
 
 	tau[1] = std::max(0.0, tau0[1] + tau0[1]*tau0[1]*(YPAPY - Trace)/y.size());
 	if (verbose)
-		print_vec("Variance component estimates: ", tau);
+	{
+		Rprintf(
+			"Initial variance component estimates, tau:\n    Sigma_E: %g, Sigma_G: %g\n",
+			tau[0], tau[1]);
+	}
 
 	int iter = 1;
 	for (; iter <= maxiter; iter++)
