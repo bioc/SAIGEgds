@@ -185,10 +185,33 @@ extern "C" double f64_dot(size_t n, const double *x, const double *y)
 
 
 // ========================================================================= //
+// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
+
+inline static COREARRAY_TARGET_CLONES
+	void d_dot_sp(size_t n, const double *x, const double *y, double &out1, double &out2)
+{
+	double sum1=0, sum2=0;
+	for (size_t i=0; i < n; i++)
+	{
+		sum1 += x[i] * y[i];
+		sum2 += y[i] * y[i];
+	}
+	out1 = sum1; out2 = sum2;
+}
+
+/// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
+extern "C" void f64_dot_sp(size_t n, const double *x, const double *y,
+	double &out1, double &out2)
+{
+	d_dot_sp(n, x, y, out1, out2);
+}
+
+
+// ========================================================================= //
 // out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
 
 inline static COREARRAY_TARGET_CLONES
-	void d_dot_sp(size_t n, const double *x1, const double *x2, const double *y,
+	void d_dot_sp2(size_t n, const double *x1, const double *x2, const double *y,
 		double &out1, double &out2)
 {
 	double sum1=0, sum2=0;
@@ -201,10 +224,10 @@ inline static COREARRAY_TARGET_CLONES
 }
 
 /// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
-extern "C" void f64_dot_sp(size_t n, const double *x1, const double *x2,
+extern "C" void f64_dot_sp2(size_t n, const double *x1, const double *x2,
 	const double *y, double &out1, double &out2)
 {
-	d_dot_sp(n, x1, x2, y, out1, out2);
+	d_dot_sp2(n, x1, x2, y, out1, out2);
 }
 
 

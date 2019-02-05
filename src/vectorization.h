@@ -88,9 +88,13 @@ extern "C"
 	/// sum_i x[i]*y[i]
 	double f64_dot(size_t n, const double *x, const double *y);
 
+	/// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
+	void f64_dot_sp(size_t n, const double *x, const double *y,
+		double &out1, double &out2);
 	/// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
-	void f64_dot_sp(size_t n, const double *x1, const double *x2,
+	void f64_dot_sp2(size_t n, const double *x1, const double *x2,
 		const double *y, double &out1, double &out2);
+
 	/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
 	void f64_mul_mat_vec(size_t n, size_t m, const double *x,
 		const double *y, double *p);

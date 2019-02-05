@@ -47,6 +47,7 @@ static double threshold_mac = 0;  //< the threshold of MAC filter
 static int mod_NSamp = 0;   //< the number of samples
 static int mod_NCoeff = 0;  //< the number of beta coefficients
 
+static double *mod_tau = NULL;           //< variance components: tau[0], tau[1]
 static double *mod_y = NULL;             //< a n_samp-length vector
 static double *mod_mu = NULL;            //< a n_samp-length vector
 static double *mod_y_mu = NULL;          //< a n_samp-length vector, y-mu
@@ -83,6 +84,7 @@ BEGIN_RCPP
 	// model parameters
 	mod_NSamp = Rf_length(M["y"]);
 	mod_NCoeff = NumericMatrix(wrap(M["XV"])).nrow();
+	mod_tau = REAL(M["tau"]);
 	mod_y = REAL(M["y"]);
 	mod_mu = REAL(M["mu"]);
 	mod_y_mu = REAL(M["y_mu"]);
@@ -108,16 +110,99 @@ END_RCPP
 
 // ========================================================================= //
 
-/// 
-RcppExport SEXP saige_score_test_quant(SEXP Dosage)
+/// calculate p-values for quantitative outcome
+RcppExport SEXP saige_score_test_quant(SEXP dosage)
 {
 BEGIN_RCPP
-	return R_NilValue;
+
+	// dosages
+	NumericVector G(dosage);
+	const size_t num_samp = G.size();
+	// calc allele freq, and impute geno using the mean
+	double AF, AC;
+	int Num;
+	f64_af_ac_impute(&G[0], num_samp, AF, AC, Num, buf_index);
+
+	double maf = std::min(AF, 1-AF);
+	double mac = std::min(AC, 2*Num - AC);
+	if (Num>0 && maf>0 && maf>=threshold_maf && mac>=threshold_mac)
+	{
+		bool minus = (AF > 0.5);
+		if (minus) f64_sub(mod_NSamp, 2, &G[0]);
+
+		const double inv_sqrt_mac = 1.0 / sqrt(mac);
+		const double inv_mac = 1.0 / mac;
+		double pval, beta;
+		if (maf < 0.05)
+		{
+			// get the number of nonzeros and the nonzero indices
+			size_t n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
+			// buf_coeff = XVX_inv_XV * G
+			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff,
+				mod_t_XVX_inv_XV, &G[0], buf_coeff);
+			// buf_B = t(X) * buf_coeff
+			f64_mul_mat_vec_sub(n_nonzero, buf_index, mod_NCoeff, mod_t_X,
+				buf_coeff, buf_B);
+			// g_tilde = G - B
+			for (size_t i=0; i < n_nonzero; i++)
+				buf_g_tilde[i] = G[IDX_i] - buf_B[i];
+			// var2 = t(buf_coeff) %*% XVX %*% buf_coeff - sum(B^2 .* mu2) + sum(g_tilde^2 .* mu2)
+			double var2 = f64_sum_mat_vec(mod_NCoeff, mod_XVX, buf_coeff);
+			for (size_t i=0; i < n_nonzero; i++)
+				var2 += sq(buf_g_tilde[i]) - sq(buf_B[i]);
+			double var1 = var2 * inv_mac * mod_varRatio;
+			// S1 = sum(y_mu .* g_tilde)
+			double S1 = 0;
+			for (size_t i=0; i < n_nonzero; i++)
+				S1 += mod_y_mu[IDX_i] * buf_g_tilde[i];
+			// buf_tmp = t(X1) * (y-mu)
+			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff, mod_t_X,
+				mod_y_mu, buf_tmp);
+			// S2 = sum((buf_tmp - mod_S_a) .* buf_coeff)
+			double S2 = 0;
+			for (int i=0; i < mod_NCoeff; i++)
+				S2 += (buf_tmp[i] - mod_S_a[i]) * buf_coeff[i];
+			//
+			double Tstat = (S1 + S2) * inv_sqrt_mac / mod_tau[0];
+			pval = ::Rf_pchisq(Tstat*Tstat/var1, 1, FALSE, FALSE);
+			beta = (minus ? -1 : 1) * Tstat / var1 * inv_sqrt_mac;
+
+		} else {
+			// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
+			// buf_coeff = XV * G
+			f64_mul_mat_vec(mod_NSamp, mod_NCoeff, mod_XV, &G[0], buf_coeff);
+			// buf_adj_g = G - XXVX_inv * buf_coeff
+			f64_sub_mul_mat_vec(mod_NSamp, mod_NCoeff, &G[0], mod_t_XXVX_inv,
+				buf_coeff, buf_adj_g);
+
+			// inner product
+			double S, var;
+			// S = sum((y - mu) .* buf_adj_g
+			// var = sum(buf_adj_g .* buf_adj_g)
+			f64_dot_sp(mod_NSamp, mod_y_mu, buf_adj_g, S, var);
+			double Tstat = S * inv_sqrt_mac / mod_tau[0];
+			var *= inv_mac * mod_varRatio;
+
+			// p-value and beta
+			pval = ::Rf_pchisq(Tstat*Tstat/var, 1, FALSE, FALSE);
+			beta = (minus ? -1 : 1) * Tstat / var * inv_sqrt_mac;
+		}
+
+		double SE = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
+
+		NumericVector ans(6);
+		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
+		ans[3] = beta;  ans[4] = SE;    ans[5] = pval;
+		return ans;
+	} else {
+		return R_NilValue;
+	}
+
 END_RCPP
 }
 
 
-/// return AF, AC, num, beta, se, pval
+/// calculate p-values for binary outcome
 RcppExport SEXP saige_score_test_bin(SEXP dosage)
 {
 BEGIN_RCPP
@@ -177,13 +262,13 @@ BEGIN_RCPP
 			// buf_coeff = XV * G
 			f64_mul_mat_vec(mod_NSamp, mod_NCoeff, mod_XV, &G[0], buf_coeff);
 			// buf_adj_g = G - XXVX_inv * buf_coeff
-			f64_sub_mul_mat_vec(mod_NSamp, mod_NCoeff,
-				&G[0], mod_t_XXVX_inv, buf_coeff, buf_adj_g);
+			f64_sub_mul_mat_vec(mod_NSamp, mod_NCoeff, &G[0], mod_t_XXVX_inv,
+				buf_coeff, buf_adj_g);
 			// inner product
 			double S, var;
 			// S = sum((y - mu) .* buf_adj_g)
 			// var = sum(mu*(1-mu) .* buf_adj_g .* buf_adj_g)
-			f64_dot_sp(mod_NSamp, mod_y_mu, mod_mu2, buf_adj_g, S, var);
+			f64_dot_sp2(mod_NSamp, mod_y_mu, mod_mu2, buf_adj_g, S, var);
 			var *= mod_varRatio;
 			// p-value and beta
 			pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
@@ -204,7 +289,7 @@ BEGIN_RCPP
 			double m1, var2;
 			// m1 = sum(mu .* adj_g)
 			// var2 = sum(mu*(1-mu) .* adj_g .* adj_g)
-			f64_dot_sp(mod_NSamp, mod_mu, mod_mu2, buf_adj_g, m1, var2);
+			f64_dot_sp2(mod_NSamp, mod_mu, mod_mu2, buf_adj_g, m1, var2);
 			double var1 = var2 * mod_varRatio;
 			double Tstat = q - m1;
 			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;

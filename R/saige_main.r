@@ -53,8 +53,8 @@ SIMD <- function() .Call(saige_simd_version)
         if (!(nm %in% names(obj)))
             stop("'", nm, "' should be stored in the SAIGE model.")
     }
-    if (!(obj$trait.type %in% c("binary")))
-        stop("'trait.type' should be binary or .")
+    if (!(obj$trait.type %in% c("binary", "quantitative")))
+        stop("'trait.type' should be binary or quantitative.")
     invisible()
 }
 
@@ -262,7 +262,32 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # ans$obj.glm.null <- fit0
         glmm$obj.noK <- obj.noK
         glmm$var.ratio <- var.ratio
-    }
+
+    } else if (trait.type == "quantitative")    
+    {
+        # quantitative outcome
+        cat("Quantitative outcome: ", phenovar, "\n", sep="")
+
+        # fit the null model
+        fit0 <- glm(formula, data=data, family=gaussian)
+        if (verbose)
+        {
+            cat("Initial fixed-effect coefficients:\n")
+            v <- fit0$coefficients
+            names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
+            print(v)
+        }
+        obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model_q(formula, data)
+
+      system.time(modglmm<-glmmkin.ai_PCG_Rcpp_Quantitative(plinkFile,fit0, tau = c(0,0), fixtau = c(0,0), maxiter =maxiter, tol = tol, verbose = TRUE, nrun=30, tolPCG = tolPCG, maxiterPCG = maxiterPCG, subPheno = dataMerge_sort, obj.noK=obj.noK, out.transform=out.transform, tauInit=tauInit, memoryChunk = memoryChunk, LOCO=LOCO, chromosomeStartIndexVec = chromosomeStartIndexVec, chromosomeEndIndexVec = chromosomeEndIndexVec, traceCVcutoff = traceCVcutoff))
+      save(modglmm, file = modelOut)
+      print("step2")
+
+
+
+    } else {
+        stop("Invalid 'trait.type'.")    
+    } 
 
     if (verbose)
     {
@@ -376,6 +401,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     n <- length(ii)
     mobj <- list(
         maf = maf, mac = mac,
+        tau = modobj$tau,
         y = y[ii], mu = mu[ii],
         y_mu = y[ii] - mu[ii],  # y - mu
         mu2 = (mu * (1 - mu))[ii],
@@ -405,6 +431,13 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         rv <- seqApply(gdsfile, dsnode, .cfunction("saige_score_test_bin"),
             as.is="list", parallel=parallel, .progress=verbose,
             .list_dup=FALSE)
+    } else if (modobj$trait.type == "quantitative")    
+    {
+        rv <- seqApply(gdsfile, dsnode, .cfunction("saige_score_test_quant"),
+            as.is="list", parallel=parallel, .progress=verbose,
+            .list_dup=FALSE)
+    } else {
+        stop("Invalid 'modobj$trait.type'.")
     }
 
     # if any maf/mac filter
@@ -422,7 +455,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     }
 
     # output
-    data.frame(
+    ans <- data.frame(
         id  = seqGetData(f, "variant.id"),
         chr = seqGetData(f, "chromosome"),
         pos = seqGetData(f, "position"),
@@ -434,8 +467,13 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         beta = sapply(rv, `[`, i=4L),
         SE   = sapply(rv, `[`, i=5L),
         pval = sapply(rv, `[`, i=6L),
-        pval.noadj = sapply(rv, `[`, i=7L),
-        converged = sapply(rv, `[`, i=8L)==1,
         stringsAsFactors = FALSE
     )
+    if (modobj$trait.type == "binary")
+    {
+        pval.noadj <- sapply(rv, `[`, i=7L)
+        converged <- as.logical(sapply(rv, `[`, i=8L))
+    }
+
+    ans
 }
