@@ -314,6 +314,11 @@ END_RCPP
 }
 
 
+// ========================================================================= //
+
+RcppExport SEXP saige_simd_version();
+RcppExport SEXP saige_store_geno(SEXP, SEXP, SEXP, SEXP, SEXP);
+
 /// initialize the package
 RcppExport void R_init_SAIGEgds(DllInfo *info)
 {
@@ -322,6 +327,8 @@ RcppExport void R_init_SAIGEgds(DllInfo *info)
 	static R_CallMethodDef callMethods[] =
 	{
 		CALL(saige_score_test_init, 1),
+		CALL(saige_simd_version, 0),
+		CALL(saige_store_geno, 5),
 		{ NULL, NULL, 0 }
 	};
 

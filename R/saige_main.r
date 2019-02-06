@@ -471,8 +471,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     )
     if (modobj$trait.type == "binary")
     {
-        pval.noadj <- sapply(rv, `[`, i=7L)
-        converged <- as.logical(sapply(rv, `[`, i=8L))
+        ans$pval.noadj <- sapply(rv, `[`, i=7L)
+        ans$converged <- as.logical(sapply(rv, `[`, i=8L))
     }
 
     ans
