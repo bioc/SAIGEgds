@@ -31,7 +31,9 @@ inline static double sq(double v) { return v*v; }
 
 // inline static int sign(double v) { return (v>0) ? 1 : ((v<0) ? -1 : 0); }
 
-static double Korg(double t, size_t n_g, const double mu[], const double g[])
+
+static COREARRAY_TARGET_CLONES
+	double Korg(double t, size_t n_g, const double mu[], const double g[])
 {
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
