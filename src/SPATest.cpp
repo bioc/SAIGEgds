@@ -42,8 +42,9 @@ static double Korg(double t, size_t n_g, const double mu[], const double g[])
 	return sum;
 }
 
-static double K1_adj(double t, size_t n_g, const double mu[], const double g[],
-	double q)
+
+static COREARRAY_TARGET_CLONES
+	double K1_adj(double t, size_t n_g, const double mu[], const double g[], double q)
 {
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
@@ -56,7 +57,9 @@ static double K1_adj(double t, size_t n_g, const double mu[], const double g[],
 	return sum - q;
 }
 
-static double K2(double t, size_t n_g, const double mu[], const double g[])
+
+static COREARRAY_TARGET_CLONES
+	double K2(double t, size_t n_g, const double mu[], const double g[])
 {
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
@@ -73,9 +76,10 @@ static double K2(double t, size_t n_g, const double mu[], const double g[])
 // .Machine$double.eps^0.25
 static const double root_tol = sqrt(sqrt(DBL_EPSILON));
 
-static void getroot_K1(double &root, int &n_iter, bool &converged,
-	double init, size_t n_g, const double mu[],
-	const double g[], double q, double tol=root_tol, int maxiter=1000)
+static void COREARRAY_TARGET_CLONES
+	getroot_K1(double &root, int &n_iter, bool &converged,
+		double init, size_t n_g, const double mu[],
+		const double g[], double q, double tol=root_tol, int maxiter=1000)
 {
 	double g_pos = 0;
 	for (size_t i=0; i < n_g; i++) g_pos += (g[i] > 0) ? g[i] : 0;
