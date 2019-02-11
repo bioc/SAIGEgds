@@ -133,7 +133,8 @@ BEGIN_RCPP
 		const double inv_sqrt_mac = 1.0 / sqrt(mac);
 		const double inv_mac = 1.0 / mac;
 		double pval, beta;
-		if (maf < 0.05)
+		// if (maf < 0.05)
+		if (maf > -0.05)
 		{
 			// get the number of nonzeros and the nonzero indices
 			size_t n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
@@ -146,7 +147,7 @@ BEGIN_RCPP
 			// g_tilde = G - B
 			for (size_t i=0; i < n_nonzero; i++)
 				buf_g_tilde[i] = G[IDX_i] - buf_B[i];
-			// var2 = t(buf_coeff) %*% XVX %*% buf_coeff - sum(B^2 .* mu2) + sum(g_tilde^2 .* mu2)
+			// var2 = t(buf_coeff) %*% XVX %*% buf_coeff - sum(B^2) + sum(g_tilde^2)
 			double var2 = f64_sum_mat_vec(mod_NCoeff, mod_XVX, buf_coeff);
 			for (size_t i=0; i < n_nonzero; i++)
 				var2 += sq(buf_g_tilde[i]) - sq(buf_B[i]);
@@ -155,6 +156,7 @@ BEGIN_RCPP
 			double S1 = 0;
 			for (size_t i=0; i < n_nonzero; i++)
 				S1 += mod_y_mu[IDX_i] * buf_g_tilde[i];
+			S1 *= inv_sqrt_mac;
 			// buf_tmp = t(X1) * (y-mu)
 			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff, mod_t_X,
 				mod_y_mu, buf_tmp);
@@ -163,7 +165,7 @@ BEGIN_RCPP
 			for (int i=0; i < mod_NCoeff; i++)
 				S2 += (buf_tmp[i] - mod_S_a[i]) * buf_coeff[i];
 			//
-			double Tstat = (S1 + S2) * inv_sqrt_mac / mod_tau[0];
+			double Tstat = (S1 + S2) / mod_tau[0];
 			pval = ::Rf_pchisq(Tstat*Tstat/var1, 1, FALSE, FALSE);
 			beta = (minus ? -1 : 1) * Tstat / var1 * inv_sqrt_mac;
 
