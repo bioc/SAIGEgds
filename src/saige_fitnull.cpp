@@ -42,34 +42,37 @@ using namespace RcppParallel;
 
 #if RCPP_PARALLEL_USE_TBB
 
-#define PARALLEL_HEAD(SIZE)    \
-	tbb::parallel_for(tbb::blocked_range<size_t>(0, SIZE,  \
-		SIZE/NumThreads + (SIZE % NumThreads ? 1 : 0)),  \
+#define PARALLEL_HEAD(SIZE, AUTO)    \
+	tbb::parallel_for(  \
+		AUTO ? tbb::blocked_range<size_t>(0, SIZE) :  \
+		tbb::blocked_range<size_t>(0, SIZE, SIZE/NumThreads + (SIZE % NumThreads ? 1:0)),  \
 		[&](const tbb::blocked_range<size_t> &r)  \
 	{  \
 		const int th_idx = tbb::this_task_arena::current_thread_index();  \
 		if (th_idx < 0 || th_idx >= NumThreads)  \
 			throw "Invalid tbb::this_task_arena::current_thread_index()!";
 
-#define PARALLEL_FOR(i, SIZE)    \
-		PARALLEL_HEAD(SIZE)    \
+#define PARALLEL_FOR(i, SIZE, AUTO)    \
+		PARALLEL_HEAD(SIZE, AUTO)    \
 		for (size_t i=r.begin(); i < r.end(); i++)
 
-#define PARALLEL_RANGE(st, ed, SIZE)    \
-		PARALLEL_HEAD(SIZE)    \
+#define PARALLEL_RANGE(st, ed, SIZE, AUTO)    \
+		PARALLEL_HEAD(SIZE, AUTO)    \
 		const size_t st = r.begin(), ed = r.end();
 
 #define PARALLEL_END    });
 
 #else
 
-#define PARALLEL_FOR(i, SIZE)    \
+#define PARALLEL_FOR(i, SIZE, AUTO)    \
+	{  \
 		const int th_idx = 0;  \
 		for (size_t i=0; i < SIZE; i++)
-#define PARALLEL_RANGE(st, ed, SIZE)    \
+#define PARALLEL_RANGE(st, ed, SIZE, AUTO)    \
+	{  \
 		const int th_idx = 0;  \
 		const size_t st = 0, ed = SIZE;
-#define PARALLEL_END
+#define PARALLEL_END    }
 
 #endif
 
@@ -155,7 +158,7 @@ BEGIN_RCPP
 	// build the look-up table of standardized genotypes
 	init_lookup_table();
 	buf_std_geno = REAL(r_buf_geno);
-	PARALLEL_FOR(i, Geno_NumVariant)
+	PARALLEL_FOR(i, Geno_NumVariant, true)
 	{
 		BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 		// calculate allele frequency
@@ -239,7 +242,7 @@ static COREARRAY_TARGET_CLONES
 	memset(buf_crossprod, 0, sizeof(double)*Geno_NumSamp*NumThreads);
 
 	// crossprod with b
-	PARALLEL_FOR(i, Geno_NumVariant)
+	PARALLEL_FOR(i, Geno_NumVariant, true)
 	{
 		const BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 		const double *base = buf_std_geno + 4*i;
@@ -282,7 +285,7 @@ static COREARRAY_TARGET_CLONES
 
 	// normalize out_b
 	out_b.resize(Geno_NumSamp);
-	PARALLEL_RANGE(st, ed, Geno_NumSamp)
+	PARALLEL_RANGE(st, ed, Geno_NumSamp, false)
 	{
 		size_t len = ed - st;
 		const double *s = buf_crossprod + st;
@@ -306,7 +309,7 @@ static COREARRAY_TARGET_CLONES
 	void get_diag_sigma(const dvec& w, const dvec& tau, dvec &out_sigma)
 {
 	out_sigma.resize(Geno_NumSamp);
-	PARALLEL_RANGE(st, ed, Geno_NumSamp)
+	PARALLEL_RANGE(st, ed, Geno_NumSamp, false)
 	{
 		const double tau0 = tau[0], tau1 = tau[1];
 		for (size_t i=st; i < ed; i++)
