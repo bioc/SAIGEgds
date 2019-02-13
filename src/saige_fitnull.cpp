@@ -272,7 +272,7 @@ static COREARRAY_TARGET_CLONES
 			double sum4[4] = { 0, 0, 0, 0 };
 			for (; n >= 4; n-=4, pb+=4)
 			{
-				const double *lkp_tab = &lkp_tab_256[size_t(*g++)*4];
+				const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
 				sum4[0] += lkp_tab[0] * pb[0];
 				sum4[1] += lkp_tab[1] * pb[1];
 				sum4[2] += lkp_tab[2] * pb[2];
@@ -287,7 +287,6 @@ static COREARRAY_TARGET_CLONES
 					base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
 			}
 		}
-
 		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 		{
 			dot += base[gg & 0x03] * (*pb++);
@@ -298,13 +297,26 @@ static COREARRAY_TARGET_CLONES
 		double *pbb = buf_crossprod + Geno_NumSamp * th_idx;
 		g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 		n = Geno_NumSamp;
-		for (; n >= 4; n-=4, pbb+=4)
+		if (buf_lookup_table)
 		{
-			BYTE gg = *g++;
-			pbb[0] += dot * base[gg & 0x03];
-			pbb[1] += dot * base[(gg >> 2) & 0x03];
-			pbb[2] += dot * base[(gg >> 4) & 0x03];
-			pbb[3] += dot * base[gg >> 6];
+			const double *lkp_tab_256 = buf_lookup_table + 1024*i;
+			for (; n >= 4; n-=4, pbb+=4)
+			{
+				const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
+				pbb[0] += dot * lkp_tab[0];
+				pbb[1] += dot * lkp_tab[1];
+				pbb[2] += dot * lkp_tab[2];
+				pbb[3] += dot * lkp_tab[3];
+			}
+		} else {
+			for (; n >= 4; n-=4, pbb+=4)
+			{
+				BYTE gg = *g++;
+				pbb[0] += dot * base[gg & 0x03];
+				pbb[1] += dot * base[(gg >> 2) & 0x03];
+				pbb[2] += dot * base[(gg >> 4) & 0x03];
+				pbb[3] += dot * base[gg >> 6];
+			}
 		}
 		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 		{
