@@ -110,7 +110,6 @@ static size_t Geno_NumVariant = 0;     //< the number of variants
 static double *buf_std_geno = NULL;   //< a 4-by-n_variant look-up matrix
 static double *buf_diag_grm = NULL;   //< n_samp-length, sigma_i = sum_j adj.g[i,j]^2
 static double *buf_crossprod = NULL;  //< nThread-by-n_samp matrix
-static double *buf_lookup_table = NULL;  //< a (4*256)-by-n_variant look-up matrix
 
 // Internal 2-bit genotype lookup tables
 static bool lookup_has_init = false;
@@ -139,7 +138,7 @@ inline static double ds_nan(BYTE g) { return (g < 3) ? g : R_NaN; }
 
 /// Store SNP genotype in the 2-bit packed format
 RcppExport SEXP saige_store_2b_geno(SEXP rawgeno, SEXP num_samp, SEXP r_buf_geno,
-	SEXP r_buf_sigma, SEXP r_buf_crossprod, SEXP r_buf_lookup_tab)
+	SEXP r_buf_sigma, SEXP r_buf_crossprod)
 {
 BEGIN_RCPP
 
@@ -161,7 +160,6 @@ BEGIN_RCPP
 	// build the look-up table of standardized genotypes
 	init_lookup_table();
 	buf_std_geno = REAL(r_buf_geno);
-	buf_lookup_table = Rf_isNull(r_buf_lookup_tab) ? NULL : REAL(r_buf_lookup_tab);
 	PARALLEL_FOR(i, Geno_NumVariant, true)
 	{
 		BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
@@ -179,18 +177,6 @@ BEGIN_RCPP
 		double *p = &buf_std_geno[4*i];
 		p[0] = (0 - 2*af) * inv; p[1] = (1 - 2*af) * inv;
 		p[2] = (2 - 2*af) * inv; p[3] = 0;
-		if (buf_lookup_table)
-		{
-			double *s = &buf_lookup_table[1024*i];
-			for (size_t v=0; v < 256; v++)
-			{
-				size_t g0 = (v >> 0) & 0x03, g1 = (v >> 2) & 0x03;
-				size_t g2 = (v >> 4) & 0x03, g3 = (v >> 6) & 0x03;
-				s[0] = p[g0]; s[1] = p[g1];
-				s[2] = p[g2]; s[3] = p[g3];
-				s += 4;
-			}
-		}
 	}
 	PARALLEL_END
 
@@ -429,26 +415,11 @@ static COREARRAY_TARGET_CLONES
 			double dot = 0;
 			const double *pb = &b[0];
 			size_t n = Geno_NumSamp;
-			if (buf_lookup_table)
+			for (; n >= 4; n-=4, pb+=4)
 			{
-				const double *lkp_tab_256 = buf_lookup_table + 1024*i;
-				double sum4[4] = { 0, 0, 0, 0 };
-				for (; n >= 4; n-=4, pb+=4)
-				{
-					const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
-					sum4[0] += lkp_tab[0] * pb[0];
-					sum4[1] += lkp_tab[1] * pb[1];
-					sum4[2] += lkp_tab[2] * pb[2];
-					sum4[3] += lkp_tab[3] * pb[3];
-				}
-				dot = sum4[0] + sum4[1] + sum4[2] + sum4[3];
-			} else {
-				for (; n >= 4; n-=4, pb+=4)
-				{
-					BYTE gg = *g++;
-					dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
-						base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
-				}
+				BYTE gg = *g++;
+				dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
+					base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
 			}
 			for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 			{
@@ -460,26 +431,13 @@ static COREARRAY_TARGET_CLONES
 			double *pbb = buf_crossprod + Geno_NumSamp * th_idx;
 			g = Geno_PackedRaw + Geno_PackedNumSamp*i;
 			n = Geno_NumSamp;
-			if (buf_lookup_table)
+			for (; n >= 4; n-=4, pbb+=4)
 			{
-				const double *lkp_tab_256 = buf_lookup_table + 1024*i;
-				for (; n >= 4; n-=4, pbb+=4)
-				{
-					const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
-					pbb[0] += dot * lkp_tab[0];
-					pbb[1] += dot * lkp_tab[1];
-					pbb[2] += dot * lkp_tab[2];
-					pbb[3] += dot * lkp_tab[3];
-				}
-			} else {
-				for (; n >= 4; n-=4, pbb+=4)
-				{
-					BYTE gg = *g++;
-					pbb[0] += dot * base[gg & 0x03];
-					pbb[1] += dot * base[(gg >> 2) & 0x03];
-					pbb[2] += dot * base[(gg >> 4) & 0x03];
-					pbb[3] += dot * base[gg >> 6];
-				}
+				BYTE gg = *g++;
+				pbb[0] += dot * base[gg & 0x03];
+				pbb[1] += dot * base[(gg >> 2) & 0x03];
+				pbb[2] += dot * base[(gg >> 4) & 0x03];
+				pbb[3] += dot * base[gg >> 6];
 			}
 			for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 			{

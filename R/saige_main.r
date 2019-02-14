@@ -79,8 +79,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
-    geno.sparse=TRUE,
-    lg.lookup.tab=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
+    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
     stopifnot(is.data.frame(data))
@@ -101,7 +100,6 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
     stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
     stopifnot(is.logical(geno.sparse), length(geno.sparse)==1L)
-    stopifnot(is.logical(lg.lookup.tab), length(lg.lookup.tab)==1L)
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.savefn), length(model.savefn)==1L)
     stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
@@ -232,11 +230,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         .Call(saige_store_sp_geno, packed.geno, n_samp, buf_std_geno, buf_sigma,
             buf_crossprod)
     } else {
-        buf_lookup_tab <- NULL
-        if (isTRUE(lg.lookup.tab))
-            buf_lookup_tab <- double(1024L*n_var)
         .Call(saige_store_2b_geno, packed.geno, n_samp, buf_std_geno, buf_sigma,
-            buf_crossprod, buf_lookup_tab)
+            buf_crossprod)
     }
 
     # parameters for fitting the model
