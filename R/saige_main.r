@@ -69,6 +69,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
+    geno.sparse=TRUE,
     lg.lookup.tab=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
@@ -89,6 +90,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.numeric(tau.init), length(tau.init)==2L)
     stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
     stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
+    stopifnot(is.logical(geno.sparse), length(geno.sparse)==1L)
     stopifnot(is.logical(lg.lookup.tab), length(lg.lookup.tab)==1L)
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.savefn), length(model.savefn)==1L)

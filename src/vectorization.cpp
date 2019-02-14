@@ -68,11 +68,10 @@ extern "C" SEXP saige_simd_version()
 
 
 // ========================================================================= //
-// return allele frequency and impute genotype using the mean
 
-inline static COREARRAY_TARGET_CLONES
-	void d_af_ac_impute(double *ds, size_t n, double &AF, double &AC,
-		int &Num, int buf_idx[])
+/// return allele frequency and impute genotype using the mean
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC, int &Num, int buf_idx[])
 {
 	double sum = 0;
 	int num = 0, *pIdx = buf_idx;
@@ -92,18 +91,10 @@ inline static COREARRAY_TARGET_CLONES
 	}
 }
 
-extern "C" void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC,
-	int &Num, int buf_idx[])
-{
-	d_af_ac_impute(ds, n, AF, AC, Num, buf_idx);
-}
 
-
-// ========================================================================= //
-// get the index of each nonzero value in x and return the number of nonzeros
-
-inline static COREARRAY_TARGET_CLONES
-	size_t d_nonzero_index(size_t n, const double *x, int *i)
+/// get the index of each nonzero value in x and return the number of nonzeros
+extern "C" COREARRAY_TARGET_CLONES
+	size_t f64_nonzero_index(size_t n, const double *x, int *i)
 {
 	size_t n_i = 0;
 	for (size_t j=0; j < n; j++)
@@ -111,84 +102,44 @@ inline static COREARRAY_TARGET_CLONES
 	return n_i;
 }
 
-/// get the index of each nonzero value in x and return the number of nonzeros
-extern "C" size_t f64_nonzero_index(size_t n, const double *x, int *i)
-{
-	return d_nonzero_index(n, x, i);
-}
 
-
-// ========================================================================= //
-// y[i] += x[i]
-
-inline static COREARRAY_TARGET_CLONES
-	void d_add(size_t n, const double *x, double *y)
+/// y[i] += x[i]
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_add(size_t n, const double *x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] += x[i];
 }
 
-/// y[i] += x[i]
-extern "C" void f64_add(size_t n, const double *x, double *y)
-{
-	d_add(n, x, y);
-}
 
-
-// ========================================================================= //
-// y[i] = x - y[i]
-
-inline static COREARRAY_TARGET_CLONES
-	void d_sub(size_t n, double x, double *y)
+/// y[i] = x - y[i]
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_sub(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] = x - y[i];
 }
 
-/// y[i] = x - y[i]
-extern "C" void f64_sub(size_t n, double x, double *y)
-{
-	d_sub(n, x, y);
-}
 
-
-// ========================================================================= //
-// y[i] = x * y[i]
-
-inline static COREARRAY_TARGET_CLONES
-	void d_mul(size_t n, double x, double *y)
+/// y[i] = x * y[i]
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_mul(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] *= x;
 }
 
-/// y[i] = x * y[i]
-extern "C" void f64_mul(size_t n, double x, double *y)
-{
-	d_mul(n, x, y);
-}
 
-
-// ========================================================================= //
-// sum_i x[i]*y[i]
-
-inline static COREARRAY_TARGET_CLONES
-	double d_dot(size_t n, const double *x, const double *y)
+/// sum_i x[i]*y[i]
+extern "C" COREARRAY_TARGET_CLONES
+	double f64_dot(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
 	for (size_t i=0; i < n; i++) sum += x[i] * y[i];
 	return sum;
 }
 
-/// sum_i x[i]*y[i]
-extern "C" double f64_dot(size_t n, const double *x, const double *y)
-{
-	return d_dot(n, x, y);
-}
 
-
-// ========================================================================= //
-// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
-
-inline static COREARRAY_TARGET_CLONES
-	void d_dot_sp(size_t n, const double *x, const double *y, double &out1, double &out2)
+/// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_dot_sp(size_t n, const double *x, const double *y, double &out1, double &out2)
 {
 	double sum1=0, sum2=0;
 	for (size_t i=0; i < n; i++)
@@ -199,20 +150,10 @@ inline static COREARRAY_TARGET_CLONES
 	out1 = sum1; out2 = sum2;
 }
 
-/// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
-extern "C" void f64_dot_sp(size_t n, const double *x, const double *y,
-	double &out1, double &out2)
-{
-	d_dot_sp(n, x, y, out1, out2);
-}
 
-
-// ========================================================================= //
-// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
-
-inline static COREARRAY_TARGET_CLONES
-	void d_dot_sp2(size_t n, const double *x1, const double *x2, const double *y,
-		double &out1, double &out2)
+/// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_dot_sp2(size_t n, const double *x1, const double *x2, const double *y, double &out1, double &out2)
 {
 	double sum1=0, sum2=0;
 	for (size_t i=0; i < n; i++)
@@ -223,21 +164,10 @@ inline static COREARRAY_TARGET_CLONES
 	out1 = sum1; out2 = sum2;
 }
 
-/// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
-extern "C" void f64_dot_sp2(size_t n, const double *x1, const double *x2,
-	const double *y, double &out1, double &out2)
-{
-	d_dot_sp2(n, x1, x2, y, out1, out2);
-}
 
-
-// ========================================================================= //
-// vec(p_m) = mat(x_{m*n}) * vec(y_n)
-// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
-// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
-
-inline static COREARRAY_TARGET_CLONES
-	void d_mul_m_v(size_t n, size_t m, const double *x, const double *y, double *p)
+/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
 	for (; n > 0; n--)
@@ -249,9 +179,10 @@ inline static COREARRAY_TARGET_CLONES
 	}
 }
 
-inline static COREARRAY_TARGET_CLONES
-	void d_mul_mat_vec_sp(size_t n, const int *idx, size_t m, const double *x,
-		const double *y, double *p)
+
+/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
 	for (; n > 0; n--)
@@ -263,9 +194,10 @@ inline static COREARRAY_TARGET_CLONES
 	}
 }
 
-inline static COREARRAY_TARGET_CLONES
-	void d_mul_mat_vec_sub(size_t n, const int *idx, size_t m,
-		const double *x, const double *y, double *p)
+
+/// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p)
 {
 	for (size_t i=0; i < n; i++)
 	{
@@ -278,35 +210,9 @@ inline static COREARRAY_TARGET_CLONES
 }
 
 
-/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
-extern "C" void f64_mul_mat_vec(size_t n, size_t m, const double *x,
-	const double *y, double *p)
-{
-	d_mul_m_v(n, m, x, y, p);
-}
-
-/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
-extern "C" void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m,
-	const double *x, const double *y, double *p)
-{
-	d_mul_mat_vec_sp(n, idx, m, x, y, p);
-}
-
-/// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
-extern "C" void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m,
-	const double *x, const double *y, double *p)
-{
-	d_mul_mat_vec_sub(n, idx, m, x, y, p);
-}
-
-
-
-// ========================================================================= //
-// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
-
-inline static COREARRAY_TARGET_CLONES
-	void d_sub_mul_mat_vec(size_t n, size_t m,
-		const double *x, const double *y, const double *z, double *p)
+/// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
+extern "C" COREARRAY_TARGET_CLONES
+	void f64_sub_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, const double *z, double *p)
 {
 	switch (m)
 	{
@@ -356,20 +262,10 @@ inline static COREARRAY_TARGET_CLONES
 	}
 }
 
-/// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
-extern "C" void f64_sub_mul_mat_vec(size_t n, size_t m,
-	const double *x, const double *y, const double *z, double *p)
-{
-	d_sub_mul_mat_vec(n, m, x, y, z, p);
-}
 
-
-
-// ========================================================================= //
-// t(vec(y)) * mat(x) * vec(y)
-
-inline static COREARRAY_TARGET_CLONES
-	double d_sum_mat_vec(size_t n, const double *x, const double *y)
+/// t(vec(y)) * mat(x) * vec(y)
+extern "C" COREARRAY_TARGET_CLONES
+	double f64_sum_mat_vec(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
 	for (size_t i=0; i < n; i++)
@@ -379,10 +275,4 @@ inline static COREARRAY_TARGET_CLONES
 			sum += a * y[j] * xx[j];
 	}
 	return sum;
-}
-
-/// t(vec(y)) * mat(x) * vec(y)
-extern "C" double f64_sum_mat_vec(size_t n, const double *x, const double *y)
-{
-	return d_sum_mat_vec(n, x, y);
 }
