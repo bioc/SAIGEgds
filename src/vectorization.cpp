@@ -69,8 +69,11 @@ extern "C" SEXP saige_simd_version()
 
 // ========================================================================= //
 
+namespace vectorization
+{
+
 /// return allele frequency and impute genotype using the mean
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC, int &Num, int buf_idx[])
 {
 	double sum = 0;
@@ -93,7 +96,7 @@ extern "C" COREARRAY_TARGET_CLONES
 
 
 /// get the index of each nonzero value in x and return the number of nonzeros
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	size_t f64_nonzero_index(size_t n, const double *x, int *i)
 {
 	size_t n_i = 0;
@@ -103,33 +106,36 @@ extern "C" COREARRAY_TARGET_CLONES
 }
 
 
+/// y[i] += x
+COREARRAY_TARGET_CLONES void f64_add(size_t n, double x, double *y)
+{
+	for (size_t i=0; i < n; i++) y[i] += x;
+}
+
+
 /// y[i] += x[i]
-extern "C" COREARRAY_TARGET_CLONES
-	void f64_add(size_t n, const double *x, double *y)
+COREARRAY_TARGET_CLONES void f64_add(size_t n, const double *x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] += x[i];
 }
 
 
 /// y[i] = x - y[i]
-extern "C" COREARRAY_TARGET_CLONES
-	void f64_sub(size_t n, double x, double *y)
+COREARRAY_TARGET_CLONES void f64_sub(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] = x - y[i];
 }
 
 
 /// y[i] = x * y[i]
-extern "C" COREARRAY_TARGET_CLONES
-	void f64_mul(size_t n, double x, double *y)
+COREARRAY_TARGET_CLONES void f64_mul(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] *= x;
 }
 
 
 /// sum_i x[i]*y[i]
-extern "C" COREARRAY_TARGET_CLONES
-	double f64_dot(size_t n, const double *x, const double *y)
+COREARRAY_TARGET_CLONES double f64_dot(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
 	for (size_t i=0; i < n; i++) sum += x[i] * y[i];
@@ -137,8 +143,17 @@ extern "C" COREARRAY_TARGET_CLONES
 }
 
 
+/// sum_i x[i]
+COREARRAY_TARGET_CLONES double f64_sum(size_t n, const double *x)
+{
+	double sum = 0;
+	for (size_t i=0; i < n; i++) sum += x[i];
+	return sum;
+}
+
+
 /// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	void f64_dot_sp(size_t n, const double *x, const double *y, double &out1, double &out2)
 {
 	double sum1=0, sum2=0;
@@ -152,7 +167,7 @@ extern "C" COREARRAY_TARGET_CLONES
 
 
 /// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	void f64_dot_sp2(size_t n, const double *x1, const double *x2, const double *y, double &out1, double &out2)
 {
 	double sum1=0, sum2=0;
@@ -166,7 +181,7 @@ extern "C" COREARRAY_TARGET_CLONES
 
 
 /// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	void f64_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
@@ -181,7 +196,7 @@ extern "C" COREARRAY_TARGET_CLONES
 
 
 /// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
@@ -196,7 +211,7 @@ extern "C" COREARRAY_TARGET_CLONES
 
 
 /// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p)
 {
 	for (size_t i=0; i < n; i++)
@@ -211,7 +226,7 @@ extern "C" COREARRAY_TARGET_CLONES
 
 
 /// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	void f64_sub_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, const double *z, double *p)
 {
 	switch (m)
@@ -264,7 +279,7 @@ extern "C" COREARRAY_TARGET_CLONES
 
 
 /// t(vec(y)) * mat(x) * vec(y)
-extern "C" COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES
 	double f64_sum_mat_vec(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
@@ -275,4 +290,6 @@ extern "C" COREARRAY_TARGET_CLONES
 			sum += a * y[j] * xx[j];
 	}
 	return sum;
+}
+
 }

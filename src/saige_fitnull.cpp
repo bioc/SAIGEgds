@@ -7,8 +7,8 @@
 // This file is part of SAIGEgds. It was created based on the original SAIGE
 // C++ and R codes in the SAIGE package. Compared with the original SAIGE,
 // I changed all single-precision floating-point numbers to double precision,
-// and a more efficient algorithm with packed 2-bit genotypes is provided here
-// to calculate the cross product of GRM.
+// and a more efficient algorithm with packed 2-bit and sparse genotypes is provided
+// to calculate the cross product of genetic relationship matrix.
 //
 // SAIGEgds is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License Version 3 as published
@@ -35,6 +35,7 @@ using namespace std;
 using namespace Rcpp;
 using namespace arma;
 using namespace RcppParallel;
+using namespace vectorization;
 
 
 // ========================================================================= //
@@ -137,7 +138,7 @@ inline static double ds_nan(BYTE g) { return (g < 3) ? g : R_NaN; }
 
 
 /// Store SNP genotype in the 2-bit packed format
-RcppExport SEXP saige_store_geno(SEXP rawgeno, SEXP num_samp, SEXP r_buf_geno,
+RcppExport SEXP saige_store_2b_geno(SEXP rawgeno, SEXP num_samp, SEXP r_buf_geno,
 	SEXP r_buf_sigma, SEXP r_buf_crossprod, SEXP r_buf_lookup_tab)
 {
 BEGIN_RCPP
@@ -222,25 +223,149 @@ END_RCPP
 }
 
 
-/// 
+// ========================================================================= //
+// Store sparse structure of SNP genotypes
+
+/// List vector of sparse structure of genotypes, with a format:
+/// integer vector: n1, n2, n3, n1-length int vector, n2-length, n3-length
+static SEXP Geno_Sparse = NULL;
+
+/// Get sparse structure of genotypes
+RcppExport SEXP saige_get_sparse(SEXP geno, SEXP buffer)
+{
+BEGIN_RCPP
+	const size_t num = Rf_length(geno);
+	BYTE *gs = (BYTE*)RAW(geno);
+	// determine whether need to flip
+	int n=0, sum=0;
+	for (size_t i=0; i < num; i++)
+		if (gs[i] < 3) { sum += gs[i]; n++; }
+	if (sum > n)
+	{
+		// flip
+		for (size_t i=0; i < num; i++)
+			if (gs[i] < 3) gs[i] = 2 - gs[i];
+	}
+	// get sparse structure
+	int *base = INTEGER(buffer), *p = base+3;
+	int &n1 = base[0], &n2 = base[1], &n3 = base[2];
+	n1 = n2 = n3 = 0;
+	// genotype: 1
+	for (size_t i=0; i < num; i++)
+		if (gs[i]==1) { *p++ = i; n1++; }
+	// genotype: 2
+	for (size_t i=0; i < num; i++)
+		if (gs[i]==2) { *p++ = i; n2++; }
+	// genotype: missing
+	for (size_t i=0; i < num; i++)
+		if (gs[i]==3) { *p++ = i; n3++; }
+	// output
+	return IntegerVector(base, p);
+END_RCPP
+}
+
+
+/// Initialize sparse structure of genotypes
+RcppExport SEXP saige_store_sp_geno(SEXP sp_geno_list, SEXP num_samp, SEXP r_buf_geno,
+	SEXP r_buf_sigma, SEXP r_buf_crossprod)
+{
+BEGIN_RCPP
+
+	// initialize the basic genotype variables
+	Geno_PackedRaw = NULL;
+	Geno_Sparse = sp_geno_list;
+	Geno_NumSamp = Rf_asInteger(num_samp);
+	Geno_NumVariant = Rf_length(sp_geno_list);
+
+	// set the buffer for get_crossprod_b_grm()
+	NumericMatrix mat(r_buf_crossprod);
+	buf_crossprod = REAL(r_buf_crossprod);
+	NumThreads = mat.ncol();
+	if (NumThreads > (int)Geno_NumSamp) NumThreads = Geno_NumSamp;
+	if (NumThreads > (int)Geno_NumVariant) NumThreads = Geno_NumVariant;
+	if (NumThreads < 1) NumThreads = 1;
+
+	// build the look-up table of standardized genotypes
+	buf_std_geno = REAL(r_buf_geno);
+	PARALLEL_FOR(i, Geno_NumVariant, true)
+	{
+		int *pg = INTEGER(VECTOR_ELT(Geno_Sparse, i));
+		int n_valid = Geno_NumSamp - pg[2];
+		int sum = pg[0] + 2*pg[1];
+		double af = double(sum) / (2*n_valid);
+		double inv = 1 / sqrt(2*af*(1-af));
+		if (!R_FINITE(af) || !R_FINITE(inv))
+			af = inv = 0;
+		double *p = &buf_std_geno[4*i];
+		p[0] = (0 - 2*af) * inv; p[1] = (1 - 2*af) * inv;
+		p[2] = (2 - 2*af) * inv; p[3] = 0;
+		p[1] -= p[0]; p[2] -= p[0]; p[3] -= p[0]; // adjustment
+	}
+	PARALLEL_END
+
+	// calculate diag(grm)
+	buf_diag_grm = REAL(r_buf_sigma);
+	memset(buf_diag_grm, 0, sizeof(double)*Geno_NumSamp);
+	double adj_g0 = 0, v;
+	for (size_t i=0; i < Geno_NumVariant; i++)
+	{
+		const double *p = &buf_std_geno[4*i];
+		const int *pg = INTEGER(VECTOR_ELT(Geno_Sparse, i));
+		const int *ii = pg + 3;
+		// g0^2
+		double g0_2 = sq(p[0]); adj_g0 += g0_2;
+		// g1^2
+		v = sq(p[1] + p[0]) - g0_2;
+		for (int k=0; k < pg[0]; k++) buf_diag_grm[*ii++] += v;
+		// g2^2
+		v = sq(p[2] + p[0]) - g0_2;
+		for (int k=0; k < pg[1]; k++) buf_diag_grm[*ii++] += v;
+		// g3^2
+		v = sq(p[3] + p[0]) - g0_2;
+		for (int k=0; k < pg[2]; k++) buf_diag_grm[*ii++] += v;
+	}
+	f64_add(Geno_NumSamp, adj_g0, buf_diag_grm);
+	f64_mul(Geno_NumSamp, 1.0 / Geno_NumVariant, buf_diag_grm);
+
+END_RCPP
+}
+
+
+// ========================================================================= //
+
+/// Get a dosage vector for a specific SNP
 static void get_geno_ds(int snp_idx, dvec &ds)
 {
 	ds.resize(Geno_NumSamp);
-	const BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*snp_idx;
-	double *p = &ds[0];
-	size_t n = Geno_NumSamp;
-	for (; n >= 4; n-=4, p+=4)
+	if (!Geno_PackedRaw)
 	{
-		BYTE gg = *g++;
-		p[0] = ds_nan(gg & 0x03);
-		p[1] = ds_nan((gg >> 2) & 0x03);
-		p[2] = ds_nan((gg >> 4) & 0x03);
-		p[3] = ds_nan(gg >> 6);
-	}
-	for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
-	{
-		*p++ = ds_nan(gg & 0x03);
-		gg >>= 2;
+		const int *pg = INTEGER(VECTOR_ELT(Geno_Sparse, snp_idx));
+		const int *i = pg + 3;
+		// g0
+		memset(&ds[0], 0, sizeof(double)*Geno_NumSamp);
+		// g1
+		for (int k=0; k < pg[0]; k++) ds[*i++] = 1;
+		// g2
+		for (int k=0; k < pg[1]; k++) ds[*i++] = 2;
+		// g3 -- missing
+		for (int k=0; k < pg[2]; k++) ds[*i++] = R_NaN;
+	} else {
+		const BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp * snp_idx;
+		double *p = &ds[0];
+		size_t n = Geno_NumSamp;
+		for (; n >= 4; n-=4, p+=4)
+		{
+			BYTE gg = *g++;
+			p[0] = ds_nan(gg & 0x03);
+			p[1] = ds_nan((gg >> 2) & 0x03);
+			p[2] = ds_nan((gg >> 4) & 0x03);
+			p[3] = ds_nan(gg >> 6);
+		}
+		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
+		{
+			*p++ = ds_nan(gg & 0x03);
+			gg >>= 2;
+		}
 	}
 }
 
@@ -255,79 +380,119 @@ static COREARRAY_TARGET_CLONES
 {
 	// initialize
 	memset(buf_crossprod, 0, sizeof(double)*Geno_NumSamp*NumThreads);
+	double sum_b = f64_sum(Geno_NumSamp, &b[0]);
+	dvec sum_cp_g0(NumThreads);
+	sum_cp_g0.zeros();
 
 	// crossprod with b
-	PARALLEL_FOR(i, Geno_NumVariant, true)
+	if (!Geno_PackedRaw)
 	{
-		const BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
-		const double *base = buf_std_geno + 4*i;
+		// sparse genotypes
+		PARALLEL_FOR(i, Geno_NumVariant, true)
+		{
+			const double *p = &buf_std_geno[4*i], *pb = &b[0];
+			const int *pg = INTEGER(VECTOR_ELT(Geno_Sparse, i));
+			const int *ii = pg + 3;
+			// g0 * b
+			double dot = sum_b * p[0];
+			// g1 * b
+			for (int k=0; k < pg[0]; k++) dot += p[1] * pb[*ii++];
+			// g2 * b
+			for (int k=0; k < pg[1]; k++) dot += p[2] * pb[*ii++];
+			// g3 * b
+			for (int k=0; k < pg[2]; k++) dot += p[3] * pb[*ii++];
 
-		// get dot = sum(std.geno .* b)
-		double dot = 0;
-		const double *pb = &b[0];
-		size_t n = Geno_NumSamp;
-		if (buf_lookup_table)
-		{
-			const double *lkp_tab_256 = buf_lookup_table + 1024*i;
-			double sum4[4] = { 0, 0, 0, 0 };
-			for (; n >= 4; n-=4, pb+=4)
-			{
-				const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
-				sum4[0] += lkp_tab[0] * pb[0];
-				sum4[1] += lkp_tab[1] * pb[1];
-				sum4[2] += lkp_tab[2] * pb[2];
-				sum4[3] += lkp_tab[3] * pb[3];
-			}
-			dot = sum4[0] + sum4[1] + sum4[2] + sum4[3];
-		} else {
-			for (; n >= 4; n-=4, pb+=4)
-			{
-				BYTE gg = *g++;
-				dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
-					base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
-			}
+			// update buf_crossprod += dot .* std.geno
+			double *pbb = buf_crossprod + Geno_NumSamp * th_idx, v;
+			ii = pg + 3;
+			// g0 * dot
+			sum_cp_g0[th_idx] += dot * p[0];
+			// g1 * dot
+			v = dot * p[1];
+			for (int k=0; k < pg[0]; k++) pbb[*ii++] += v;
+			// g2 * dot
+			v = dot * p[2];
+			for (int k=0; k < pg[1]; k++) pbb[*ii++] += v;
+			// g3 * dot
+			v = dot * p[3];
+			for (int k=0; k < pg[2]; k++) pbb[*ii++] += v;
 		}
-		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
+		PARALLEL_END
+	} else {
+		// dense packed genotypes
+		PARALLEL_FOR(i, Geno_NumVariant, true)
 		{
-			dot += base[gg & 0x03] * (*pb++);
-			gg >>= 2;
-		}
+			const BYTE *g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+			const double *base = buf_std_geno + 4*i;
 
-		// update the output rv += dot .* std.geno
-		double *pbb = buf_crossprod + Geno_NumSamp * th_idx;
-		g = Geno_PackedRaw + Geno_PackedNumSamp*i;
-		n = Geno_NumSamp;
-		if (buf_lookup_table)
-		{
-			const double *lkp_tab_256 = buf_lookup_table + 1024*i;
-			for (; n >= 4; n-=4, pbb+=4)
+			// get dot = sum(std.geno .* b)
+			double dot = 0;
+			const double *pb = &b[0];
+			size_t n = Geno_NumSamp;
+			if (buf_lookup_table)
 			{
-				const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
-				pbb[0] += dot * lkp_tab[0];
-				pbb[1] += dot * lkp_tab[1];
-				pbb[2] += dot * lkp_tab[2];
-				pbb[3] += dot * lkp_tab[3];
+				const double *lkp_tab_256 = buf_lookup_table + 1024*i;
+				double sum4[4] = { 0, 0, 0, 0 };
+				for (; n >= 4; n-=4, pb+=4)
+				{
+					const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
+					sum4[0] += lkp_tab[0] * pb[0];
+					sum4[1] += lkp_tab[1] * pb[1];
+					sum4[2] += lkp_tab[2] * pb[2];
+					sum4[3] += lkp_tab[3] * pb[3];
+				}
+				dot = sum4[0] + sum4[1] + sum4[2] + sum4[3];
+			} else {
+				for (; n >= 4; n-=4, pb+=4)
+				{
+					BYTE gg = *g++;
+					dot += base[gg & 0x03] * pb[0] + base[(gg >> 2) & 0x03] * pb[1] +
+						base[(gg >> 4) & 0x03] * pb[2] + base[gg >> 6] * pb[3];
+				}
 			}
-		} else {
-			for (; n >= 4; n-=4, pbb+=4)
+			for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
 			{
-				BYTE gg = *g++;
-				pbb[0] += dot * base[gg & 0x03];
-				pbb[1] += dot * base[(gg >> 2) & 0x03];
-				pbb[2] += dot * base[(gg >> 4) & 0x03];
-				pbb[3] += dot * base[gg >> 6];
+				dot += base[gg & 0x03] * (*pb++);
+				gg >>= 2;
+			}
+
+			// update buf_crossprod += dot .* std.geno
+			double *pbb = buf_crossprod + Geno_NumSamp * th_idx;
+			g = Geno_PackedRaw + Geno_PackedNumSamp*i;
+			n = Geno_NumSamp;
+			if (buf_lookup_table)
+			{
+				const double *lkp_tab_256 = buf_lookup_table + 1024*i;
+				for (; n >= 4; n-=4, pbb+=4)
+				{
+					const double *lkp_tab = &lkp_tab_256[size_t(*g++) << 2];
+					pbb[0] += dot * lkp_tab[0];
+					pbb[1] += dot * lkp_tab[1];
+					pbb[2] += dot * lkp_tab[2];
+					pbb[3] += dot * lkp_tab[3];
+				}
+			} else {
+				for (; n >= 4; n-=4, pbb+=4)
+				{
+					BYTE gg = *g++;
+					pbb[0] += dot * base[gg & 0x03];
+					pbb[1] += dot * base[(gg >> 2) & 0x03];
+					pbb[2] += dot * base[(gg >> 4) & 0x03];
+					pbb[3] += dot * base[gg >> 6];
+				}
+			}
+			for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
+			{
+				(*pbb++) += dot * base[gg & 0x03];
+				gg >>= 2;
 			}
 		}
-		for (BYTE gg = (n>0 ? *g : 0); n > 0; n--)
-		{
-			(*pbb++) += dot * base[gg & 0x03];
-			gg >>= 2;
-		}
+		PARALLEL_END
 	}
-	PARALLEL_END
 
 	// normalize out_b
 	out_b.resize(Geno_NumSamp);
+	double sum_g0 = sum(sum_cp_g0);
 	PARALLEL_RANGE(st, ed, Geno_NumSamp, false)
 	{
 		size_t len = ed - st;
@@ -339,6 +504,8 @@ static COREARRAY_TARGET_CLONES
 			f64_add(len, s, p);
 			s += Geno_NumSamp;
 		}
+		if (!Geno_PackedRaw)
+			f64_add(len, sum_g0, p);
 		f64_mul(len, 1.0/Geno_NumVariant, p);
 	}
 	PARALLEL_END

@@ -25,6 +25,16 @@
     fn
 }
 
+.cfunction2 <- function(name)
+{
+    fn <- function(x, y) NULL
+    f <- quote(.Call(SEQ_ExternalName2, x, y))
+    f[[1L]] <- .Call
+    f[[2L]] <- getNativeSymbolInfo(name, "SAIGEgds")$address
+    body(fn) <- f
+    fn
+}
+
 .pretty <- function(x) prettyNum(x, big.mark=",", scientific=FALSE)
 
 SIMD <- function() .Call(saige_simd_version)
@@ -196,9 +206,20 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             cat("    new formula: ", format(formula), "\n", sep="")
     }
 
-    # 2-bit packed genotypes
-    if (verbose) cat("Start loading SNP genotypes: ")
-    packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile)
+    # load SNP genotypes
+    if (verbose)
+        cat("Start loading SNP genotypes: ")
+    if (isTRUE(geno.sparse))
+    {
+        # sparse genotypes
+        buffer <- integer(n_samp + 4L)
+        packed.geno <- seqApply(gdsfile, "$dosage_alt", .cfunction2("saige_get_sparse"),
+            as.is="list", .useraw=TRUE, .list_dup=FALSE, y=buffer)
+        rm(buffer)
+    } else {
+        # 2-bit packed genotypes
+        packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile)
+    }
     if (verbose)
         print(object.size(packed.geno))
 
@@ -206,11 +227,17 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     buf_std_geno <- double(4L*n_var)
     buf_sigma <- double(n_samp)
     buf_crossprod <- matrix(0.0, nrow=n_samp, ncol=num.thread)
-    buf_lookup_tab <- NULL
-    if (isTRUE(lg.lookup.tab))
-        buf_lookup_tab <- double(1024L*n_var)
-    .Call(saige_store_geno, packed.geno, n_samp, buf_std_geno, buf_sigma,
-        buf_crossprod, buf_lookup_tab)
+    if (isTRUE(geno.sparse))
+    {
+        .Call(saige_store_sp_geno, packed.geno, n_samp, buf_std_geno, buf_sigma,
+            buf_crossprod)
+    } else {
+        buf_lookup_tab <- NULL
+        if (isTRUE(lg.lookup.tab))
+            buf_lookup_tab <- double(1024L*n_var)
+        .Call(saige_store_2b_geno, packed.geno, n_samp, buf_std_geno, buf_sigma,
+            buf_crossprod, buf_lookup_tab)
+    }
 
     # parameters for fitting the model
     param <- list(

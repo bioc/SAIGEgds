@@ -71,7 +71,7 @@
 #include <string.h>
 
 
-extern "C"
+namespace vectorization
 {
 	/// return allele frequency and impute genotype using the mean
 	void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC,
@@ -79,6 +79,8 @@ extern "C"
 	/// get the index of each nonzero value in x and return the number of nonzeros
 	size_t f64_nonzero_index(size_t n, const double *x, int *i);
 
+	/// y[i] += x
+	void f64_add(size_t n, double x, double *y);
 	/// y[i] += x[i]
 	void f64_add(size_t n, const double *x, double *y);
 	/// y[i] = x - y[i]
@@ -87,6 +89,8 @@ extern "C"
 	void f64_mul(size_t n, double x, double *y);
 	/// sum_i x[i]*y[i]
 	double f64_dot(size_t n, const double *x, const double *y);
+	/// sum_i x[i]
+	double f64_sum(size_t n, const double *x);
 
 	/// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
 	void f64_dot_sp(size_t n, const double *x, const double *y,
