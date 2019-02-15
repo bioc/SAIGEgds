@@ -219,7 +219,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile)
     }
     if (verbose)
-        print(object.size(packed.geno))
+    {
+        cat(SeqArray:::.pretty_size(as.double(object.size(packed.geno))))
+        cat(ifelse(isTRUE(geno.sparse), " (sparse)\n", " (dense)\n"))
+    }
 
     # initialize internal variables and buffers
     buf_std_geno <- double(4L*n_var)
