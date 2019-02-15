@@ -560,7 +560,7 @@ static double calcCV(const dvec &x)
 }
 
 
-// [[export]]
+/// Calculate the trace of matrix
 static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
 	const dvec& tau, const dmat& cov,
 	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff, int seed)
