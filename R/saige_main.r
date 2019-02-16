@@ -150,6 +150,16 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         seqSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
     }
 
+    # the max mumber of SNPs
+    v <- seqGetFilter(gdsfile)$variant.sel
+    n <- sum(v, na.rm=TRUE)
+    if (n > max.num.snp)
+    {
+        set.seed(seed)
+        seqSetFilter(gdsfile, variant.sel=sample(which(v), max.num.snp),
+            verbose=FALSE)
+    }
+
     # get the number of samples / variants
     dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
     n_samp <- dm[2L]
@@ -159,7 +169,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         cat(.crayon_inverse("SAIGE association analysis:\n"))
         cat("Fit the null model:", format(formula), "+ var(GRM)\n")
         cat("    # of samples: ", .pretty(n_samp), "\n", sep="")
-        cat("    # of variants: ", .pretty(n_var), "\n", sep="")
+        cat("    # of variants:", .pretty(n_var))
+        if (n > max.num.snp)
+            cat(" (randomly selected from ", .pretty(n), ")", sep="")
+        cat("\n")
     }
 
     # set the number of internal threads
@@ -354,7 +367,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
 
 #######################################################################
-# SAIGE single-variant analysis
+# SAIGE single variant analysis
 #
 
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
