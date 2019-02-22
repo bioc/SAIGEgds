@@ -112,7 +112,7 @@ END_RCPP
 // ========================================================================= //
 
 /// calculate p-values for quantitative outcome
-RcppExport SEXP saige_score_test_quant(SEXP dosage)
+RcppExport COREARRAY_TARGET_CLONES SEXP saige_score_test_quant(SEXP dosage)
 {
 BEGIN_RCPP
 
@@ -206,7 +206,7 @@ END_RCPP
 
 
 /// calculate p-values for binary outcome
-RcppExport SEXP saige_score_test_bin(SEXP dosage)
+RcppExport COREARRAY_TARGET_CLONES SEXP saige_score_test_bin(SEXP dosage)
 {
 BEGIN_RCPP
 
