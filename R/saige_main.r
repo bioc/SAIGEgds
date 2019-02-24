@@ -105,10 +105,12 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
+    if (verbose)
+        cat(.crayon_inverse("SAIGE association analysis:\n"))
     if (is.character(gdsfile))
     {
         if (verbose)
-            cat("Open the file '", gdsfile, "'\n")
+            cat("Open the genotype file '", gdsfile, "'\n", sep="")
         gdsfile <- seqOpen(gdsfile)
         on.exit(seqClose(gdsfile))
     }
@@ -144,8 +146,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (is.null(variant.id))
     {
         # filters of maf, mac, missing.rate
-        seqSetFilter(gdsfile, sample.id=data$sample.id, verbose=FALSE)
-        seqSetFilterCond(gdsfile, maf=maf, missing.rate=missing.rate, verbose=FALSE)
+        if (verbose)
+            cat("Filtering variants:\n")
+        seqSetFilterCond(gdsfile, maf=maf, missing.rate=missing.rate,
+            parallel=num.thread, .progress=TRUE, verbose=FALSE)
     } else {
         seqSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
     }
@@ -166,7 +170,6 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     n_var  <- dm[3L]
     if (verbose)
     {
-        cat(.crayon_inverse("SAIGE association analysis:\n"))
         cat("Fit the null model:", format(formula), "+ var(GRM)\n")
         cat("    # of samples: ", .pretty(n_samp), "\n", sep="")
         cat("    # of variants:", .pretty(n_var))
@@ -219,22 +222,23 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     # load SNP genotypes
     if (verbose)
-        cat("Start loading SNP genotypes: ")
+        cat("Start loading SNP genotypes:\n")
     if (isTRUE(geno.sparse))
     {
         # sparse genotypes
         buffer <- integer(n_samp + 4L)
         packed.geno <- seqApply(gdsfile, "$dosage_alt", .cfunction2("saige_get_sparse"),
-            as.is="list", .useraw=TRUE, .list_dup=FALSE, y=buffer)
+            as.is="list", .useraw=TRUE, .list_dup=FALSE, y=buffer, .progress=verbose)
         rm(buffer)
     } else {
         # 2-bit packed genotypes
-        packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile)
+        packed.geno <- SeqArray:::.seqGet2bGeno(gdsfile, verbose)
     }
     if (verbose)
     {
+        cat("    using ")
         cat(SeqArray:::.pretty_size(as.double(object.size(packed.geno))))
-        cat(ifelse(isTRUE(geno.sparse), " (sparse)\n", " (dense)\n"))
+        cat(ifelse(isTRUE(geno.sparse), " (sparse matrix)\n", " (dense matrix)\n"))
     }
 
     # initialize internal variables and buffers
@@ -351,16 +355,20 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     names(glmm$tau) <- c("Sigma_E", "Sigma_G")
     glmm$trait.type <- trait.type
     glmm$sample.id <- data$sample.id
+    glmm$variant.id <- seqGetData(gdsfile, "variant.id")
 
     if (!is.na(model.savefn) && model.savefn!="")
     {
         cat("Save the model to '", model.savefn, "'\n", sep="")
         save(glmm, file=model.savefn)
-        glmm <- invisible(glmm)
     }
     if (verbose)
         cat(.crayon_inverse("Done."), "\n", sep="")
-    glmm
+
+    if (!is.na(model.savefn) && model.savefn!="")
+        return(invisible(glmm))
+    else
+        return(glmm)
 }
 
 
