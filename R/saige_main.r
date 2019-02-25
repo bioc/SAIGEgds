@@ -76,7 +76,7 @@ SIMD <- function() .Call(saige_simd_version)
 
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     trait.type=c("binary", "quantitative"), maf=0.01, missing.rate=0.01,
-    max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
+    max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=TRUE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
     geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
@@ -354,7 +354,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     }
     names(glmm$tau) <- c("Sigma_E", "Sigma_G")
     glmm$trait.type <- trait.type
-    glmm$sample.id <- data$sample.id
+    glmm$sample.id <- seqGetData(gdsfile, "sample.id")
     glmm$variant.id <- seqGetData(gdsfile, "variant.id")
 
     if (!is.na(model.savefn) && model.savefn!="")

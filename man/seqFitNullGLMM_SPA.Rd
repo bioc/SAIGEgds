@@ -17,16 +17,16 @@ seqFitNullGLMM_SPA(formula, data, gdsfile,
 \arguments{
     \item{formula}{an object of class \code{formula} (or one that can be coerced to
           that class), e.g., \code{y ~ x1 + x2}, see \code{\link{lm}}}
-    \item{data}{}
-    \item{gdsfile}{}
+    \item{data}{a data frame for the formulas}
+    \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
     \item{trait.type}{"binary" for binary outcomes, "quantitative" for continuous
         outcomes}
     \item{maf}{minor allele frequency for imported genotypes, if \code{variant.id=NULL}}
     \item{missing.rate}{threshold of missing rate, if \code{variant.id=NULL}}
     \item{max.num.snp}{the maximum number of SNPs used}
     \item{variant.id}{a list of variant IDs, used to construct GRM}
-    \item{inv.norm}{}
-    \item{X.transform}{}
+    \item{inv.norm}{perform inverse normal transform or not}
+    \item{X.transform}{if TRUE, perform QR decomposition on the design matrix}
     \item{tol}{}
     \item{maxiter}{}
     \item{nrun}{}
@@ -36,9 +36,10 @@ seqFitNullGLMM_SPA(formula, data, gdsfile,
     \item{tau.init}{}
     \item{traceCVcutoff}{}
     \item{ratioCVcutoff}{}
-    \item{geno.sparse}{}
+    \item{geno.sparse}{if TRUE, store the sparse structure for genotypes; otherwise, save
+        genotypes in a 2-bit dense matrix}
     \item{num.thread}{the number of threads}
-    \item{model.savefn}{}
+    \item{model.savefn}{the filename of model output}
     \item{seed}{an integer as a seed for random numbers}
     \item{verbose}{if \code{TRUE}, show information}
 }
