@@ -243,7 +243,7 @@ RcppExport COREARRAY_TARGET_CLONES SEXP saige_score_test_bin(SEXP dosage)
 {
 BEGIN_RCPP
 
-	// dosages
+	// dosages and imputed
 	size_t num_samp = Rf_length(dosage);
 	double *G = get_real_dosage(dosage, num_samp);
 
@@ -318,6 +318,17 @@ BEGIN_RCPP
 		// need SPAtest or not?
 		if (R_FINITE(pval_noadj) && pval_noadj <= 0.05)
 		{
+			// calculate adjusted genotypes
+			if (maf < 0.05)
+			{
+				// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
+				// buf_coeff = XV * G
+				f64_mul_mat_vec(mod_NSamp, mod_NCoeff, mod_XV, &G[0], buf_coeff);
+				// buf_adj_g = G - XXVX_inv * buf_coeff
+				f64_sub_mul_mat_vec(mod_NSamp, mod_NCoeff, &G[0], mod_t_XXVX_inv,
+					buf_coeff, buf_adj_g);
+			}
+			// minor allele count
 			double AC2 = minus ? (2*Num - AC) : AC;
 			// adj_g = adj_g / sqrt(AC2)
 			f64_mul(mod_NSamp, 1/sqrt(AC2), buf_adj_g);
