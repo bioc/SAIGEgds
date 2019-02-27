@@ -62,11 +62,12 @@ static double *mod_S_a = NULL;           //< a K-length vector
 
 static double mod_varRatio = 0;
 
+static double *buf_dosage = NULL;    //< temporary buffer for real dosages if the input is not real numbers
 static double *buf_coeff = NULL;
-static double *buf_adj_g = NULL;
+static double *buf_adj_g = NULL;     //< genotype after adjusting for fixed effects
 static int *buf_index = NULL;
 static double *buf_B = NULL;
-static double *buf_g_tilde = NULL;
+static double *buf_g_tilde = NULL;   //<
 static double *buf_tmp = NULL;
 
 #define IDX_i    buf_index[i]
@@ -98,6 +99,7 @@ BEGIN_RCPP
 	mod_S_a = REAL(M["S_a"]);
 	mod_varRatio = Rf_asReal(M["var.ratio"]);
 	// buffer
+	buf_dosage = REAL(M["buf_dosage"]);
 	buf_coeff = REAL(M["buf_coeff"]);
 	buf_adj_g = REAL(M["buf_adj_g"]);
 	buf_index = INTEGER(M["buf_index"]);
@@ -110,6 +112,37 @@ END_RCPP
 
 
 // ========================================================================= //
+
+static double *get_real_dosage(SEXP dosage, size_t &out_n_samp)
+{
+	const size_t num_samp = Rf_length(dosage);
+	if (size_t(mod_NSamp) != num_samp)
+		throw std::invalid_argument("Invalid length of dosages.");
+	out_n_samp = num_samp;
+
+	int *I;
+	unsigned char *p;
+	const double NaN = R_NaN;
+
+	switch (TYPEOF(dosage))
+	{
+		case REALSXP:
+			return REAL(dosage);
+		case INTSXP:
+			I = INTEGER(dosage);
+			for (size_t i=0; i < num_samp; i++)
+				buf_dosage[i] = (I[i] != NA_INTEGER) ? I[i] : NaN;
+			return buf_dosage;
+		case RAWSXP:
+			p = (unsigned char *)RAW(dosage);
+			for (size_t i=0; i < num_samp; i++)
+				buf_dosage[i] = (p[i] != 0xFF) ? p[i] : NaN;
+			return buf_dosage;
+	}
+	throw std::invalid_argument(
+		"Invalid data type for dosages (should be one of RAW, INT or REAL).");
+}
+
 
 /// calculate p-values for quantitative outcome
 RcppExport COREARRAY_TARGET_CLONES SEXP saige_score_test_quant(SEXP dosage)
@@ -211,8 +244,9 @@ RcppExport COREARRAY_TARGET_CLONES SEXP saige_score_test_bin(SEXP dosage)
 BEGIN_RCPP
 
 	// dosages
-	NumericVector G(dosage);
-	const size_t num_samp = G.size();
+	size_t num_samp = Rf_length(dosage);
+	double *G = get_real_dosage(dosage, num_samp);
+
 	// calc allele freq, and impute geno using the mean
 	double AF, AC;
 	int Num;

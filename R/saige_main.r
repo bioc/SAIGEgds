@@ -411,7 +411,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         n <- index.gdsn(gdsfile, "genotype/data", silent=TRUE)
         if (!is.null(n))
         {
-            dsnode <- "genotype"
+            dsnode <- "$dosage_alt"
         } else {
             n <- index.gdsn(gdsfile, "annotation/format/DS", silent=TRUE)
             if (!is.null(n))
@@ -462,6 +462,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         t_XVX_inv_XV = t(modobj$obj.noK$XXVX_inv[ii, ] * modobj$obj.noK$V[ii]),  # K x n_samp
         t_X = t(X1),  # K x n_samp
         var.ratio = mean(modobj$var.ratio$ratio, na.rm=TRUE),
+        # buffer
+        buf_dosage = double(n),
         buf_coeff = double(nrow(modobj$obj.noK$XV)),
         buf_adj_g = double(n),
         buf_index = integer(n),
