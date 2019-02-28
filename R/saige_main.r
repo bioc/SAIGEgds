@@ -513,16 +513,21 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
         id  = seqGetData(f, "variant.id"),
         chr = seqGetData(f, "chromosome"),
         pos = seqGetData(f, "position"),
-        ref = seqGetData(f, "$ref"),
-        alt   = seqGetData(f, "$alt"),
-        AF.alt = sapply(rv, `[`, i=1L),
-        AC.alt = sapply(rv, `[`, i=2L),
-        num  = as.integer(sapply(rv, `[`, i=3L)),
-        beta = sapply(rv, `[`, i=4L),
-        SE   = sapply(rv, `[`, i=5L),
-        pval = sapply(rv, `[`, i=6L),
         stringsAsFactors = FALSE
     )
+    # add RS IDs if possible
+    if (!is.null(index.gdsn(f, "annotation/id", silent=TRUE)))
+    {
+        ans$rs.id <- seqGetData(f, "annotation/id")
+    }
+    ans$ref <- seqGetData(f, "$ref")
+    ans$alt <- seqGetData(f, "$alt")
+    ans$AF.alt <- sapply(rv, `[`, i=1L)
+    ans$AC.alt <- sapply(rv, `[`, i=2L)
+    ans$num  <- as.integer(sapply(rv, `[`, i=3L))
+    ans$beta <- sapply(rv, `[`, i=4L)
+    ans$SE   <- sapply(rv, `[`, i=5L)
+    ans$pval <- sapply(rv, `[`, i=6L)
     if (modobj$trait.type == "binary")
     {
         ans$pval.noadj <- sapply(rv, `[`, i=7L)
