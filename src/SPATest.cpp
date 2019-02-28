@@ -24,7 +24,8 @@
 #include <Rdefines.h>
 #include <R.h>
 #include <Rmath.h>
-#include <float.h>
+#include <cfloat>
+#include <cmath>
 
 
 inline static double sq(double v) { return v*v; }
@@ -103,7 +104,7 @@ static void COREARRAY_TARGET_CLONES
 			double K2_eval = K2(t, n_g, mu, g);
 			double tnew = t - K1_eval/K2_eval;
 			if (!R_FINITE(tnew)) break;
-			if (abs(tnew - t) < tol)
+			if (fabs(tnew - t) < tol)
 			{
 				converged = true;
 				break;
@@ -111,13 +112,13 @@ static void COREARRAY_TARGET_CLONES
 			double newK1 = K1_adj(tnew, n_g, mu, g, q);
 			if (sign(K1_eval) != sign(newK1))
 			{
-				if (abs(tnew - t) > prevJump-tol)
+				if (fabs(tnew - t) > prevJump-tol)
 				{
 					tnew = t + sign(newK1 - K1_eval)*prevJump/2;
 					newK1 = K1_adj(tnew, n_g, mu, g, q);
 					prevJump = prevJump / 2;
 				} else {
-					prevJump = abs(tnew - t);
+					prevJump = fabs(tnew - t);
 				}
 			}
 			root = t = tnew;
@@ -164,7 +165,7 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 		converged = true;
 		if (cutoff < 0.1) cutoff = 0.1;
 
-		if (abs(q - m1)/sqrt(var1) < cutoff)
+		if (fabs(q - m1)/sqrt(var1) < cutoff)
 		{
 			pval = pval_noadj;
 		} else {
@@ -177,7 +178,7 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 			{
 				double p1 = Get_Saddle_Prob(uni1_root, n_g, mu, g, q);
 				double p2 = Get_Saddle_Prob(uni2_root, n_g, mu, g, qinv);
-				pval = abs(p1) + abs(p2);
+				pval = fabs(p1) + fabs(p2);
 			} else {
 				pval = pval_noadj;
 				converged = false;
