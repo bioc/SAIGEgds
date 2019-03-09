@@ -1,17 +1,13 @@
-\name{seqFitNullGLMM_SPA}
-\alias{seqFitNullGLMM_SPA}
+\name{seqAssocGLMM_SPA}
+\alias{seqAssocGLMM_SPA}
 \title{Fit the null model with GRM}
 \description{
     Fit the null model in the mixed frame with genetic relationship matrix (GRM).
 }
 
 \usage{
-seqFitNullGLMM_SPA(formula, data, gdsfile,
-    trait.type=c("binary", "quantitative"), maf=0.01, missing.rate=0.01,
-    max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
-    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
-    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
+seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=NaN, dsnode="", parallel=FALSE,
+    verbose=TRUE)
 }
 
 \arguments{
@@ -33,7 +29,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile,
     \item{tolPCG}{}
     \item{maxiterPCG}{}
     \item{num.marker}{the number of SNPs used to calculate the variance ratio}
-    \item{tau.init}{a 2-length numeric vector, the initial values for tau. For binary traits, the first element will be always be set to 1. If the tauInit is not specified, the second element will be 0.5 for binary traits.}
+    \item{tau.init}{a 2-length numeric vector, the initial values for variance components.
+        For binary traits, the first element will be always be set to 1. If the tauInit is not specified, the second element will be 0.5 for binary traits.}
     \item{traceCVcutoff}{the threshold for coefficient of variation (CV) for the trace
         estimator, and the number of runs for trace estimation will be increased until
         the CV is below the threshold}
@@ -53,7 +50,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile,
 }
 
 \value{
-    Returns a list with the following components:
+    Return a \code{data.frame} with the following components:
     \code{coefficients}, the beta coefficients for fixed effects;
     \code{tau}, variance components 'Sigma_E' and 'Sigma_G';
     \code{linear.predictors}, ;

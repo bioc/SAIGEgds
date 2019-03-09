@@ -360,7 +360,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (!is.na(model.savefn) && model.savefn!="")
     {
         cat("Save the model to '", model.savefn, "'\n", sep="")
-        save(glmm, file=model.savefn)
+        .glmm <- glmm
+        save(.glmm, file=model.savefn)
     }
     if (verbose)
         cat(.crayon_inverse("Done."), "\n", sep="")
@@ -499,7 +500,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     if (any(x))
     {
         x <- !x
-        seqSetFilter(gdsfile, variant.sel=x, action="intersect", verbose=T)
+        seqSetFilter(gdsfile, variant.sel=x, action="intersect", verbose=FALSE)
         rv <- rv[x]
     }
     if (verbose)
