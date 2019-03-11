@@ -31,7 +31,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile,
     \item{maxiter}{}
     \item{nrun}{}
     \item{tolPCG}{}
-    \item{maxiterPCG}{}
+    \item{maxiterPCG}{the maximum number of PCG iterations}
     \item{num.marker}{the number of SNPs used to calculate the variance ratio}
     \item{tau.init}{a 2-length numeric vector, the initial values for tau. For binary traits, the first element will be always be set to 1. If the tauInit is not specified, the second element will be 0.5 for binary traits.}
     \item{traceCVcutoff}{the threshold for coefficient of variation (CV) for the trace

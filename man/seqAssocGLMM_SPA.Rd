@@ -51,20 +51,20 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=NaN, dsnode="", parallel=FALSE,
 
 \value{
     Return a \code{data.frame} with the following components:
-    \code{coefficients}, the beta coefficients for fixed effects;
-    \code{tau}, variance components 'Sigma_E' and 'Sigma_G';
-    \code{linear.predictors}, ;
-    \code{fitted.values}, ;
-    \code{Y}, ;
-    \code{residuals}, ;
-    \code{cov}, ;
-    \code{converged}, whether the model is fitted or not;
-    \code{obj.noK}, ;
-    \code{var.ratio}, a data.frame with columns 'id' (variant.id), 'maf' (minor allele
-        frequency), 'var1' (), 'var2' () and 'ratio' (estimated variance ratio);
-    \code{trait.type}, either "binary" or "quantitative";
-    \code{sample.id}, the sample IDs used in the model fitting;
-    \code{variant.id}, the variant IDs used in the model fitting.
+    \code{id}, variant ID in the GDS file;
+    \code{chr}, chromosome;
+    \code{pos}, position;
+    \code{rs.id}, the RS IDs if it is available in the GDS file;
+    \code{ref}, the reference allele;
+    \code{alt}, the alternative allele;
+    \code{AF.alt}, allele frequency for the alternative allele;
+    \code{AC.alt}, allele count for the alternative allele;
+    \code{num}, the number of samples with non-missing genotypes;
+    \code{beta}, beta coefficient, effect size;
+    \code{SE}, standard error for beta coefficient;
+    \code{pval}, adjusted p-value with SPA;
+    \code{pval.noadj}, p-value without adjustment;
+    \code{converged}, whether the SPA algorithm converges or not for adjusted p-value
 }
 
 \references{
