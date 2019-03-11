@@ -11,6 +11,10 @@
 #
 
 
+# Package-wide variable
+.packageEnv <- new.env()
+
+
 #######################################################################
 # Internal functions
 #
@@ -477,20 +481,51 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
 
     if (!is.finite(mobj$var.ratio))
         stop("Invalid variance ratio in the SAIGE model.")
+
+    # is forking or not?
+    is_fork <- SeqArray:::.IsForking(parallel)
+    njobs <- SeqArray:::.NumParallel(parallel)
+
     # initialize internally
-    .Call(saige_score_test_init, mobj)
+    if (njobs<=1L || is_fork)
+    {
+        .Call(saige_score_test_init, mobj)
+    } else {
+        if (verbose)
+            cat("Distribute the model parameters to the", njobs, "processes\n")
+        # pass the model parameters to each process
+        seqParallel(parallel, NULL, FUN=function(mobj) {
+            library(Rcpp)
+            library(SAIGEgds)
+            .packageEnv$modobj <- mobj
+            .Call(saige_score_test_init, mobj)
+        }, split="none", mobj=mobj)
+        # clear when exit
+        on.exit({
+            seqParallel(parallel, NULL, FUN=function(mobj) {
+                .packageEnv$modobj <- NULL
+                remove(modobj, envir=.packageEnv)
+            }, split="none", mobj=mobj)
+        })
+    }
 
     # scan all (selected) variants
     if (modobj$trait.type == "binary")
     {
-        rv <- seqApply(gdsfile, dsnode, .cfunction("saige_score_test_bin"),
-            as.is="list", parallel=parallel, .progress=verbose,
-            .list_dup=FALSE)
+        rv <- seqParallel(parallel, gdsfile, split="by.variant",
+            FUN = function(f, dsnode, verbose)
+            {
+                seqApply(f, dsnode, .cfunction("saige_score_test_bin"), as.is="list",
+                    parallel=FALSE, .progress=verbose, .list_dup=FALSE, .useraw=NA)
+            }, dsnode=dsnode, verbose=verbose)
     } else if (modobj$trait.type == "quantitative")    
     {
-        rv <- seqApply(gdsfile, dsnode, .cfunction("saige_score_test_quant"),
-            as.is="list", parallel=parallel, .progress=verbose,
-            .list_dup=FALSE)
+        rv <- seqParallel(parallel, gdsfile, split="by.variant",
+            FUN = function(f, dsnode, verbose)
+            {
+                seqApply(f, dsnode, .cfunction("saige_score_test_quant"), as.is="list",
+                    parallel=FALSE, .progress=verbose, .list_dup=FALSE, .useraw=NA)
+            }, dsnode=dsnode, verbose=verbose)
     } else {
         stop("Invalid 'modobj$trait.type'.")
     }
@@ -518,9 +553,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     )
     # add RS IDs if possible
     if (!is.null(index.gdsn(f, "annotation/id", silent=TRUE)))
-    {
         ans$rs.id <- seqGetData(f, "annotation/id")
-    }
     ans$ref <- seqGetData(f, "$ref")
     ans$alt <- seqGetData(f, "$alt")
     ans$AF.alt <- sapply(rv, `[`, i=1L)
