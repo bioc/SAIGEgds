@@ -12,7 +12,10 @@ useDynLib(SAIGEgds,
 exportPattern("^seq*")
 
 # Import all packages listed as Imports or Depends
+importFrom(stats, as.formula, binomial, gaussian, glm, lm, model.frame, model.matrix,
+    model.response, na.omit, sd)
+importFrom(utils, object.size)
 importFrom(gdsfmt, index.gdsn)
 importFrom(SeqArray, seqOpen, seqClose, seqGetData, seqApply, seqSummary,
-    seqResetFilter, seqSetFilter, seqSetFilterCond)
+    seqParallel, seqResetFilter, seqSetFilter, seqGetFilter, seqSetFilterCond)
 importFrom(RcppParallel, setThreadOptions, RcppParallelLibs)

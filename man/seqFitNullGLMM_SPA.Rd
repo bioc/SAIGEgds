@@ -6,12 +6,12 @@
 }
 
 \usage{
-seqFitNullGLMM_SPA(formula, data, gdsfile,
-    trait.type=c("binary", "quantitative"), maf=0.01, missing.rate=0.01,
-    max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=FALSE,
-    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
-    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
+seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"),
+    sample.col="sample.id", maf=0.01, missing.rate=0.01, max.num.snp=1000000L,
+    variant.id=NULL, inv.norm=TRUE, X.transform=TRUE, tol=0.02, maxiter=20L,
+    nrun=30L, tolPCG=1e-5, maxiterPCG=500L, num.marker=30L, tau.init=c(0,0),
+    traceCVcutoff=1, ratioCVcutoff=1, geno.sparse=TRUE, num.thread=1L, model.savefn="",
+    seed=200L, verbose=TRUE)
 }
 
 \arguments{
@@ -21,6 +21,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile,
     \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
     \item{trait.type}{"binary" for binary outcomes, "quantitative" for continuous
         outcomes}
+    \item{sample.col}{the column name of sample IDs corresponding to the GDS file}
     \item{maf}{minor allele frequency for imported genotypes, if \code{variant.id=NULL}}
     \item{missing.rate}{threshold of missing rate, if \code{variant.id=NULL}}
     \item{max.num.snp}{the maximum number of SNPs used}
@@ -33,7 +34,10 @@ seqFitNullGLMM_SPA(formula, data, gdsfile,
     \item{tolPCG}{}
     \item{maxiterPCG}{the maximum number of PCG iterations}
     \item{num.marker}{the number of SNPs used to calculate the variance ratio}
-    \item{tau.init}{a 2-length numeric vector, the initial values for tau. For binary traits, the first element will be always be set to 1. If the tauInit is not specified, the second element will be 0.5 for binary traits.}
+    \item{tau.init}{a 2-length numeric vector, the initial values for variance components,
+        tau; for binary traits, the first element is always be set to 1.
+        if \code{tau.init} is not specified, the second element will be 0.5 for binary
+        traits}
     \item{traceCVcutoff}{the threshold for coefficient of variation (CV) for the trace
         estimator, and the number of runs for trace estimation will be increased until
         the CV is below the threshold}

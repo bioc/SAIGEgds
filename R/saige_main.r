@@ -79,9 +79,9 @@ SIMD <- function() .Call(saige_simd_version)
 #
 
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
-    trait.type=c("binary", "quantitative"), maf=0.01, missing.rate=0.01,
-    max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE, X.transform=TRUE,
-    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
+    trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.01,
+    missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
+    X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
     geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
 {
@@ -89,6 +89,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.data.frame(data))
     stopifnot(is.character(gdsfile) | inherits(gdsfile, "SeqVarGDSClass"))
     trait.type <- match.arg(trait.type)
+    stopifnot(is.character(sample.col), length(sample.col)==1L, !is.na(sample.col))
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
     stopifnot(is.numeric(max.num.snp), length(max.num.snp)==1L)
@@ -124,28 +125,28 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     phenovar <- all.vars(formula)[1L]
 
     # check sample id
-    if ("sample.id" %in% vars)
-        stop("'sample.id' should not be in the formula.")
-    if (!("sample.id" %in% colnames(data)))
-        stop("'sample.id' should be one of the columns in 'data'.")
-    if (is.factor(data$sample.id))
-        stop("'sample.id' should not be a factor variable.")
-    if (any(is.na(data$sample.id)))
-        stop("'sample.id' should not have any missing value.")
-    if (anyDuplicated(data$sample.id))
-        stop("'sample.id' in data should be unique.")
+    if (sample.col %in% vars)
+        stop(sprintf("'%s' should not be in the formula.", sample.col))
+    if (!(sample.col %in% colnames(data)))
+        stop(sprintf("'%s' should be one of the columns in 'data'.", sample.col))
+    if (is.factor(data[[sample.col]]))
+        stop(sprintf("'%s' should not be a factor variable.", sample.col))
+    if (any(is.na(data[[sample.col]])))
+        stop(sprintf("'%s' should not have any missing value.", sample.col))
+    if (anyDuplicated(data[[sample.col]]))
+        stop(sprintf("'%s' in data should be unique.", sample.col))
 
     # remove missing values
-    data <- data[, c("sample.id", vars)]
+    data <- data[, c(sample.col, vars)]
     data <- na.omit(data)
     seqResetFilter(gdsfile, sample=TRUE, verbose=FALSE)
     sid <- seqGetData(gdsfile, "sample.id")
-    i <- match(sid, data$sample.id)
+    i <- match(sid, data[[sample.col]])
     i <- i[!is.na(i)]
     data <- data[i, ]
     if (nrow(data) <= 0L)
         stop("No common sample.id between 'data' and the GDS file.")
-    seqSetFilter(gdsfile, sample.id=data$sample.id, verbose=FALSE)
+    seqSetFilter(gdsfile, sample.id=data[[sample.col]], verbose=FALSE)
 
     if (is.null(variant.id))
     {
@@ -319,6 +320,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     {
         # quantitative outcome
         cat("Quantitative outcome: ", phenovar, "\n", sep="")
+
+        stop("Implementation is not ready.")
 
         # fit the null model
         fit0 <- glm(formula, data=data, family=gaussian)

@@ -593,9 +593,9 @@ static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
 			nrunStart = nrunEnd;
 			nrunEnd = nrunEnd + 10;
 			buf.resize(nrunEnd);
-			cout << "CV for trace random estimator using "<< nrun <<
-				" runs is " << traceCV <<  " > " << traceCVcutoff << endl;
-			cout << "try " << nrunEnd << " runs" << endl;
+			Rprintf("CV for trace random estimator using %d runs is %g > %g\n",
+				nrun, traceCV, traceCVcutoff);
+			Rprintf("try %d runs ...\n", nrunEnd);
 		}
 	}
 
