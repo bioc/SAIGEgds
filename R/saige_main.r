@@ -279,7 +279,11 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         if (verbose)
         {
             cat("Binary outcome: ", phenovar, "\n", sep="")
-            v <- table(data[[phenovar]])
+            if (isTRUE(X.transform))
+                y <- data$y
+            else
+                y <- data[[phenovar]]
+            v <- table(y)
             v <- data.frame(v, as.numeric(prop.table(v)))
             v[, 1L] <- paste0("    ", v[, 1L])
             colnames(v) <- c(phenovar, "Number", "Proportion")
