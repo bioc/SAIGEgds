@@ -276,7 +276,15 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (trait.type == "binary")
     {
         # binary outcome
-        cat("Binary outcome: ", phenovar, "\n", sep="")
+        if (verbose)
+        {
+            cat("Binary outcome: ", phenovar, "\n", sep="")
+            v <- table(data[[phenovar]])
+            v <- data.frame(v, as.numeric(prop.table(v)))
+            v[, 1L] <- paste0("    ", v[, 1L])
+            colnames(v) <- c(phenovar, "Number", "Proportion")
+            print(v, row.names=FALSE)
+        }
 
         # fit the null model
         fit0 <- glm(formula, data=data, family=binomial)
@@ -447,9 +455,10 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     if (any(is.na(ii)))
         stop("Sample IDs do not match.")
 
+    dm <- SeqArray:::.seldim(gdsfile)
+    nVariant <- dm[3L]
     if (verbose)
     {
-        dm <- SeqArray:::.seldim(gdsfile)
         cat("    # of samples: ", .pretty(dm[2L]), "\n", sep="")
         cat("    # of variants: ", .pretty(dm[3L]), "\n", sep="")
     }
@@ -534,6 +543,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     }
 
     # if any maf/mac filter
+    if (length(rv) != nVariant)
+        stop("Internal error: seqParallel() returns a vector of wrong length.")
     x <- sapply(rv, is.null)
     if (any(x))
     {
