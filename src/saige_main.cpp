@@ -348,13 +348,11 @@ BEGIN_RCPP
 			double Tstat = q - m1;
 			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;
 
-			// call Saddle_Prob in SPAtest
+			// get the number of nonzeros and the nonzero indices
 			if (!is_sparse)
-			{
-				// get the number of nonzeros and the nonzero indices
 				n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
-			}
-			if (n_nonzero*2 <= num_samp)
+			// call Saddle_Prob in SPAtest
+			if (n_nonzero*2 < num_samp)
 			{
 				pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
 					buf_adj_g, 2, converged);
