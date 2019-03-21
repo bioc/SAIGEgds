@@ -36,6 +36,10 @@ using namespace vectorization;
 extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], double cutoff, bool &converged);
 
+extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
+	const double mu[], const double g[], size_t n_nonzero, const int nonzero_idx[],
+	double cutoff, bool &converged);
+
 /// square
 inline double sq(double v) { return v*v; }
 
@@ -260,10 +264,12 @@ BEGIN_RCPP
 		if (minus) f64_sub(mod_NSamp, 2, &G[0]);
 
 		double pval_noadj, beta;
-		if (maf < 0.05)
+		size_t n_nonzero;
+		const bool is_sparse = maf < 0.05;
+		if (is_sparse)
 		{
 			// get the number of nonzeros and the nonzero indices
-			size_t n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
+			n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
 			// buf_coeff = XVX_inv_XV * G
 			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff,
 				mod_t_XVX_inv_XV, &G[0], buf_coeff);
@@ -341,9 +347,22 @@ BEGIN_RCPP
 			double var1 = var2 * mod_varRatio;
 			double Tstat = q - m1;
 			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;
+
 			// call Saddle_Prob in SPAtest
-			pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
-				buf_adj_g, 2, converged);
+			if (!is_sparse)
+			{
+				// get the number of nonzeros and the nonzero indices
+				n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
+			}
+			if (n_nonzero*2 <= num_samp)
+			{
+				pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
+					buf_adj_g, 2, converged);
+			} else {
+				pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu,
+					buf_adj_g, n_nonzero, buf_index, 2, converged);
+			}
+			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);
 		}
 		double SE = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));

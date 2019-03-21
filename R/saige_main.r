@@ -285,7 +285,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
                 y <- data[[phenovar]]
             v <- table(y)
             v <- data.frame(v, as.numeric(prop.table(v)))
-            v[, 1L] <- paste0("    ", v[, 1L])
+            v[, 1L] <- paste0("      ", v[, 1L])
             colnames(v) <- c(phenovar, "Number", "Proportion")
             print(v, row.names=FALSE)
         }
