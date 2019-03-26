@@ -501,6 +501,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     # is forking or not?
     is_fork <- SeqArray:::.IsForking(parallel)
     njobs <- SeqArray:::.NumParallel(parallel)
+    if (verbose && njobs>1L)
+        cat("    # of processes: ", njobs, "\n", sep="")
 
     # initialize internally
     if (njobs<=1L || is_fork)
@@ -558,7 +560,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     }
     if (verbose)
     {
-        cat("# of variants after filtering MAF/MAC threshold: ",
+        cat("# of variants after filtering MAF/MAC: ",
             .pretty(length(rv)), "\n", sep="")
     }
 

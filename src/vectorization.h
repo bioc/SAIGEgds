@@ -27,7 +27,7 @@
 
 
 // Function multiversioning (requiring target_clones)
-#if (defined(__GNUC__) && (__GNUC__ >= 6))
+#if (defined(__GNUC__) && (__GNUC__ >= 6) && !defined(COREARRAY_NO_TARGET))
 #   if defined(__x86_64__) || defined(__i386__)
 #       define COREARRAY_HAVE_TARGET
 #       define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
