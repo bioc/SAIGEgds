@@ -66,7 +66,7 @@ static COREARRAY_TARGET_CLONES
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
 	{
-		double temp1 = (1 - mu[i])* exp(-g[i] * t) + mu[i];
+		double temp1 = (1 - mu[i]) * exp(-g[i] * t) + mu[i];
 		double temp2 = mu[i] * g[i];
 		double temp = temp2 / temp1;
 		if (R_FINITE(temp)) sum += temp;

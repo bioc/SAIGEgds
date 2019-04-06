@@ -228,7 +228,7 @@ BEGIN_RCPP
 			beta = (minus ? -1 : 1) * Tstat / var * inv_sqrt_mac;
 		}
 
-		double SE = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
+		double SE = fabs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
 
 		NumericVector ans(6);
 		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
@@ -363,7 +363,7 @@ BEGIN_RCPP
 			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);
 		}
-		double SE = abs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
+		double SE = fabs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
 
 		NumericVector ans(8);
 		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
