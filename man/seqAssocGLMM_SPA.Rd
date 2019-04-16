@@ -6,42 +6,21 @@
 }
 
 \usage{
-seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=NaN, dsnode="", parallel=FALSE,
-    verbose=TRUE)
+seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
+    parallel=FALSE, verbose=TRUE)
 }
 
 \arguments{
-    \item{formula}{an object of class \code{formula} (or one that can be coerced to
-          that class), e.g., \code{y ~ x1 + x2}, see \code{\link{lm}}}
-    \item{data}{a data frame for the formulas}
     \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
-    \item{trait.type}{"binary" for binary outcomes, "quantitative" for continuous
-        outcomes}
-    \item{maf}{minor allele frequency for imported genotypes, if \code{variant.id=NULL}}
-    \item{missing.rate}{threshold of missing rate, if \code{variant.id=NULL}}
-    \item{max.num.snp}{the maximum number of SNPs used}
-    \item{variant.id}{a list of variant IDs, used to construct GRM}
-    \item{inv.norm}{perform inverse normal transform or not}
-    \item{X.transform}{if TRUE, perform QR decomposition on the design matrix}
-    \item{tol}{}
-    \item{maxiter}{}
-    \item{nrun}{}
-    \item{tolPCG}{}
-    \item{maxiterPCG}{}
-    \item{num.marker}{the number of SNPs used to calculate the variance ratio}
-    \item{tau.init}{a 2-length numeric vector, the initial values for variance components.
-        For binary traits, the first element will be always be set to 1. If the tauInit is not specified, the second element will be 0.5 for binary traits.}
-    \item{traceCVcutoff}{the threshold for coefficient of variation (CV) for the trace
-        estimator, and the number of runs for trace estimation will be increased until
-        the CV is below the threshold}
-    \item{ratioCVcutoff}{the threshold for coefficient of variation (CV) for estimating
-        the variance ratio, and the number of randomly selected markers will be increased
-        until the CV is below the threshold}
-    \item{geno.sparse}{if TRUE, store the sparse structure for genotypes; otherwise, save
-        genotypes in a 2-bit dense matrix}
-    \item{num.thread}{the number of threads}
-    \item{model.savefn}{the filename of model output}
-    \item{seed}{an integer as a seed for random numbers}
+    \item{modobj}{an R object for SAIGE model parameters}
+    \item{maf}{minor allele frequency cutoff}
+    \item{mac}{minor allele count cutoff}
+    \item{dsnode}{}
+    \item{spa.pval}{the p-value threshold for SPA adjustment}
+    \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
+        processing), numeric value or other value; \code{parallel} is passed
+        to the argument \code{cl} in \code{\link{seqParallel}}, see
+        \code{\link{seqParallel}} for more details.}
     \item{verbose}{if \code{TRUE}, show information}
 }
 

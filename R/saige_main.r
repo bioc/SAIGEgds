@@ -398,14 +398,15 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 # SAIGE single variant analysis
 #
 
-seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
-    dsnode="", parallel=FALSE, verbose=TRUE)
+seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
+    dsnode="", spa.pval=0.05, parallel=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(mac), length(mac)==1L)
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
-    stopifnot(!is.na(dsnode))
+    stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
+    stopifnot(is.numeric(spa.pval), length(spa.pval)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     # check model
@@ -421,8 +422,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     {
         gdsfile <- seqOpen(gdsfile)
         if (verbose)
-            cat("Open '", gdsfile, "'\n", sep="")
-        on.exit(seqClose(gdsfile))    
+            cat("Open '", gdsfile, "' ...\n", sep="")
+        on.exit(seqClose(gdsfile))
     }
 
     # determine the GDS node for dosages
@@ -473,7 +474,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=NaN,
     X1 <- modobj$obj.noK$X1[ii, ]
     n <- length(ii)
     mobj <- list(
-        maf = maf, mac = mac,
+        maf = maf, mac = mac, spa.pval = spa.pval,
         tau = modobj$tau,
         y = y[ii], mu = mu[ii],
         y_mu = y[ii] - mu[ii],  # y - mu

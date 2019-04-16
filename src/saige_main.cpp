@@ -1,6 +1,6 @@
 // ===========================================================
 //
-// saige_main.cpp: SAIGE association analysis for each variant
+// saige_main.cpp: SAIGE association analysis
 //
 // Copyright (C) 2019    Xiuwen Zheng
 //
@@ -48,6 +48,7 @@ inline double sq(double v) { return v*v; }
 
 static double threshold_maf = 0;  //< the threshold of MAF filter
 static double threshold_mac = 0;  //< the threshold of MAC filter
+static double threshold_pval_spa = 0.05;  //< the threshold of p-value filter for SPA
 
 static int mod_NSamp = 0;   //< the number of samples
 static int mod_NCoeff = 0;  //< the number of beta coefficients
@@ -87,6 +88,8 @@ BEGIN_RCPP
 	if (!R_FINITE(threshold_maf)) threshold_maf = -1;
 	threshold_mac = Rf_asReal(M["mac"]);
 	if (!R_FINITE(threshold_mac)) threshold_mac = -1;
+	threshold_pval_spa = Rf_asReal(M["spa.pval"]);
+	if (!R_FINITE(threshold_pval_spa)) threshold_pval_spa = 0.05;
 	// model parameters
 	mod_NSamp = Rf_length(M["y"]);
 	mod_NCoeff = NumericMatrix(wrap(M["XV"])).nrow();
@@ -298,7 +301,7 @@ BEGIN_RCPP
 			//
 			double S = S1 + S2;
 			pval_noadj = ::Rf_pchisq(S*S/var1, 1, FALSE, FALSE);
-			beta = (minus ? -1 : 1) * S / var1;
+			beta = S / var1;
 
 		} else {
 			// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
@@ -315,14 +318,14 @@ BEGIN_RCPP
 			var *= mod_varRatio;
 			// p-value and beta
 			pval_noadj = ::Rf_pchisq(S*S/var, 1, FALSE, FALSE);
-			beta = (minus ? -1 : 1) * S / var;
+			beta = S / var;
 		}
 
 		double pval = pval_noadj;
 		bool converged = true;
 
-		// need SPAtest or not?
-		if (R_FINITE(pval_noadj) && pval_noadj <= 0.05)
+		// need further SPAtest or not?
+		if (R_FINITE(pval_noadj) && pval_noadj <= threshold_pval_spa)
 		{
 			// calculate adjusted genotypes
 			if (maf < 0.05)
@@ -363,7 +366,9 @@ BEGIN_RCPP
 			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);
 		}
-		double SE = fabs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
+
+		if (minus) beta = -beta;
+		double SE = fabs(beta / ::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
 
 		NumericVector ans(8);
 		ans[0] = AF;    ans[1] = AC;    ans[2] = Num;
