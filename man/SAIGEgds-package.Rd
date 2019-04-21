@@ -34,7 +34,7 @@ written in C/C++ and highly optimized.
     Bioinformatics (2012); doi: 10.1093/bioinformatics/bts610
 }
 \author{
-    Xiuwen Zheng \email{zhengxwen@gmail.com}
+    Xiuwen Zheng \email{xiuwen.zheng@gmail.com}
 }
 
 \examples{

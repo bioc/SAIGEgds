@@ -7,7 +7,8 @@
 
 \usage{
 seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
-    parallel=FALSE, verbose=TRUE)
+    res.savefn="", res.compress=c("LZMA", "ZIP", "none"), parallel=FALSE,
+    verbose=TRUE)
 }
 
 \arguments{
@@ -17,6 +18,8 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
     \item{mac}{minor allele count cutoff}
     \item{dsnode}{}
     \item{spa.pval}{the p-value threshold for SPA adjustment}
+    \item{res.savefn}{an RData or GDS file name}
+    \item{res.compress}{the compression method for the output file}
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
         processing), numeric value or other value; \code{parallel} is passed
         to the argument \code{cl} in \code{\link{seqParallel}}, see
@@ -77,4 +80,5 @@ seqClose(gdsfile)
 }
 
 \keyword{GDS}
-\keyword{utilities}
+\keyword{genetics}
+\keyword{association}

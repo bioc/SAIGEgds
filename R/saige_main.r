@@ -73,6 +73,47 @@ SIMD <- function() .Call(saige_simd_version)
 }
 
 
+# Write to GDS file
+.write_gds <- function(out.gds, out.nm, in.gds, in.nm, cm)
+{
+    n <- add.gdsn(out.gds, out.nm, storage=index.gdsn(in.gds, in.nm), compress=cm)
+    seqApply(in.gds, in.nm, `c`, as.is=n)
+    readmode.gdsn(n)
+    invisible()
+}
+
+
+
+#######################################################################
+# Load the association p-values in a GDS file
+#
+
+seqSAIGE_LoadPval <- function(fn, varnm=NULL)
+{
+    # check
+    stopifnot(is.character(fn), length(fn)==1L, !is.na(fn))
+    stopifnot(is.null(varnm) || is.character(varnm))
+
+    if (grepl("\\.gds$", fn, ignore.case=TRUE))
+    {
+        f <- openfn.gds(fn)
+        on.exit(closefn.gds(f))
+        varnm <- ls.gdsn(f$root)
+        varnm <- setdiff(varnm, "sample.id")
+        rv <- list()
+        for (nm in varnm)
+            rv[[nm]] <- read.gdsn(index.gdsn(f, nm))
+        rv <- as.data.frame(rv, stringsAsFactors=FALSE)
+    } else if (grepl("\\.(rda|RData)$", fn, ignore.case=TRUE))
+    {
+        rv <- get(load(fn))
+    } else {
+        stop("Unknown format, should be RData or gds.")
+    }
+    rv
+}
+
+
 
 #######################################################################
 # Fit the null model
@@ -399,7 +440,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 #
 
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
-    dsnode="", spa.pval=0.05, parallel=FALSE, verbose=TRUE)
+    dsnode="", spa.pval=0.05, res.savefn="", res.compress=c("LZMA", "ZIP", "none"),
+    parallel=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(maf), length(maf)==1L)
@@ -407,6 +449,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
     stopifnot(is.numeric(spa.pval), length(spa.pval)==1L)
+    stopifnot(is.character(res.savefn), length(res.savefn)==1L)
+    res.compress <- match.arg(res.compress)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     # check model
@@ -466,6 +510,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     {
         cat("    # of samples: ", .pretty(dm[2L]), "\n", sep="")
         cat("    # of variants: ", .pretty(dm[3L]), "\n", sep="")
+        cat("    p-value threshold for SPA adjustment: ", spa.pval, "\n", sep="")
     }
 
     # initialize the internal model parameters
@@ -565,29 +610,89 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
             .pretty(length(rv)), "\n", sep="")
     }
 
-    # output
-    ans <- data.frame(
-        id  = seqGetData(f, "variant.id"),
-        chr = seqGetData(f, "chromosome"),
-        pos = seqGetData(f, "position"),
-        stringsAsFactors = FALSE
-    )
-    # add RS IDs if possible
-    if (!is.null(index.gdsn(f, "annotation/id", silent=TRUE)))
-        ans$rs.id <- seqGetData(f, "annotation/id")
-    ans$ref <- seqGetData(f, "$ref")
-    ans$alt <- seqGetData(f, "$alt")
-    ans$AF.alt <- sapply(rv, `[`, i=1L)
-    ans$AC.alt <- sapply(rv, `[`, i=2L)
-    ans$num  <- as.integer(sapply(rv, `[`, i=3L))
-    ans$beta <- sapply(rv, `[`, i=4L)
-    ans$SE   <- sapply(rv, `[`, i=5L)
-    ans$pval <- sapply(rv, `[`, i=6L)
-    if (modobj$trait.type == "binary")
+    # output to a GDS file?
+    isfn <- !is.na(res.savefn) && res.savefn!=""
+    if (isfn && grepl("\\.gds$", res.savefn, ignore.case=TRUE))
     {
-        ans$pval.noadj <- sapply(rv, `[`, i=7L)
-        ans$converged <- as.logical(sapply(rv, `[`, i=8L))
-    }
+        if (verbose)
+            cat("Save to '", res.savefn, "' ...\n", sep="")
+        cm <- switch(res.compress, LZMA="LZMA_RA", ZIP="ZIP_RA", none="")
+        # create a GDS file
+        f <- createfn.gds(res.savefn)
+        on.exit(closefn.gds(f), add=TRUE)
+        put.attr.gdsn(f$root, "FileFormat", "SAIGE_OUTPUT")
+        put.attr.gdsn(f$root, "Version",
+            paste0("SAIGEgds_", packageVersion("SAIGEgds")))
+        # add sample IDs
+        add.gdsn(f, "sample.id", seqGetData(gdsfile, "sample.id"),
+            compress=cm, closezip=TRUE)
+        # write data
+        .write_gds(f, "id", gdsfile, "variant.id", cm)
+        .write_gds(f, "chr", gdsfile, "chromosome", cm)
+        .write_gds(f, "pos", gdsfile, "position", cm)
+        # rs.id
+        if (!is.null(index.gdsn(gdsfile, "annotation/id", silent=TRUE)))
+        {
+            .write_gds(f, "rs.id", gdsfile, "annotation/id", cm)
+        }
+        # ref and alt alleles
+        add.gdsn(f, "ref", seqGetData(gdsfile, "$ref"), compress=cm, closezip=TRUE)
+        add.gdsn(f, "alt", seqGetData(gdsfile, "$alt"), compress=cm, closezip=TRUE)
+        # other data
+        add.gdsn(f, "AF.alt", sapply(rv, `[`, i=1L), compress=cm, closezip=TRUE)
+        add.gdsn(f, "AC.alt", sapply(rv, `[`, i=2L), compress=cm, closezip=TRUE)
+        add.gdsn(f, "num", as.integer(sapply(rv, `[`, i=3L)), compress=cm, closezip=TRUE)
+        add.gdsn(f, "beta", sapply(rv, `[`, i=4L), compress=cm, closezip=TRUE)
+        add.gdsn(f, "SE", sapply(rv, `[`, i=5L), compress=cm, closezip=TRUE)
+        add.gdsn(f, "pval", sapply(rv, `[`, i=6L), compress=cm, closezip=TRUE)
+        if (modobj$trait.type == "binary")
+        {
+            add.gdsn(f, "pval.noadj", sapply(rv, `[`, i=7L), compress=cm, closezip=TRUE)
+            add.gdsn(f, "converged", sapply(rv, `[`, i=8L)==1, compress=cm, closezip=TRUE)
+        }
+        # output
+        invisible()
+    } else {
+        # output
+        ans <- data.frame(
+            id  = seqGetData(gdsfile, "variant.id"),
+            chr = seqGetData(gdsfile, "chromosome"),
+            pos = seqGetData(gdsfile, "position"),
+            stringsAsFactors = FALSE
+        )
+        # add RS IDs if possible
+        if (!is.null(index.gdsn(gdsfile, "annotation/id", silent=TRUE)))
+            ans$rs.id <- seqGetData(gdsfile, "annotation/id")
+        ans$ref <- seqGetData(gdsfile, "$ref")
+        ans$alt <- seqGetData(gdsfile, "$alt")
+        ans$AF.alt <- sapply(rv, `[`, i=1L)
+        ans$AC.alt <- sapply(rv, `[`, i=2L)
+        ans$num  <- as.integer(sapply(rv, `[`, i=3L))
+        ans$beta <- sapply(rv, `[`, i=4L)
+        ans$SE   <- sapply(rv, `[`, i=5L)
+        ans$pval <- sapply(rv, `[`, i=6L)
+        if (modobj$trait.type == "binary")
+        {
+            ans$pval.noadj <- sapply(rv, `[`, i=7L)
+            ans$converged <- as.logical(sapply(rv, `[`, i=8L))
+        }
 
-    ans
+        # save file?
+        if (isfn)
+        {
+            if (grepl("\\.(rda|RData)$", res.savefn, ignore.case=TRUE))
+            {
+                if (verbose)
+                    cat("Save to '", res.savefn, "' ...\n", sep="")
+                cm <- switch(res.compress, LZMA="xz", ZIP="gzip", none="gzip")
+                .res <- ans
+                save(.res, file=res.savefn, compress=cm)
+                invisible()
+            } else {
+                stop("Unknown format of the output file, and it should be RData or gds.")
+            }
+        } else {
+            ans
+        }
+    }
 }

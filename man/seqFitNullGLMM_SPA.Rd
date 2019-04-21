@@ -105,4 +105,5 @@ seqClose(gdsfile)
 }
 
 \keyword{GDS}
-\keyword{utilities}
+\keyword{genetics}
+\keyword{association}
