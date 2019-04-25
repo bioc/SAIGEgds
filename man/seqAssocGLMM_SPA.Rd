@@ -7,8 +7,8 @@
 
 \usage{
 seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
-    res.savefn="", res.compress=c("LZMA", "ZIP", "none"), parallel=FALSE,
-    verbose=TRUE)
+    res.savefn="", res.compress=c("LZMA", "LZMA_RA", "ZIP", "ZIP_RA", "none"),
+    parallel=FALSE, verbose=TRUE)
 }
 
 \arguments{

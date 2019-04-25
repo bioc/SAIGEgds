@@ -440,7 +440,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 #
 
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
-    dsnode="", spa.pval=0.05, res.savefn="", res.compress=c("LZMA", "ZIP", "none"),
+    dsnode="", spa.pval=0.05, res.savefn="",
+    res.compress=c("LZMA", "LZMA_RA", "ZIP", "ZIP_RA", "none"),
     parallel=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
@@ -616,7 +617,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     {
         if (verbose)
             cat("Save to '", res.savefn, "' ...\n", sep="")
-        cm <- switch(res.compress, LZMA="LZMA_RA", ZIP="ZIP_RA", none="")
+        cm <- res.compress[1L]
         # create a GDS file
         f <- createfn.gds(res.savefn)
         on.exit(closefn.gds(f), add=TRUE)
@@ -650,6 +651,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
             add.gdsn(f, "pval.noadj", sapply(rv, `[`, i=7L), compress=cm, closezip=TRUE)
             add.gdsn(f, "converged", sapply(rv, `[`, i=8L)==1, compress=cm, closezip=TRUE)
         }
+        if (verbose) cat("Done.\n")
         # output
         invisible()
     } else {
@@ -684,14 +686,17 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
             {
                 if (verbose)
                     cat("Save to '", res.savefn, "' ...\n", sep="")
-                cm <- switch(res.compress, LZMA="xz", ZIP="gzip", none="gzip")
+                cm <- switch(res.compress, LZMA="xz", LZMA_RA="xz",
+                    ZIP="gzip", ZIP_RA="gzip", none="gzip", TRUE)
                 .res <- ans
                 save(.res, file=res.savefn, compress=cm)
+                if (verbose) cat("Done.\n")
                 invisible()
             } else {
                 stop("Unknown format of the output file, and it should be RData or gds.")
             }
         } else {
+            if (verbose) cat("Done.\n")
             ans
         }
     }
