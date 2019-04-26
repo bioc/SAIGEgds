@@ -98,12 +98,17 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL)
     {
         f <- openfn.gds(fn)
         on.exit(closefn.gds(f))
-        varnm <- ls.gdsn(f$root)
-        varnm <- setdiff(varnm, "sample.id")
-        rv <- list()
-        for (nm in varnm)
-            rv[[nm]] <- read.gdsn(index.gdsn(f, nm))
-        rv <- as.data.frame(rv, stringsAsFactors=FALSE)
+        if (identical(get.attr.gdsn(f$root)$FileFormat, "SAIGE_OUTPUT"))
+        {
+            varnm <- ls.gdsn(f$root)
+            varnm <- setdiff(varnm, "sample.id")
+            rv <- list()
+            for (nm in varnm)
+                rv[[nm]] <- read.gdsn(index.gdsn(f, nm))
+            rv <- as.data.frame(rv, stringsAsFactors=FALSE)
+        } else {
+            stop("FileFormat should be 'SAIGE_OUTPUT'.")
+        }
     } else if (grepl("\\.(rda|RData)$", fn, ignore.case=TRUE))
     {
         rv <- get(load(fn))

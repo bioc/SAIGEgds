@@ -185,27 +185,172 @@ COREARRAY_TARGET_CLONES
 	void f64_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
-	for (; n > 0; n--)
+	switch (m)
 	{
-		double alpha = *y++;
-		if (alpha != 0) // sparse vector
-			for (size_t i=0; i < m; i++) p[i] += alpha * x[i];
-		x += m;
+	case 1:
+		for (size_t k=0; k < n; k++) p[0] += y[k] * x[k];
+		break;
+	case 2:
+		for (size_t k=0; k < n; k++, x+=2)
+		{
+			const double alpha = y[k];
+			p[0] += alpha * x[0];  p[1] += alpha * x[1];
+		}
+		break;
+	case 3:
+		for (size_t k=0; k < n; k++, x+=3)
+		{
+			const double alpha = y[k];
+			p[0] += alpha * x[0];  p[1] += alpha * x[1];
+			p[2] += alpha * x[2];
+		}
+		break;
+	case 4:
+		for (size_t k=0; k < n; k++, x+=4)
+		{
+			const double alpha = y[k];
+			p[0] += alpha * x[0];  p[1] += alpha * x[1];
+			p[2] += alpha * x[2];  p[3] += alpha * x[3];
+		}
+		break;
+	case 5:
+		for (size_t k=0; k < n; k++, x+=5)
+		{
+			const double alpha = y[k];
+			p[0] += alpha * x[0];  p[1] += alpha * x[1];
+			p[2] += alpha * x[2];  p[3] += alpha * x[3];
+			p[4] += alpha * x[4];
+		}
+		break;
+	case 6:
+		for (size_t k=0; k < n; k++, x+=6)
+		{
+			const double alpha = y[k];
+			p[0] += alpha * x[0];  p[1] += alpha * x[1];
+			p[2] += alpha * x[2];  p[3] += alpha * x[3];
+			p[4] += alpha * x[4];  p[5] += alpha * x[5];
+		}
+		break;
+	case 7:
+		for (size_t k=0; k < n; k++, x+=7)
+		{
+			const double alpha = y[k];
+			p[0] += alpha * x[0];  p[1] += alpha * x[1];
+			p[2] += alpha * x[2];  p[3] += alpha * x[3];
+			p[4] += alpha * x[4];  p[5] += alpha * x[5];
+			p[6] += alpha * x[6];
+		}
+		break;
+	case 8:
+		for (size_t k=0; k < n; k++, x+=8)
+		{
+			const double alpha = y[k];
+			p[0] += alpha * x[0];  p[1] += alpha * x[1];
+			p[2] += alpha * x[2];  p[3] += alpha * x[3];
+			p[4] += alpha * x[4];  p[5] += alpha * x[5];
+			p[6] += alpha * x[6];  p[7] += alpha * x[7];
+		}
+		break;
+	default:
+		for (size_t k=0; k < n; k++, x+=m)
+		{
+			double alpha = y[k];
+			if (alpha != 0) // if sparse vector
+				for (size_t i=0; i < m; i++) p[i] += alpha * x[i];
+		}
 	}
 }
 
 
 /// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
 COREARRAY_TARGET_CLONES
-	void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p)
+	void f64_mul_mat_vec_sp(size_t n_idx, const int *idx, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
-	for (; n > 0; n--)
+	switch (m)
 	{
-		size_t i = *idx++;
-		double alpha = y[i];
-		const double *xx = &x[m*i];
-		for (size_t j=0; j < m; j++) p[j] += alpha * xx[j];
+	case 1:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			p[0] += y[i] * x[i];
+		}
+		break;
+	case 2:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[2*i];
+			p[0] += alpha * xx[0];  p[1] += alpha * xx[1];
+		}
+		break;
+	case 3:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[3*i];
+			p[0] += alpha * xx[0];  p[1] += alpha * xx[1];
+			p[2] += alpha * xx[2];
+		}
+		break;
+	case 4:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[4*i];
+			p[0] += alpha * xx[0];  p[1] += alpha * xx[1];
+			p[2] += alpha * xx[2];  p[3] += alpha * xx[3];
+		}
+		break;
+	case 5:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[5*i];
+			p[0] += alpha * xx[0];  p[1] += alpha * xx[1];
+			p[2] += alpha * xx[2];  p[3] += alpha * xx[3];
+			p[4] += alpha * xx[4];
+		}
+		break;
+	case 6:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[6*i];
+			p[0] += alpha * xx[0];  p[1] += alpha * xx[1];
+			p[2] += alpha * xx[2];  p[3] += alpha * xx[3];
+			p[4] += alpha * xx[4];  p[5] += alpha * xx[5];
+		}
+		break;
+	case 7:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[7*i];
+			p[0] += alpha * xx[0];  p[1] += alpha * xx[1];
+			p[2] += alpha * xx[2];  p[3] += alpha * xx[3];
+			p[4] += alpha * xx[4];  p[5] += alpha * xx[5];
+			p[6] += alpha * xx[6];
+		}
+		break;
+	case 8:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[8*i];
+			p[0] += alpha * xx[0];  p[1] += alpha * xx[1];
+			p[2] += alpha * xx[2];  p[3] += alpha * xx[3];
+			p[4] += alpha * xx[4];  p[5] += alpha * xx[5];
+			p[6] += alpha * xx[6];  p[7] += alpha * xx[7];
+		}
+		break;
+	default:
+		for (size_t k=0; k < n_idx; k++)
+		{
+			const size_t i = idx[k];
+			const double alpha = y[i], *xx = &x[m*i];
+			for (size_t j=0; j < m; j++) p[j] += alpha * xx[j];
+		}
 	}
 }
 

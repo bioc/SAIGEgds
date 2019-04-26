@@ -27,7 +27,7 @@
 
 
 // Function multiversioning (requiring target_clones)
-#if (defined(__GNUC__) && (__GNUC__ >= 6) && !defined(COREARRAY_NO_TARGET))
+#if (defined(__GNUC__) && (__GNUC__ >= 6) && !defined(COREARRAY_NO_TARGET)) && !defined(__AVX512F__)
 #   if defined(__x86_64__) || defined(__i386__)
 #       define COREARRAY_HAVE_TARGET
 #       define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
@@ -103,7 +103,7 @@ namespace vectorization
 	void f64_mul_mat_vec(size_t n, size_t m, const double *x,
 		const double *y, double *p);
 	/// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
-	void f64_mul_mat_vec_sp(size_t n, const int *idx, size_t m,
+	void f64_mul_mat_vec_sp(size_t n_idx, const int *idx, size_t m,
 		const double *x, const double *y, double *p);
 	/// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
 	void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m,

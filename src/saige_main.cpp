@@ -325,14 +325,15 @@ BEGIN_RCPP
 		bool converged = true;
 
 		// need further SPAtest or not?
-		if (R_FINITE(pval_noadj) && pval_noadj <= threshold_pval_spa)
+		if (R_FINITE(pval_noadj) && (pval_noadj <= threshold_pval_spa))
 		{
 			// calculate adjusted genotypes
-			if (maf < 0.05)
+			if (is_sparse)
 			{
-				// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
+				// need adjusted genotypes, adj_g = G - XXVX_inv * (XV * G)
 				// buf_coeff = XV * G
-				f64_mul_mat_vec(mod_NSamp, mod_NCoeff, mod_XV, &G[0], buf_coeff);
+				f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff,
+					mod_XV, &G[0], buf_coeff);
 				// buf_adj_g = G - XXVX_inv * buf_coeff
 				f64_sub_mul_mat_vec(mod_NSamp, mod_NCoeff, &G[0], mod_t_XXVX_inv,
 					buf_coeff, buf_adj_g);
