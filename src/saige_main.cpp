@@ -322,10 +322,10 @@ BEGIN_RCPP
 		}
 
 		double pval = pval_noadj;
-		bool converged = true;
+		bool converged = R_FINITE(pval_noadj) != 0;
 
 		// need further SPAtest or not?
-		if (R_FINITE(pval_noadj) && (pval_noadj <= threshold_pval_spa))
+		if (converged && (pval_noadj <= threshold_pval_spa))
 		{
 			// calculate adjusted genotypes
 			if (is_sparse)
@@ -366,6 +366,7 @@ BEGIN_RCPP
 			}
 			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);
+			if (converged && (pval <= 0)) converged = false;
 		}
 
 		if (minus) beta = -beta;
