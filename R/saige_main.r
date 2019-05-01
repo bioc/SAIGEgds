@@ -167,6 +167,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         on.exit(seqClose(gdsfile))
     }
 
+    # save the filter on GDS file
+    seqSetFilter(gdsfile, action="push", verbose=FALSE)
+    on.exit(seqSetFilter(gdsfile, action="pop", verbose=FALSE), add=TRUE)
+
     # variables in the formula
     vars <- all.vars(formula)
     phenovar <- all.vars(formula)[1L]
@@ -498,9 +502,9 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     if (verbose)
         cat("SAIGE association analysis:\n")
 
-    # save the current filter
+    # save the filter on GDS file
     seqSetFilter(gdsfile, action="push", verbose=FALSE)
-    on.exit({ seqSetFilter(gdsfile, action="pop", verbose=FALSE) })
+    on.exit(seqSetFilter(gdsfile, action="pop", verbose=FALSE), add=TRUE)
 
     # check sample ID
     seqSetFilter(gdsfile, sample.id=modobj$sample.id, verbose=FALSE)

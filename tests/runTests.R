@@ -1,1 +1,1 @@
-BiocGenerics:::testPackage("SNPRelate")
+BiocGenerics:::testPackage("SAIGEgds")

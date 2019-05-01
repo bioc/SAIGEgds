@@ -74,6 +74,10 @@ pheno <- read.table(phenofn, head=TRUE, as.is=TRUE)
 # fit the null model
 glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
 
+# p-value calculation
+assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=4)
+
+head(assoc)
 
 # close the GDS file
 seqClose(gdsfile)

@@ -23,6 +23,13 @@ seqSAIGE_LoadPval(fn, varnm=NULL)
     \code{\link{seqFitNullGLMM_SPA}}, \code{\link{seqAssocGLMM_SPA}}
 }
 
+\examples{
+fn <- system.file("unitTests/saige_pval.rda", package="SAIGEgds")
+
+pval <- seqSAIGE_LoadPval(fn)
+head(pval)
+}
+
 \keyword{GDS}
 \keyword{genetics}
 \keyword{association}
