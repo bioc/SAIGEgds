@@ -159,17 +159,18 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (verbose)
         cat(.crayon_inverse("SAIGE association analysis:\n"))
+
     if (is.character(gdsfile))
     {
         if (verbose)
             cat("Open the genotype file '", gdsfile, "'\n", sep="")
         gdsfile <- seqOpen(gdsfile)
         on.exit(seqClose(gdsfile))
+    } else {
+        # save the filter on GDS file
+        seqSetFilter(gdsfile, action="push", verbose=FALSE)
+        on.exit(seqSetFilter(gdsfile, action="pop", verbose=FALSE))
     }
-
-    # save the filter on GDS file
-    seqSetFilter(gdsfile, action="push", verbose=FALSE)
-    on.exit(seqSetFilter(gdsfile, action="pop", verbose=FALSE), add=TRUE)
 
     # variables in the formula
     vars <- all.vars(formula)
@@ -479,6 +480,10 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         if (verbose)
             cat("Open '", gdsfile, "' ...\n", sep="")
         on.exit(seqClose(gdsfile))
+    } else {
+        # save the filter on GDS file
+        seqSetFilter(gdsfile, action="push", verbose=FALSE)
+        on.exit(seqSetFilter(gdsfile, action="pop", verbose=FALSE))
     }
 
     # determine the GDS node for dosages
@@ -501,10 +506,6 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
 
     if (verbose)
         cat("SAIGE association analysis:\n")
-
-    # save the filter on GDS file
-    seqSetFilter(gdsfile, action="push", verbose=FALSE)
-    on.exit(seqSetFilter(gdsfile, action="pop", verbose=FALSE), add=TRUE)
 
     # check sample ID
     seqSetFilter(gdsfile, sample.id=modobj$sample.id, verbose=FALSE)
