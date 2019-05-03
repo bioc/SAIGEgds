@@ -388,21 +388,20 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         stop("Implementation is not ready.")
 
         # fit the null model
-        fit0 <- glm(formula, data=data, family=gaussian)
-        if (verbose)
-        {
-            cat("Initial fixed-effect coefficients:\n")
-            v <- fit0$coefficients
-            names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
-            print(v)
-        }
-        obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model_q(formula, data)
+        # fit0 <- glm(formula, data=data, family=gaussian)
+        # if (verbose)
+        # {
+        #     cat("Initial fixed-effect coefficients:\n")
+        #     v <- fit0$coefficients
+        #     names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
+        #     print(v)
+        # }
+        # obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model_q(formula, data)
 
-      system.time(modglmm<-glmmkin.ai_PCG_Rcpp_Quantitative(plinkFile,fit0, tau = c(0,0), fixtau = c(0,0), maxiter =maxiter, tol = tol, verbose = TRUE, nrun=30, tolPCG = tolPCG, maxiterPCG = maxiterPCG, subPheno = dataMerge_sort, obj.noK=obj.noK, out.transform=out.transform, tauInit=tauInit, memoryChunk = memoryChunk, LOCO=LOCO, chromosomeStartIndexVec = chromosomeStartIndexVec, chromosomeEndIndexVec = chromosomeEndIndexVec, traceCVcutoff = traceCVcutoff))
-      save(modglmm, file = modelOut)
-      print("step2")
-
-
+        # system.time(modglmm<-glmmkin.ai_PCG_Rcpp_Quantitative(plinkFile,fit0,
+        #   tau = c(0,0), fixtau = c(0,0), maxiter =maxiter, tol = tol, verbose = TRUE, nrun=30, tolPCG = tolPCG, maxiterPCG = maxiterPCG, subPheno = dataMerge_sort, obj.noK=obj.noK, out.transform=out.transform, tauInit=tauInit, memoryChunk = memoryChunk, LOCO=LOCO, chromosomeStartIndexVec = chromosomeStartIndexVec, chromosomeEndIndexVec = chromosomeEndIndexVec, traceCVcutoff = traceCVcutoff))
+        # save(modglmm, file = modelOut)
+        # print("step2")
 
     } else {
         stop("Invalid 'trait.type'.")    

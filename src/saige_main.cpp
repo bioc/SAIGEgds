@@ -267,7 +267,7 @@ BEGIN_RCPP
 		if (minus) f64_sub(mod_NSamp, 2, &G[0]);
 
 		double pval_noadj, beta;
-		size_t n_nonzero;
+		size_t n_nonzero = 0;
 		const bool is_sparse = maf < 0.05;
 		if (is_sparse)
 		{
@@ -352,9 +352,11 @@ BEGIN_RCPP
 			double Tstat = q - m1;
 			double qtilde = Tstat/sqrt(var1) * sqrt(var2) + m1;
 
-			// get the number of nonzeros and the nonzero indices
+			// need the number of nonzeros and the nonzero indices
 			if (!is_sparse)
+			{
 				n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
+			}
 			// call Saddle_Prob in SPAtest
 			if (n_nonzero*2 < num_samp)
 			{
