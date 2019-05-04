@@ -148,7 +148,8 @@ static void COREARRAY_TARGET_CLONES
 		{
 			double K2_eval = K2(t, n_g, mu, g);
 			double tnew = t - K1_eval/K2_eval;
-			if (!R_FINITE(tnew)) break;
+			if (!R_FINITE(tnew))
+				break;
 			if (fabs(tnew - t) < tol)
 			{
 				converged = true;
@@ -173,16 +174,12 @@ static void COREARRAY_TARGET_CLONES
 }
 
 static void COREARRAY_TARGET_CLONES
-	getroot_K1_fast(double &root, int &n_iter, bool &converged, double init, size_t n_g,
+	getroot_K1_fast(const double g_pos, const double g_neg,
+		double &root, int &n_iter, bool &converged, double init, size_t n_g,
 		const double mu[], const double g[], double q,
 		size_t n_nonzero, const int nonzero_idx[], double NAmu, double NAsigma,
 		double tol=root_tol, int maxiter=1000)
 {
-	double g_pos = 0;
-	for (size_t i=0; i < n_g; i++) g_pos += (g[i] > 0) ? g[i] : 0;
-	double g_neg = 0;
-	for (size_t i=0; i < n_g; i++) g_neg += (g[i] < 0) ? g[i] : 0;
-
 	if (q>=g_pos || q<=g_neg)
 	{
 		root = R_PosInf; n_iter = 0;
@@ -197,7 +194,8 @@ static void COREARRAY_TARGET_CLONES
 		{
 			double K2_eval = K2_fast(t, mu, g, n_nonzero, nonzero_idx, NAsigma);
 			double tnew = t - K1_eval/K2_eval;
-			if (!R_FINITE(tnew)) break;
+			if (!R_FINITE(tnew))
+				break;
 			if (fabs(tnew - t) < tol)
 			{
 				converged = true;
@@ -330,6 +328,7 @@ extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
 	double qinv = -s + m1;
 	double pval_noadj = Rf_pchisq(s*s/var1, 1, FALSE, FALSE);
 	double pval;
+	double g_pos=R_NaN, g_neg=R_NaN;
 
 	while (true)
 	{
@@ -340,12 +339,18 @@ extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
 		{
 			pval = pval_noadj;
 		} else {
+			if (!R_FINITE(g_pos))
+			{
+				g_pos = g_neg = 0;
+				for (size_t i=0; i < n_g; i++) g_pos += (g[i] > 0) ? g[i] : 0;
+				for (size_t i=0; i < n_g; i++) g_neg += (g[i] < 0) ? g[i] : 0;
+			}
 			double uni1_root, uni2_root;
 			int n_iter1, n_iter2;
 			bool conv1, conv2;
-			getroot_K1_fast(uni1_root, n_iter1, conv1, 0, n_g, mu, g, q,
+			getroot_K1_fast(g_pos, g_neg, uni1_root, n_iter1, conv1, 0, n_g, mu, g, q,
 				n_nonzero, nonzero_idx, NAmu, NAsigma);
-			getroot_K1_fast(uni2_root, n_iter2, conv2, 0, n_g, mu, g, qinv,
+			getroot_K1_fast(g_pos, g_neg, uni2_root, n_iter2, conv2, 0, n_g, mu, g, qinv,
 				n_nonzero, nonzero_idx, NAmu, NAsigma);
 			if (conv1 && conv2)
 			{
