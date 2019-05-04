@@ -39,8 +39,9 @@ static COREARRAY_TARGET_CLONES
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
 	{
-		double temp = log(1 - mu[i] + mu[i] * exp(g[i] * t));
-		if (R_FINITE(temp)) sum += temp;
+		double m_i = mu[i];
+		double v = log(1 - m_i + m_i * exp(g[i] * t));
+		if (R_FINITE(v)) sum += v;
 	}
 	return sum;
 }
@@ -53,8 +54,9 @@ static COREARRAY_TARGET_CLONES
 	for (size_t i=0; i < n_nonzero; i++)
 	{
 		size_t k = nonzero_idx[i];
-		double temp = log(1 - mu[k] + mu[k] * exp(g[k] * t));
-		if (R_FINITE(temp)) sum += temp;
+		double m_k = mu[k];
+		double v = log(1 - m_k + m_k * exp(g[k] * t));
+		if (R_FINITE(v)) sum += v;
 	}
 	return sum + NAmu * t + 0.5 * NAsigma * t * t;
 }
@@ -66,10 +68,9 @@ static COREARRAY_TARGET_CLONES
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
 	{
-		double temp1 = (1 - mu[i]) * exp(-g[i] * t) + mu[i];
-		double temp2 = mu[i] * g[i];
-		double temp = temp2 / temp1;
-		if (R_FINITE(temp)) sum += temp;
+		double m_i=mu[i], g_i=g[i];
+		double v = m_i * g_i / ((1-m_i) * exp(-g_i * t) + m_i);
+		if (R_FINITE(v)) sum += v;
 	}
 	return sum - q;
 }
@@ -82,10 +83,9 @@ static COREARRAY_TARGET_CLONES
 	for (size_t i=0; i < n_nonzero; i++)
 	{
 		size_t k = nonzero_idx[i];
-		double temp1 = (1 - mu[k]) * exp(-g[k] * t) + mu[k];
-		double temp2 = mu[k] * g[k];
-		double temp = temp2 / temp1;
-		if (R_FINITE(temp)) sum += temp;
+		double m_k=mu[k], g_k=g[k];
+		double v = m_k * g_k / ((1-m_k) * exp(-g_k*t) + m_k);
+		if (R_FINITE(v)) sum += v;
 	}
 	return sum + NAmu + NAsigma * t - q;
 }
@@ -97,10 +97,9 @@ static COREARRAY_TARGET_CLONES
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
 	{
-		double temp1 = sq((1 - mu[i]) * exp(-g[i]*t) + mu[i]);
-		double temp2 = (1 - mu[i]) * mu[i] * sq(g[i]) * exp(-g[i]*t);
-		double temp = temp2 / temp1;
-		if (R_FINITE(temp)) sum += temp;
+		double m_i=mu[i], g_i=g[i], exp_i=exp(-g_i*t);
+		double v = ((1-m_i) * m_i * g_i * g_i * exp_i) / sq((1-m_i) * exp_i + m_i);
+		if (R_FINITE(v)) sum += v;
 	}
 	return sum;
 }
@@ -113,10 +112,9 @@ static COREARRAY_TARGET_CLONES
 	for (size_t i=0; i < n_nonzero; i++)
 	{
 		size_t k = nonzero_idx[i];
-		double temp1 = sq((1 - mu[k]) * exp(-g[k]*t) + mu[k]);
-		double temp2 = (1 - mu[k]) * mu[k] * sq(g[k]) * exp(-g[k]*t);
-		double temp = temp2 / temp1;
-		if (R_FINITE(temp)) sum += temp;
+		double m_k=mu[k], g_k=g[k], exp_k=exp(-g_k*t);
+		double v = ((1-m_k) * m_k * g_k * g_k * exp_k) / sq((1-m_k) * exp_k + m_k);
+		if (R_FINITE(v)) sum += v;
 	}
 	return sum + NAsigma;
 }
@@ -262,8 +260,7 @@ static double Get_Saddle_Prob_fast(double zeta, const double mu[], const double 
 
 
 
-
-// m1<-sum(mu * g),  var1<-sum(mu * (1-mu) * g^2)
+// m1 <- sum(mu * g),  var1 <- sum(mu * (1-mu) * g^2)
 extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], double cutoff, bool &converged)
 {
@@ -306,8 +303,7 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 }
 
 
-
-// m1<-sum(mu * g),  var1<-sum(mu * (1-mu) * g^2)
+// m1 <- sum(mu * g),  var1 <- sum(mu * (1-mu) * g^2)
 extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], size_t n_nonzero, const int nonzero_idx[],
 	double cutoff, bool &converged)
