@@ -33,7 +33,7 @@ inline static double sq(double v) { return v*v; }
 // inline static int sign(double v) { return (v>0) ? 1 : ((v<0) ? -1 : 0); }
 
 
-static COREARRAY_TARGET_CLONES
+inline static COREARRAY_TARGET_CLONES
 	double Korg(double t, size_t n_g, const double mu[], const double g[])
 {
 	double sum = 0;
@@ -46,7 +46,7 @@ static COREARRAY_TARGET_CLONES
 	return sum;
 }
 
-static COREARRAY_TARGET_CLONES
+inline static COREARRAY_TARGET_CLONES
 	double Korg_fast(double t, const double mu[], const double g[],
 	size_t n_nonzero, const int nonzero_idx[], double NAmu, double NAsigma)
 {
@@ -62,7 +62,7 @@ static COREARRAY_TARGET_CLONES
 }
 
 
-static COREARRAY_TARGET_CLONES
+inline static COREARRAY_TARGET_CLONES
 	double K1_adj(double t, size_t n_g, const double mu[], const double g[], double q)
 {
 	double sum = 0;
@@ -75,7 +75,7 @@ static COREARRAY_TARGET_CLONES
 	return sum - q;
 }
 
-static COREARRAY_TARGET_CLONES
+inline static COREARRAY_TARGET_CLONES
 	double K1_adj_fast(double t, const double mu[], const double g[], double q,
 	size_t n_nonzero, const int nonzero_idx[], double NAmu, double NAsigma)
 {
@@ -91,7 +91,7 @@ static COREARRAY_TARGET_CLONES
 }
 
 
-static COREARRAY_TARGET_CLONES
+inline static COREARRAY_TARGET_CLONES
 	double K2(double t, size_t n_g, const double mu[], const double g[])
 {
 	double sum = 0;
@@ -104,7 +104,7 @@ static COREARRAY_TARGET_CLONES
 	return sum;
 }
 
-static COREARRAY_TARGET_CLONES
+inline static COREARRAY_TARGET_CLONES
 	double K2_fast(double t, const double mu[], const double g[], size_t n_nonzero,
 		const int nonzero_idx[], double NAsigma)
 {
