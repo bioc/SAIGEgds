@@ -832,7 +832,7 @@ BEGIN_RCPP
 		if (max(abs(tau-tau0) / (abs(tau)+abs(tau0)+tol)) < tol) break;
 		if (max(tau) > tol_inv_2)
 		{
-			Rprintf("Large variance estimate observed in the iterations, model not converged ...");
+			throw "Large variance estimate observed in the iterations, model not converged ...";
 			iter = maxiter + 1;
 			break;
 		}
