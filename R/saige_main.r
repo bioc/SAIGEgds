@@ -88,33 +88,45 @@ SIMD <- function() .Call(saige_simd_version)
 # Load the association p-values in a GDS file
 #
 
-seqSAIGE_LoadPval <- function(fn, varnm=NULL)
+seqSAIGE_LoadPval <- function(fn, varnm=NULL, verbose=TRUE)
 {
     # check
-    stopifnot(is.character(fn), length(fn)==1L, !is.na(fn))
+    stopifnot(is.character(fn), length(fn)>0L, all(!is.na(fn)))
     stopifnot(is.null(varnm) || is.character(varnm))
 
-    if (grepl("\\.gds$", fn, ignore.case=TRUE))
+    if (length(fn) == 1L)
     {
-        f <- openfn.gds(fn)
-        on.exit(closefn.gds(f))
-        if (identical(get.attr.gdsn(f$root)$FileFormat, "SAIGE_OUTPUT"))
+        if (verbose)
+            cat("Loading '", fn, "' ...\n", sep="")
+        if (grepl("\\.gds$", fn, ignore.case=TRUE))
         {
-            if (is.null(varnm))
-                varnm <- ls.gdsn(f$root)
-            varnm <- setdiff(varnm, "sample.id")
-            rv <- list()
-            for (nm in varnm)
-                rv[[nm]] <- read.gdsn(index.gdsn(f, nm))
-            rv <- as.data.frame(rv, stringsAsFactors=FALSE)
+            f <- openfn.gds(fn)
+            on.exit(closefn.gds(f))
+            if (identical(get.attr.gdsn(f$root)$FileFormat, "SAIGE_OUTPUT"))
+            {
+                if (is.null(varnm))
+                    varnm <- ls.gdsn(f$root)
+                varnm <- setdiff(varnm, "sample.id")
+                rv <- list()
+                for (nm in varnm)
+                    rv[[nm]] <- read.gdsn(index.gdsn(f, nm))
+                rv <- as.data.frame(rv, stringsAsFactors=FALSE)
+            } else {
+                stop("FileFormat should be 'SAIGE_OUTPUT'.")
+            }
+        } else if (grepl("\\.(rda|RData)$", fn, ignore.case=TRUE))
+        {
+            rv <- get(load(fn))
+            if (!is.null(varnm)) rv <- rv[, varnm]
         } else {
-            stop("FileFormat should be 'SAIGE_OUTPUT'.")
+            stop(sprintf("Unknown format (%s), should be RData or gds.",
+                basename(fn)))
         }
-    } else if (grepl("\\.(rda|RData)$", fn, ignore.case=TRUE))
-    {
-        rv <- get(load(fn))
     } else {
-        stop("Unknown format, should be RData or gds.")
+        rv <- sapply(fn, function(nm) seqSAIGE_LoadPval(nm, varnm), simplify=FALSE)
+        if (verbose) cat("Merging ...")
+        rv <- Reduce(rbind, rv)
+        if (verbose) cat(" [done]\n")
     }
     rv
 }

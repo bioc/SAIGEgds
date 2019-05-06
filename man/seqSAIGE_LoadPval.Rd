@@ -6,12 +6,13 @@
 }
 
 \usage{
-seqSAIGE_LoadPval(fn, varnm=NULL)
+seqSAIGE_LoadPval(fn, varnm=NULL, verbose=TRUE)
 }
 
 \arguments{
-    \item{fn}{a RData or GDS file name}
+    \item{fn}{RData or GDS file names, merging datasets if multiple files}
     \item{varnm}{NULL, or a character vector to include the column names}
+    \item{verbose}{if \code{TRUE}, show information}
 }
 
 \value{
