@@ -368,7 +368,11 @@ BEGIN_RCPP
 			}
 			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);
-			if (converged && (pval <= 0)) converged = false;
+			if (!converged || (pval <= 0))
+			{
+				pval = R_NaN;
+				converged = false;
+			}
 		}
 
 		if (minus) beta = -beta;
