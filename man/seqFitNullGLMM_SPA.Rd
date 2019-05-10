@@ -7,7 +7,7 @@
 
 \usage{
 seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"),
-    sample.col="sample.id", maf=0.01, missing.rate=0.01, max.num.snp=1000000L,
+    sample.col="sample.id", maf=0.005, missing.rate=0.01, max.num.snp=1000000L,
     variant.id=NULL, inv.norm=TRUE, X.transform=TRUE, tol=0.02, maxiter=20L,
     nrun=30L, tolPCG=1e-5, maxiterPCG=500L, num.marker=30L, tau.init=c(0,0),
     traceCVcutoff=1, ratioCVcutoff=1, geno.sparse=TRUE, num.thread=1L, model.savefn="",

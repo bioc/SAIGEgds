@@ -3,17 +3,17 @@ Type: Package
 Title: Scalable and Accurate Implementation of Generalized mixed models with
         the support of GDS files
 Version: 0.9.3
-Date: 2019-05-03
-Depends: R (>= 2.15), gdsfmt (>= 1.9.2), SeqArray (>= 1.23.8), Rcpp
+Date: 2019-05-07
+Depends: R (>= 2.15), gdsfmt (>= 1.9.2), SeqArray (>= 1.23.9), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, RcppParallel, SPAtest
 Suggests: parallel, crayon, RUnit, knitr, BiocGenerics
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
         email="xiuwen.zheng@abbvie.com"),
-        person("Wei", "Zhou", role=c("aut"),
-        comment="the original author of the SAIGE package"))
+        person("Wei", "Zhou", role=c("ctb"),
+        comment="the original author of the SAIGE R package"))
 Description: Scalable and Accurate Implementation of Generalized mixed models
-        (SAIGE) with the support of GDS files.
+        (SAIGE) with the support of GDS files and highly optimized C++ implementation.
 License: GPL-3
 SystemRequirements: C++11
 VignetteBuilder: knitr

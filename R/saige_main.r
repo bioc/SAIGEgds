@@ -138,7 +138,7 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, verbose=TRUE)
 #
 
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
-    trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.01,
+    trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.005,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
     X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=1, ratioCVcutoff=1,
@@ -217,7 +217,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # filters of maf, mac, missing.rate
         if (verbose)
             cat("Filtering variants:\n")
-        seqSetFilterCond(gdsfile, maf=maf, missing.rate=missing.rate,
+        seqSetFilterCond(gdsfile, maf=maf, mac=NaN, missing.rate=missing.rate,
             parallel=num.thread, .progress=TRUE, verbose=FALSE)
     } else {
         seqSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
