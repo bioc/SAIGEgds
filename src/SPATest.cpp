@@ -259,6 +259,7 @@ extern "C" double COREARRAY_TARGET_CLONES
 			} else {
 				pval = pval_noadj;
 				converged = false;
+				break;
 			}
 		}
 
@@ -335,6 +336,7 @@ extern "C" double COREARRAY_TARGET_CLONES
 			} else {
 				pval = pval_noadj;
 				converged = false;
+				break;
 			}
 		}
 
