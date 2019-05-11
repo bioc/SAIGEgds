@@ -67,8 +67,9 @@ inline static COREARRAY_TARGET_CLONES
 	double sum = 0;
 	for (size_t i=0; i < n_g; i++)
 	{
-		double m_i=mu[i], g_i=g[i], exp_i=exp(-g_i*t);
-		double v = ((1-m_i) * m_i * g_i * g_i * exp_i) / sq((1-m_i) * exp_i + m_i);
+		double m_i=mu[i], one_m_i=1-m_i;
+		double g_i=g[i], exp_i=exp(-g_i*t);
+		double v = (one_m_i * m_i * g_i * g_i * exp_i) / sq(one_m_i * exp_i + m_i);
 		if (R_FINITE(v)) sum += v;
 	}
 	return sum;
@@ -78,15 +79,12 @@ inline static COREARRAY_TARGET_CLONES
 // .Machine$double.eps^0.25
 static const double root_tol = sqrt(sqrt(DBL_EPSILON));
 
+
 inline static void COREARRAY_TARGET_CLONES
-	getroot_K1(double &root, int &n_iter, bool &converged, double init, size_t n_g,
+	getroot_K1(const double g_pos, const double g_neg,
+		double &root, int &n_iter, bool &converged, double init, size_t n_g,
 		const double mu[], const double g[], double q, double tol=root_tol, int maxiter=1000)
 {
-	double g_pos = 0;
-	for (size_t i=0; i < n_g; i++) g_pos += (g[i] > 0) ? g[i] : 0;
-	double g_neg = 0;
-	for (size_t i=0; i < n_g; i++) g_neg += (g[i] < 0) ? g[i] : 0;
-
 	if (q>=g_pos || q<=g_neg)
 	{
 		root = R_PosInf; n_iter = 0;
@@ -225,6 +223,8 @@ extern "C" double COREARRAY_TARGET_CLONES
 	double qinv = -s + m1;
 	double pval_noadj = Rf_pchisq(s*s/var1, 1, FALSE, FALSE);
 	double pval;
+	double g_pos=0, g_neg=0;
+	double init=false;
 
 	while (true)
 	{
@@ -235,11 +235,22 @@ extern "C" double COREARRAY_TARGET_CLONES
 		{
 			pval = pval_noadj;
 		} else {
+			// need initializing
+			if (!init)
+			{
+				init = true;
+				for (size_t i=0; i < n_g; i++)
+				{
+					double v = g[i];
+					if (v > 0) g_pos += v; else g_neg += v;
+				}
+			}
+			//
 			double uni1_root, uni2_root;
 			int n_iter1, n_iter2;
 			bool conv1, conv2;
-			getroot_K1(uni1_root, n_iter1, conv1, 0, n_g, mu, g, q);
-			getroot_K1(uni2_root, n_iter2, conv2, 0, n_g, mu, g, qinv);
+			getroot_K1(g_pos, g_neg, uni1_root, n_iter1, conv1, 0, n_g, mu, g, q);
+			getroot_K1(g_pos, g_neg, uni2_root, n_iter2, conv2, 0, n_g, mu, g, qinv);
 			if (conv1 && conv2)
 			{
 				double p1 = Get_Saddle_Prob(uni1_root, n_g, mu, g, q);
@@ -288,22 +299,23 @@ extern "C" double COREARRAY_TARGET_CLONES
 			{
 				init = true;
 				// get g_pos, g_neg
-				for (size_t i=0; i < n_g; i++) g_pos += (g[i] > 0) ? g[i] : 0;
-				for (size_t i=0; i < n_g; i++) g_neg += (g[i] < 0) ? g[i] : 0;
-				// re-save mu and g to buf_spa
+				for (size_t i=0; i < n_g; i++)
+				{
+					double v = g[i];
+					if (v > 0) g_pos += v; else g_neg += v;
+				}
+				// re-save mu and g to buf_spa, calculate NAmu and NAsigma
+				NAmu = m1, NAsigma = var1;
 				for (size_t i=0; i < n_nonzero; i++)
 				{
 					size_t k = nonzero_idx[i];
-					buf_spa[i] = g[k];
-					buf_spa[i + n_nonzero] = mu[k];
+					double g_k, mu_k;
+					buf_spa[i] = g_k = g[k];
+					buf_spa[i + n_nonzero] = mu_k = mu[k];
+					NAmu -= g_k * mu_k;
+					NAsigma -= g_k * g_k * mu_k * (1 - mu_k);
 				}
 				g = &buf_spa[0]; mu = &buf_spa[n_nonzero];
-				// calculate NAmu and NAsigma
-				NAmu = m1, NAsigma = var1;
-				for (size_t i=0; i < n_nonzero; i++)
-					NAmu -= g[i] * mu[i];
-				for (size_t i=0; i < n_nonzero; i++)
-					NAsigma -= g[i] * g[i] * mu[i] * (1 - mu[i]);
 			}
 			//
 			double uni1_root, uni2_root;
