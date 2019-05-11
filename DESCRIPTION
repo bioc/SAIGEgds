@@ -2,8 +2,8 @@ Package: SAIGEgds
 Type: Package
 Title: Scalable and Accurate Implementation of Generalized mixed models with
         the support of GDS files
-Version: 0.9.3
-Date: 2019-05-07
+Version: 0.9.4
+Date: 2019-05-10
 Depends: R (>= 2.15), gdsfmt (>= 1.9.2), SeqArray (>= 1.23.9), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, RcppParallel, SPAtest

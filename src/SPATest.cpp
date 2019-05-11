@@ -46,21 +46,6 @@ inline static COREARRAY_TARGET_CLONES
 	return sum;
 }
 
-inline static COREARRAY_TARGET_CLONES
-	double Korg_fast(double t, const double mu[], const double g[],
-	size_t n_nonzero, const int nonzero_idx[], double NAmu, double NAsigma)
-{
-	double sum = 0;
-	for (size_t i=0; i < n_nonzero; i++)
-	{
-		size_t k = nonzero_idx[i];
-		double m_k = mu[k];
-		double v = log(1 - m_k + m_k * exp(g[k] * t));
-		if (R_FINITE(v)) sum += v;
-	}
-	return sum + NAmu * t + 0.5 * NAsigma * t * t;
-}
-
 
 inline static COREARRAY_TARGET_CLONES
 	double K1_adj(double t, size_t n_g, const double mu[], const double g[], double q)
@@ -73,21 +58,6 @@ inline static COREARRAY_TARGET_CLONES
 		if (R_FINITE(v)) sum += v;
 	}
 	return sum - q;
-}
-
-inline static COREARRAY_TARGET_CLONES
-	double K1_adj_fast(double t, const double mu[], const double g[], double q,
-	size_t n_nonzero, const int nonzero_idx[], double NAmu, double NAsigma)
-{
-	double sum = 0;
-	for (size_t i=0; i < n_nonzero; i++)
-	{
-		size_t k = nonzero_idx[i];
-		double m_k=mu[k], g_k=g[k];
-		double v = m_k * g_k / ((1-m_k) * exp(-g_k*t) + m_k);
-		if (R_FINITE(v)) sum += v;
-	}
-	return sum + NAmu + NAsigma * t - q;
 }
 
 
@@ -104,26 +74,11 @@ inline static COREARRAY_TARGET_CLONES
 	return sum;
 }
 
-inline static COREARRAY_TARGET_CLONES
-	double K2_fast(double t, const double mu[], const double g[], size_t n_nonzero,
-		const int nonzero_idx[], double NAsigma)
-{
-	double sum = 0;
-	for (size_t i=0; i < n_nonzero; i++)
-	{
-		size_t k = nonzero_idx[i];
-		double m_k=mu[k], g_k=g[k], exp_k=exp(-g_k*t);
-		double v = ((1-m_k) * m_k * g_k * g_k * exp_k) / sq((1-m_k) * exp_k + m_k);
-		if (R_FINITE(v)) sum += v;
-	}
-	return sum + NAsigma;
-}
-
 
 // .Machine$double.eps^0.25
 static const double root_tol = sqrt(sqrt(DBL_EPSILON));
 
-static void COREARRAY_TARGET_CLONES
+inline static void COREARRAY_TARGET_CLONES
 	getroot_K1(double &root, int &n_iter, bool &converged, double init, size_t n_g,
 		const double mu[], const double g[], double q, double tol=root_tol, int maxiter=1000)
 {
@@ -171,11 +126,10 @@ static void COREARRAY_TARGET_CLONES
 	}
 }
 
-static void COREARRAY_TARGET_CLONES
+inline static void COREARRAY_TARGET_CLONES
 	getroot_K1_fast(const double g_pos, const double g_neg,
-		double &root, int &n_iter, bool &converged, double init, size_t n_g,
-		const double mu[], const double g[], double q,
-		size_t n_nonzero, const int nonzero_idx[], double NAmu, double NAsigma,
+		double &root, int &n_iter, bool &converged, double init, size_t n_nonzero,
+		const double mu[], const double g[], double q, double NAmu, double NAsigma,
 		double tol=root_tol, int maxiter=1000)
 {
 	if (q>=g_pos || q<=g_neg)
@@ -185,12 +139,12 @@ static void COREARRAY_TARGET_CLONES
 
 	} else {
 		double t = root = init;
-		double K1_eval = K1_adj_fast(t, mu, g, q, n_nonzero, nonzero_idx, NAmu, NAsigma);
+		double K1_eval = K1_adj(t, n_nonzero, mu, g, q) + NAmu + NAsigma * t;
 		double prevJump = R_PosInf;
 		converged = false;
 		for (int n_iter=1; n_iter <= maxiter; n_iter++)
 		{
-			double K2_eval = K2_fast(t, mu, g, n_nonzero, nonzero_idx, NAsigma);
+			double K2_eval = K2(t, n_nonzero, mu, g) + NAsigma;
 			double tnew = t - K1_eval/K2_eval;
 			if (!R_FINITE(tnew))
 				break;
@@ -199,13 +153,13 @@ static void COREARRAY_TARGET_CLONES
 				converged = true;
 				break;
 			}
-			double newK1 = K1_adj_fast(tnew, mu, g, q, n_nonzero, nonzero_idx, NAmu, NAsigma);
+			double newK1 = K1_adj(tnew, n_nonzero, mu, g, q) + NAmu + NAsigma * tnew;
 			if (sign(K1_eval) != sign(newK1))
 			{
 				if (fabs(tnew - t) > prevJump-tol)
 				{
 					tnew = t + sign(newK1 - K1_eval)*prevJump/2;
-					newK1 = K1_adj_fast(tnew, mu, g, q, n_nonzero, nonzero_idx, NAmu, NAsigma);
+					newK1 = K1_adj(tnew, n_nonzero, mu, g, q) + NAmu + NAsigma * tnew;
 					prevJump = prevJump / 2;
 				} else {
 					prevJump = fabs(tnew - t);
@@ -218,8 +172,9 @@ static void COREARRAY_TARGET_CLONES
 }
 
 
-static double Get_Saddle_Prob(double zeta, size_t n_g, const double mu[],
-	const double g[], double q)
+inline static double COREARRAY_TARGET_CLONES
+	Get_Saddle_Prob(double zeta, size_t n_g,
+	const double mu[], const double g[], double q)
 {
 	double k1 = Korg(zeta, n_g, mu, g);
 	double k2 = K2(zeta, n_g, mu, g);
@@ -238,11 +193,12 @@ static double Get_Saddle_Prob(double zeta, size_t n_g, const double mu[],
 	return pval;
 }
 
-static double Get_Saddle_Prob_fast(double zeta, const double mu[], const double g[],
-	double q, size_t n_nonzero, const int nonzero_idx[], double NAmu, double NAsigma)
+inline static double COREARRAY_TARGET_CLONES
+	Get_Saddle_Prob_fast(double zeta, size_t n_nonzero,
+	const double mu[], const double g[], double q, double NAmu, double NAsigma)
 {
-	double k1 = Korg_fast(zeta, mu, g, n_nonzero, nonzero_idx, NAmu, NAsigma);
-	double k2 = K2_fast(zeta, mu, g, n_nonzero, nonzero_idx, NAsigma);
+	double k1 = Korg(zeta, n_nonzero, mu, g) + NAmu * zeta + 0.5 * NAsigma * zeta * zeta;
+	double k2 = K2(zeta, n_nonzero, mu, g) + NAsigma;
 	double pval = 0;
 	if (R_FINITE(k1) && R_FINITE(k1))
 	{
@@ -261,7 +217,8 @@ static double Get_Saddle_Prob_fast(double zeta, const double mu[], const double 
 
 
 // m1 <- sum(mu * g),  var1 <- sum(mu * (1-mu) * g^2)
-extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
+extern "C" double COREARRAY_TARGET_CLONES
+	Saddle_Prob(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], double cutoff, bool &converged)
 {
 	double s = q - m1;
@@ -291,7 +248,7 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 			} else {
 				pval = pval_noadj;
 				converged = false;
-			}				
+			}
 		}
 
 		if (pval!=0 && pval_noadj/pval>1000)
@@ -304,27 +261,18 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 
 
 // m1 <- sum(mu * g),  var1 <- sum(mu * (1-mu) * g^2)
-extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
+extern "C" double COREARRAY_TARGET_CLONES
+	Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], size_t n_nonzero, const int nonzero_idx[],
-	double cutoff, bool &converged)
+	double cutoff, bool &converged, double buf_spa[])
 {
 	double s = q - m1;
-	double NAmu = m1;
-	for (size_t i=0; i < n_nonzero; i++)
-	{
-		size_t k = nonzero_idx[i];
-		NAmu -= g[k] * mu[k];
-	}
-	double NAsigma = var1;
-	for (size_t i=0; i < n_nonzero; i++)
-	{
-		size_t k = nonzero_idx[i];
-		NAsigma -= g[k] * g[k] * mu[k] * (1 - mu[k]);
-	}
 	double qinv = -s + m1;
 	double pval_noadj = Rf_pchisq(s*s/var1, 1, FALSE, FALSE);
 	double pval;
-	double g_pos=R_NaN, g_neg=R_NaN;
+	double NAmu, NAsigma;
+	double g_pos=0, g_neg=0;
+	double init=false;
 
 	while (true)
 	{
@@ -335,30 +283,47 @@ extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
 		{
 			pval = pval_noadj;
 		} else {
-			if (!R_FINITE(g_pos))
+			// need initializing
+			if (!init)
 			{
-				g_pos = g_neg = 0;
+				init = true;
+				// get g_pos, g_neg
 				for (size_t i=0; i < n_g; i++) g_pos += (g[i] > 0) ? g[i] : 0;
 				for (size_t i=0; i < n_g; i++) g_neg += (g[i] < 0) ? g[i] : 0;
+				// re-save mu and g to buf_spa
+				for (size_t i=0; i < n_nonzero; i++)
+				{
+					size_t k = nonzero_idx[i];
+					buf_spa[i] = g[k];
+					buf_spa[i + n_nonzero] = mu[k];
+				}
+				g = &buf_spa[0]; mu = &buf_spa[n_nonzero];
+				// calculate NAmu and NAsigma
+				NAmu = m1, NAsigma = var1;
+				for (size_t i=0; i < n_nonzero; i++)
+					NAmu -= g[i] * mu[i];
+				for (size_t i=0; i < n_nonzero; i++)
+					NAsigma -= g[i] * g[i] * mu[i] * (1 - mu[i]);
 			}
+			//
 			double uni1_root, uni2_root;
 			int n_iter1, n_iter2;
 			bool conv1, conv2;
-			getroot_K1_fast(g_pos, g_neg, uni1_root, n_iter1, conv1, 0, n_g, mu, g, q,
-				n_nonzero, nonzero_idx, NAmu, NAsigma);
-			getroot_K1_fast(g_pos, g_neg, uni2_root, n_iter2, conv2, 0, n_g, mu, g, qinv,
-				n_nonzero, nonzero_idx, NAmu, NAsigma);
+			getroot_K1_fast(g_pos, g_neg, uni1_root, n_iter1, conv1, 0, n_nonzero,
+				mu, g, q, NAmu, NAsigma);
+			getroot_K1_fast(g_pos, g_neg, uni2_root, n_iter2, conv2, 0, n_nonzero,
+				mu, g, qinv, NAmu, NAsigma);
 			if (conv1 && conv2)
 			{
-				double p1 = Get_Saddle_Prob_fast(uni1_root, mu, g, q,
-					n_nonzero, nonzero_idx, NAmu, NAsigma);
-				double p2 = Get_Saddle_Prob_fast(uni2_root, mu, g, qinv,
-					n_nonzero, nonzero_idx, NAmu, NAsigma);
+				double p1 = Get_Saddle_Prob_fast(uni1_root, n_nonzero, mu, g, q,
+					NAmu, NAsigma);
+				double p2 = Get_Saddle_Prob_fast(uni2_root, n_nonzero, mu, g, qinv,
+					NAmu, NAsigma);
 				pval = fabs(p1) + fabs(p2);
 			} else {
 				pval = pval_noadj;
 				converged = false;
-			}				
+			}
 		}
 
 		if (pval!=0 && pval_noadj/pval>1000)

@@ -559,6 +559,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         buf_index = integer(n),
         buf_B = double(n),
         buf_g_tilde = double(n),
+        buf_spa = double(n+n),
         buf_tmp = double(ncol(X1))
     )
     mobj$XVX <- t(X1) %*% (X1 * mobj$mu2)  # a matrix: K x K

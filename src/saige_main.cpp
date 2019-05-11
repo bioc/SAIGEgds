@@ -38,7 +38,7 @@ extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
 
 extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], size_t n_nonzero, const int nonzero_idx[],
-	double cutoff, bool &converged);
+	double cutoff, bool &converged, double buf_spa[]);
 
 /// square
 inline double sq(double v) { return v*v; }
@@ -73,6 +73,7 @@ static double *buf_adj_g = NULL;     //< genotype after adjusting for fixed effe
 static int *buf_index = NULL;
 static double *buf_B = NULL;
 static double *buf_g_tilde = NULL;   //<
+static double *buf_spa = NULL;       //< the buffer for SPA calculation
 static double *buf_tmp = NULL;
 
 #define IDX_i    buf_index[i]
@@ -112,6 +113,7 @@ BEGIN_RCPP
 	buf_index = INTEGER(M["buf_index"]);
 	buf_B = REAL(M["buf_B"]);
 	buf_g_tilde = REAL(M["buf_g_tilde"]);
+	buf_spa = REAL(M["buf_spa"]);
 	buf_tmp = REAL(M["buf_tmp"]);
 END_RCPP
 }
@@ -357,6 +359,7 @@ BEGIN_RCPP
 			{
 				n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
 			}
+
 			// call Saddle_Prob in SPAtest
 			if (n_nonzero*2 < num_samp)
 			{
@@ -364,15 +367,12 @@ BEGIN_RCPP
 					buf_adj_g, 2, converged);
 			} else {
 				pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu,
-					buf_adj_g, n_nonzero, buf_index, 2, converged);
+					buf_adj_g, n_nonzero, buf_index, 2, converged, buf_spa);
 			}
+
 			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);
-			if (!converged || (pval <= 0))
-			{
-				pval = R_NaN;
-				converged = false;
-			}
+			if (converged && (pval <= 0)) converged = false;
 		}
 
 		if (minus) beta = -beta;
