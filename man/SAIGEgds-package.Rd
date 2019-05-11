@@ -2,7 +2,7 @@
 \alias{SAIGEgds-package}
 \alias{SAIGEgds}
 \docType{package}
-\title{Parallel Computing Toolset for Genome-Wide Association Studies}
+\title{Scalable and Accurate Implementation of Generalized mixed models using GDS files}
 \description{
     Genome-wide association studies are widely used to investigate
 the genetic basis of diseases and traits, but they pose many computational
@@ -28,17 +28,40 @@ written in C/C++ and highly optimized.
     Tutorial: \url{http://corearray.sourceforge.net/tutorials/SNPRelate/}
 }
 \references{
-    Zheng X, Levine D, Shen J, Gogarten SM, Laurie C, Weir BS.
-    A High-performance Computing Toolset for Relatedness and Principal
-    Component Analysis of SNP Data.
-    Bioinformatics (2012); doi: 10.1093/bioinformatics/bts610
+    Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J,
+VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K,
+Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control
+imbalance and sample relatedness in large-scale genetic association studies.
+*Nat Genet* (2018). Sep;50(9):1335-1341.
+
+    Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D.
+SeqArray -- A storage-efficient high-performance data format for WGS variant calls.
+*Bioinformatics* (2017). DOI: 10.1093/bioinformatics/btx145.
 }
 \author{
-    Xiuwen Zheng \email{xiuwen.zheng@gmail.com}
+    Xiuwen Zheng \email{xiuwen.zheng@abbvie.com},
+    Wei Zhou, contributor (the original author of the SAIGE R package)
 }
 
 \examples{
-####
+# open a GDS file
+fn <- system.file("extdata/grm1k_10k_snp.gds", package="SAIGEgds")
+gdsfile <- seqOpen(fn)
+
+# load phenotype
+phenofn <- system.file("extdata/pheno.txt.gz", package="SAIGEgds")
+pheno <- read.table(phenofn, head=TRUE, as.is=TRUE)
+
+# fit the null model
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
+
+# p-value calculation
+assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=4)
+
+head(assoc)
+
+# close the GDS file
+seqClose(gdsfile)
 }
 
 \keyword{GDS}

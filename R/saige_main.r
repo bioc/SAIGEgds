@@ -487,9 +487,9 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     # GDS file
     if (is.character(gdsfile))
     {
-        gdsfile <- seqOpen(gdsfile)
         if (verbose)
             cat("Open '", gdsfile, "' ...\n", sep="")
+        gdsfile <- seqOpen(gdsfile)
         on.exit(seqClose(gdsfile))
     } else {
         # save the filter on GDS file
