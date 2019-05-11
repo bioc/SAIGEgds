@@ -111,9 +111,9 @@ inline static void COREARRAY_TARGET_CLONES
 			{
 				if (fabs(tnew - t) > prevJump-tol)
 				{
-					tnew = t + sign(newK1 - K1_eval)*prevJump/2;
+					tnew = t + sign(newK1 - K1_eval) * prevJump * 0.5;
 					newK1 = K1_adj(tnew, n_g, mu, g, q);
-					prevJump = prevJump / 2;
+					prevJump *= 0.5;
 				} else {
 					prevJump = fabs(tnew - t);
 				}
@@ -156,9 +156,9 @@ inline static void COREARRAY_TARGET_CLONES
 			{
 				if (fabs(tnew - t) > prevJump-tol)
 				{
-					tnew = t + sign(newK1 - K1_eval)*prevJump/2;
+					tnew = t + sign(newK1 - K1_eval) * prevJump * 0.5;
 					newK1 = K1_adj(tnew, n_nonzero, mu, g, q) + NAmu + NAsigma * tnew;
-					prevJump = prevJump / 2;
+					prevJump *= 0.5;
 				} else {
 					prevJump = fabs(tnew - t);
 				}
