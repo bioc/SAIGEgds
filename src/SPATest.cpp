@@ -78,12 +78,14 @@ inline static COREARRAY_TARGET_CLONES
 
 // .Machine$double.eps^0.25
 static const double root_tol = sqrt(sqrt(DBL_EPSILON));
+static const int MaxNumIter = 1000;
 
 
 inline static void COREARRAY_TARGET_CLONES
 	getroot_K1(const double g_pos, const double g_neg,
 		double &root, int &n_iter, bool &converged, double init, size_t n_g,
-		const double mu[], const double g[], double q, double tol=root_tol, int maxiter=1000)
+		const double mu[], const double g[], double q, double tol=root_tol,
+		int maxiter=MaxNumIter)
 {
 	if (q>=g_pos || q<=g_neg)
 	{
@@ -128,7 +130,7 @@ inline static void COREARRAY_TARGET_CLONES
 	getroot_K1_fast(const double g_pos, const double g_neg,
 		double &root, int &n_iter, bool &converged, double init, size_t n_nonzero,
 		const double mu[], const double g[], double q, double NAmu, double NAsigma,
-		double tol=root_tol, int maxiter=1000)
+		double tol=root_tol, int maxiter=MaxNumIter)
 {
 	if (q>=g_pos || q<=g_neg)
 	{
