@@ -22,7 +22,8 @@
 #if defined(__clang__)
 #pragma clang optimize on
 #elif defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
-#pragma GCC optimize("O3")
+// enable auto-vectorization and -fast-math
+#pragma GCC optimize("Ofast")
 #endif
 
 
@@ -33,7 +34,7 @@
 #       define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
 #       define COREARRAY_HAVE_TARGET_CLONES
 #       define COREARRAY_TARGET_CLONES    \
-            __attribute__((target_clones("avx512f","avx2","avx","fma","sse3","sse2","default")))
+            __attribute__((target_clones("avx512f","avx2","avx","sse3","sse2","default")))
 #   endif
 //#elif defined(__clang__)  // not support
 //#   define COREARRAY_HAVE_TARGET

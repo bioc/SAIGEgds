@@ -361,15 +361,15 @@ BEGIN_RCPP
 			}
 
 			// call Saddle_Prob in SPAtest
-//			if (n_nonzero*2 < num_samp)
+/*			if (n_nonzero*2 < num_samp)
 			{
-//				pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
-//					buf_adj_g, 2, converged);
-//			} else {
-				// fully utilize sparse structure
+				pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
+					buf_adj_g, 2, converged);
+			} else {
+*/				// fully utilize sparse structure
 				pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu,
 					buf_adj_g, n_nonzero, buf_index, 2, converged, buf_spa);
-			}
+//			}
 
 			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);

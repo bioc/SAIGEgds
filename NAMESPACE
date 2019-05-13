@@ -12,6 +12,7 @@ useDynLib(SAIGEgds,
 exportPattern("^seq*")
 
 # Import all packages listed as Imports or Depends
+import(methods)
 import(Rcpp)
 importFrom(stats, as.formula, binomial, gaussian, glm, lm, model.frame, model.matrix,
     model.response, na.omit, sd)

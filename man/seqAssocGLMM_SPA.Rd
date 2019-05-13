@@ -7,8 +7,9 @@
 
 \usage{
 seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
-    res.savefn="", res.compress=c("LZMA", "LZMA_RA", "ZIP", "ZIP_RA", "none"),
-    parallel=FALSE, verbose=TRUE)
+    var.ratio=NaN, res.savefn="",
+    res.compress=c("LZMA", "LZMA_RA", "ZIP", "ZIP_RA", "none"), parallel=FALSE,
+    verbose=TRUE)
 }
 
 \arguments{
@@ -16,14 +17,17 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
     \item{modobj}{an R object for SAIGE model parameters}
     \item{maf}{minor allele frequency cutoff}
     \item{mac}{minor allele count cutoff}
-    \item{dsnode}{}
+    \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
+        "annotation/format/DS", or use a user-defined GDS node in the file}
     \item{spa.pval}{the p-value threshold for SPA adjustment}
+    \item{var.ratio}{\code{NaN} for using the estimated variance ratio in the model
+        fitting, or a user-defined variance ratio}
     \item{res.savefn}{an RData or GDS file name}
     \item{res.compress}{the compression method for the output file}
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
         processing), numeric value or other value; \code{parallel} is passed
         to the argument \code{cl} in \code{\link{seqParallel}}, see
-        \code{\link{seqParallel}} for more details.}
+        \code{\link{seqParallel}} for more details}
     \item{verbose}{if \code{TRUE}, show information}
 }
 

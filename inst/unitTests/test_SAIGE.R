@@ -47,7 +47,7 @@ test.saige_fit_null_model <- function()
 	glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
 
 	# check
-	checkEquals(mod, glmm, "check the SAIGE parameters")
+	checkEquals(mod, glmm, "check the SAIGE parameters", tolerance=1e-4)
 }
 
 
@@ -66,5 +66,5 @@ test.saige_pval <- function()
 	assoc <- seqAssocGLMM_SPA(gdsfile, mod, mac=4)
 
 	# check
-	checkEquals(pval, assoc, "check the SAIGE p-value output")
+	checkEquals(pval, assoc, "check the SAIGE p-value output", tolerance=1e-7)
 }

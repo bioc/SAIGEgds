@@ -462,8 +462,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 #
 
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
-    dsnode="", spa.pval=0.05, res.savefn="",
-    res.compress=c("LZMA", "LZMA_RA", "ZIP", "ZIP_RA", "none"),
+    dsnode="", spa.pval=0.05, var.ratio=NaN,
+    res.savefn="", res.compress=c("LZMA", "LZMA_RA", "ZIP", "ZIP_RA", "none"),
     parallel=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
@@ -472,6 +472,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
     stopifnot(is.numeric(spa.pval), length(spa.pval)==1L)
+    stopifnot(is.numeric(var.ratio), length(var.ratio)==1L)
     stopifnot(is.character(res.savefn), length(res.savefn)==1L)
     res.compress <- match.arg(res.compress)
     stopifnot(is.logical(verbose), length(verbose)==1L)
@@ -551,7 +552,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         XV = modobj$obj.noK$XV[, ii],  # K x n_samp
         t_XVX_inv_XV = t(modobj$obj.noK$XXVX_inv[ii, ] * modobj$obj.noK$V[ii]),  # K x n_samp
         t_X = t(X1),  # K x n_samp
-        var.ratio = mean(modobj$var.ratio$ratio, na.rm=TRUE),
+        var.ratio = ifelse(is.finite(var.ratio), var.ratio,
+            mean(modobj$var.ratio$ratio, na.rm=TRUE)),
         # buffer
         buf_dosage = double(n),
         buf_coeff = double(nrow(modobj$obj.noK$XV)),
