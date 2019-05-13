@@ -27,6 +27,11 @@
 #include <cfloat>
 #include <cmath>
 
+#if defined(__AVX__) || defined(__AVX2__)
+#   include <immintrin.h>  // AVX, AVX2
+#endif
+
+
 
 inline static double sq(double v) { return v*v; }
 
@@ -40,8 +45,7 @@ inline static COREARRAY_TARGET_CLONES
 	for (size_t i=0; i < n_g; i++)
 	{
 		double m_i = mu[i];
-		double v = log(1 - m_i + m_i * exp(g[i] * t));
-		if (R_FINITE(v)) sum += v;
+		sum += log(1 - m_i + m_i * exp(g[i] * t));
 	}
 	return sum;
 }
@@ -54,8 +58,7 @@ inline static COREARRAY_TARGET_CLONES
 	for (size_t i=0; i < n_g; i++)
 	{
 		double m_i=mu[i], g_i=g[i];
-		double v = m_i * g_i / ((1-m_i) * exp(-g_i * t) + m_i);
-		if (R_FINITE(v)) sum += v;
+		sum += m_i * g_i / ((1-m_i) * exp(-g_i * t) + m_i);
 	}
 	return sum - q;
 }
