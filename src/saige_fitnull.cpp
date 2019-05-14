@@ -51,7 +51,8 @@ using namespace vectorization;
 	{  \
 		const int th_idx = tbb::this_task_arena::current_thread_index();  \
 		if (th_idx < 0 || th_idx >= NumThreads)  \
-			throw "Invalid tbb::this_task_arena::current_thread_index()!";
+			throw std::invalid_argument( \
+				"Invalid tbb::this_task_arena::current_thread_index()!");
 
 #define PARALLEL_FOR(i, SIZE, balancing)    \
 		PARALLEL_HEAD(SIZE, balancing)    \
@@ -832,7 +833,8 @@ BEGIN_RCPP
 		if (max(abs(tau-tau0) / (abs(tau)+abs(tau0)+tol)) < tol) break;
 		if (max(tau) > tol_inv_2)
 		{
-			throw "Large variance estimate observed in the iterations, model not converged ...";
+			throw std::overflow_error(
+				"Large variance estimate observed in the iterations, model not converged ...");
 			iter = maxiter + 1;
 			break;
 		}

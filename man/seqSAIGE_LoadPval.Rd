@@ -25,8 +25,7 @@ seqSAIGE_LoadPval(fn, varnm=NULL, verbose=TRUE)
 }
 
 \examples{
-fn <- system.file("unitTests/saige_pval.rda", package="SAIGEgds")
-
+(fn <- system.file("unitTests/saige_pval.rda", package="SAIGEgds"))
 pval <- seqSAIGE_LoadPval(fn)
 head(pval)
 }

@@ -17,15 +17,7 @@ written in C/C++ and highly optimized.
         Package: \tab SAIGEgds \cr
         Type: \tab Package \cr
         License: \tab GPL version 3 \cr
-        Depends: \tab gdsfmt (>= 1.0.4) \cr
     }
-    The genotypes stored in GDS format can be analyzed by the R functions in
-    SNPRelate, which utilize the multi-core feature of machine for a single
-    computer.
-
-    Webpage: \url{http://github.com/zhengxwen/SAIGEgds}
-
-    Tutorial: \url{http://corearray.sourceforge.net/tutorials/SNPRelate/}
 }
 \references{
     Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J,

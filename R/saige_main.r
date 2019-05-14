@@ -584,9 +584,10 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         if (verbose)
             cat("Distribute the model parameters to the", njobs, "processes\n")
         # pass the model parameters to each process
-        seqParallel(parallel, NULL, FUN=function(mobj) {
-            library(Rcpp)
-            library(SAIGEgds)
+        seqParallel(parallel, NULL, FUN=function(mobj)
+        {
+            eval(parse(text="library(Rcpp)"))
+            eval(parse(text="library(SAIGEgds)"))
             .packageEnv$modobj <- mobj
             .Call(saige_score_test_init, mobj)
         }, split="none", mobj=mobj)

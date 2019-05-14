@@ -24,9 +24,9 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
         fitting, or a user-defined variance ratio}
     \item{res.savefn}{an RData or GDS file name}
     \item{res.compress}{the compression method for the output file}
-    \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
-        processing), numeric value or other value; \code{parallel} is passed
-        to the argument \code{cl} in \code{\link{seqParallel}}, see
+    \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore processing),
+        a numeric value for the number of cores, or other value; \code{parallel} is
+        passed to the argument \code{cl} in \code{\link{seqParallel}}, see
         \code{\link{seqParallel}} for more details}
     \item{verbose}{if \code{TRUE}, show information}
 }
