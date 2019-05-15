@@ -397,7 +397,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # quantitative outcome
         cat("Quantitative outcome: ", phenovar, "\n", sep="")
 
-        stop("Implementation is not ready.")
+        stop("Quantitative implementation is not ready.")
 
         # fit the null model
         # fit0 <- glm(formula, data=data, family=gaussian)
@@ -611,6 +611,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
             }, dsnode=dsnode, verbose=verbose)
     } else if (modobj$trait.type == "quantitative")    
     {
+        stop("Quantitative implementation is not ready.")
+
         rv <- seqParallel(parallel, gdsfile, split="by.variant",
             FUN = function(f, dsnode, verbose)
             {

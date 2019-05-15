@@ -176,8 +176,8 @@ inline static void COREARRAY_TARGET_CLONES
 
 
 inline static double COREARRAY_TARGET_CLONES
-	Get_Saddle_Prob(double zeta, size_t n_g,
-	const double mu[], const double g[], double q)
+	Get_Saddle_Prob(double zeta, size_t n_g, const double mu[], const double g[],
+		double q)
 {
 	double k1 = Korg(zeta, n_g, mu, g);
 	double k2 = K2(zeta, n_g, mu, g);
@@ -197,8 +197,8 @@ inline static double COREARRAY_TARGET_CLONES
 }
 
 inline static double COREARRAY_TARGET_CLONES
-	Get_Saddle_Prob_fast(double zeta, size_t n_nonzero,
-	const double mu[], const double g[], double q, double NAmu, double NAsigma)
+	Get_Saddle_Prob_fast(double zeta, size_t n_nonzero, const double mu[],
+		const double g[], double q, double NAmu, double NAsigma)
 {
 	double k1 = Korg(zeta, n_nonzero, mu, g) + NAmu * zeta + 0.5 * NAsigma * zeta * zeta;
 	double k2 = K2(zeta, n_nonzero, mu, g) + NAsigma;
@@ -221,8 +221,8 @@ inline static double COREARRAY_TARGET_CLONES
 
 // m1 <- sum(mu * g),  var1 <- sum(mu * (1-mu) * g^2)
 extern "C" double COREARRAY_TARGET_CLONES
-	Saddle_Prob(double q, double m1, double var1, size_t n_g,
-	const double mu[], const double g[], double cutoff, bool &converged)
+	Saddle_Prob(double q, double m1, double var1, size_t n_g, const double mu[],
+		const double g[], double cutoff, bool &converged)
 {
 	double s = q - m1;
 	double qinv = -s + m1;
@@ -279,9 +279,9 @@ extern "C" double COREARRAY_TARGET_CLONES
 
 // m1 <- sum(mu * g),  var1 <- sum(mu * (1-mu) * g^2)
 extern "C" double COREARRAY_TARGET_CLONES
-	Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
-	const double mu[], const double g[], size_t n_nonzero, const int nonzero_idx[],
-	double cutoff, bool &converged, double buf_spa[])
+	Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g, const double mu[],
+		const double g[], size_t n_nonzero, const int nonzero_idx[], double cutoff,
+		bool &converged, double buf_spa[])
 {
 	double s = q - m1;
 	double qinv = -s + m1;

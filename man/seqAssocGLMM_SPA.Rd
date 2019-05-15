@@ -15,8 +15,8 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
 \arguments{
     \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
     \item{modobj}{an R object for SAIGE model parameters}
-    \item{maf}{minor allele frequency cutoff}
-    \item{mac}{minor allele count cutoff}
+    \item{maf}{minor allele frequency cutoff (>= maf)}
+    \item{mac}{minor allele count cutoff (>= mac)}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
     \item{spa.pval}{the p-value threshold for SPA adjustment}

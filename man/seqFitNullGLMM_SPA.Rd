@@ -20,7 +20,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{data}{a data frame for the formulas}
     \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
     \item{trait.type}{"binary" for binary outcomes, "quantitative" for continuous
-        outcomes}
+        outcomes (not applicable)}
     \item{sample.col}{the column name of sample IDs corresponding to the GDS file}
     \item{maf}{minor allele frequency for imported genotypes, if \code{variant.id=NULL}}
     \item{missing.rate}{threshold of missing rate, if \code{variant.id=NULL}}
@@ -28,10 +28,10 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{variant.id}{a list of variant IDs, used to construct GRM}
     \item{inv.norm}{perform inverse normal transform or not}
     \item{X.transform}{if TRUE, perform QR decomposition on the design matrix}
-    \item{tol}{}
-    \item{maxiter}{}
-    \item{nrun}{}
-    \item{tolPCG}{}
+    \item{tol}{overall tolerance for model fitting}
+    \item{maxiter}{the maximum number of iterations for model fitting}
+    \item{nrun}{the number of random vectors in the trace estimation}
+    \item{tolPCG}{tolerance of PCG iterations}
     \item{maxiterPCG}{the maximum number of PCG iterations}
     \item{num.marker}{the number of SNPs used to calculate the variance ratio}
     \item{tau.init}{a 2-length numeric vector, the initial values for variance components,
@@ -59,7 +59,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
 \value{
     Returns a list with the following components:
     \code{coefficients}, the beta coefficients for fixed effects;
-    \code{tau}, variance components 'Sigma_E' and 'Sigma_G';
+    \code{tau}, a numeric vector of variance components 'Sigma_E' and 'Sigma_G';
     \code{linear.predictors}, ;
     \code{fitted.values}, ;
     \code{Y}, ;
