@@ -537,6 +537,11 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         cat("    p-value threshold for SPA adjustment: ", spa.pval, "\n", sep="")
     }
 
+    if (!is.finite(var.ratio))
+        var.ratio <- mean(modobj$var.ratio$ratio, na.rm=TRUE)
+    if (verbose)
+        cat("    variance ratio for approximation: ", var.ratio, "\n", sep="")
+
     # initialize the internal model parameters
     y <- unname(modobj$obj.noK$y)
     mu <- unname(modobj$fitted.values)
@@ -552,8 +557,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         XV = modobj$obj.noK$XV[, ii],  # K x n_samp
         t_XVX_inv_XV = t(modobj$obj.noK$XXVX_inv[ii, ] * modobj$obj.noK$V[ii]),  # K x n_samp
         t_X = t(X1),  # K x n_samp
-        var.ratio = ifelse(is.finite(var.ratio), var.ratio,
-            mean(modobj$var.ratio$ratio, na.rm=TRUE)),
+        var.ratio = var.ratio,
         # buffer
         buf_dosage = double(n),
         buf_coeff = double(nrow(modobj$obj.noK$XV)),
