@@ -45,7 +45,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
         the variance ratio, and the number of randomly selected markers will be increased
         until the CV is below the threshold}
     \item{geno.sparse}{if TRUE, store the sparse structure for genotypes; otherwise, save
-        genotypes in a 2-bit dense matrix}
+        genotypes in a 2-bit dense matrix; see details}
     \item{num.thread}{the number of threads}
     \item{model.savefn}{the filename of model output}
     \item{seed}{an integer as a seed for random numbers}
@@ -53,7 +53,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
 }
 
 \details{
-    XXXX
+    Utilizing the sparse structure of genotypes could significantly improve the
+computational efficiency of model fitting, but it also increases the memory usage.
 }
 
 \value{
@@ -61,14 +62,16 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \code{coefficients}, the beta coefficients for fixed effects;
     \code{tau}, a numeric vector of variance components 'Sigma_E' and 'Sigma_G';
     \code{linear.predictors}, ;
-    \code{fitted.values}, ;
+    \code{fitted.values}, fitted values from objects returned by modeling functions using
+        \code{glm.fit};
     \code{Y}, ;
     \code{residuals}, ;
     \code{cov}, ;
     \code{converged}, whether the model is fitted or not;
     \code{obj.noK}, ;
     \code{var.ratio}, a data.frame with columns 'id' (variant.id), 'maf' (minor allele
-        frequency), 'var1' (), 'var2' () and 'ratio' (estimated variance ratio);
+        frequency), 'var1' (), 'var2' () and 'ratio' (estimated variance ratio for
+        variance approximation);
     \code{trait.type}, either "binary" or "quantitative";
     \code{sample.id}, the sample IDs used in the model fitting;
     \code{variant.id}, the variant IDs used in the model fitting.

@@ -297,7 +297,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # sparse genotypes
         buffer <- integer(n_samp + 4L)
         packed.geno <- seqApply(gdsfile, "$dosage_alt", .cfunction2("saige_get_sparse"),
-            as.is="list", .useraw=TRUE, .list_dup=FALSE, y=buffer, .progress=verbose)
+            as.is="list", y=buffer, .useraw=TRUE, .list_dup=FALSE, .progress=verbose)
         rm(buffer)
     } else {
         # 2-bit packed genotypes

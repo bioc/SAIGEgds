@@ -1,8 +1,8 @@
 \name{seqAssocGLMM_SPA}
 \alias{seqAssocGLMM_SPA}
-\title{Fit the null model with GRM}
+\title{P-value calculation}
 \description{
-    Fit the null model in the mixed frame with genetic relationship matrix (GRM).
+    P-value calculations using variance approximation and SPA adjustment.
 }
 
 \usage{
@@ -22,7 +22,7 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
     \item{spa.pval}{the p-value threshold for SPA adjustment}
     \item{var.ratio}{\code{NaN} for using the estimated variance ratio in the model
         fitting, or a user-defined variance ratio}
-    \item{res.savefn}{an RData or GDS file name}
+    \item{res.savefn}{an RData or GDS file name, "" for no saving}
     \item{res.compress}{the compression method for the output file}
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore processing),
         a numeric value for the number of cores, or other value; \code{parallel} is
@@ -36,7 +36,7 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
 }
 
 \value{
-    Return a \code{data.frame} with the following components:
+    Return a \code{data.frame} with the following components if not saving to a file:
     \code{id}, variant ID in the GDS file;
     \code{chr}, chromosome;
     \code{pos}, position;
@@ -63,7 +63,7 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
 }
 \author{Xiuwen Zheng}
 \seealso{
-    \code{\link{seqAssocGLMM_SPA}}
+    \code{\link{seqAssocGLMM_SPA}}, \code{\link{seqSAIGE_LoadPval}}
 }
 
 \examples{
