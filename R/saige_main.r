@@ -187,6 +187,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # variables in the formula
     vars <- all.vars(formula)
     phenovar <- all.vars(formula)[1L]
+    y <- data[[phenovar]]
+    if (!is.factor(y) && !is.numeric(y) && !is.logical(y))
+        stop("The response variable should be numeric or a factor.")
 
     # check sample id
     if (sample.col %in% vars)

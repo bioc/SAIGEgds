@@ -15,7 +15,7 @@ Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
 Description: Scalable and Accurate Implementation of Generalized mixed models
         (SAIGE) with the support of GDS files and highly optimized C++ implementation.
 License: GPL-3
-SystemRequirements: C++11
+SystemRequirements: C++11, GNU make
 VignetteBuilder: knitr
 URL: http://github.com/zhengxwen/SAIGEgds
 BugReports: http://github.com/zhengxwen/SAIGEgds/issues
