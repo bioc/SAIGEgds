@@ -27,11 +27,6 @@
 #include <cfloat>
 #include <cmath>
 
-#if defined(__AVX__) || defined(__AVX2__)
-#   include <immintrin.h>  // AVX, AVX2
-#endif
-
-
 
 inline static double sq(double v) { return v*v; }
 

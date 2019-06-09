@@ -2,9 +2,9 @@ Package: SAIGEgds
 Type: Package
 Title: Scalable and Accurate Implementation of Generalized mixed models (SAIGE) using
         GDS files
-Version: 0.9.6
-Date: 2019-05-15
-Depends: R (>= 2.15), gdsfmt (>= 1.9.2), SeqArray (>= 1.23.9), Rcpp
+Version: 0.9.7
+Date: 2019-06-08
+Depends: R (>= 3.0), gdsfmt (>= 1.10.0), SeqArray (>= 1.24.1), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, RcppParallel, SPAtest
 Suggests: parallel, crayon, RUnit, knitr, BiocGenerics

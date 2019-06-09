@@ -587,35 +587,37 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     if (njobs<=1L || is_fork)
     {
         .Call(saige_score_test_init, mobj)
+        initfun <- finalfun <- NULL
     } else {
         if (verbose)
             cat("Distribute the model parameters to the", njobs, "processes\n")
         # pass the model parameters to each process
-        seqParallel(parallel, NULL, FUN=function(mobj)
+        initfun <- function(proc_id, mobj)
         {
             eval(parse(text="library(Rcpp)"))
             eval(parse(text="library(SAIGEgds)"))
             .packageEnv$modobj <- mobj
             .Call(saige_score_test_init, mobj)
-        }, split="none", mobj=mobj)
+        }
         # clear when exit
-        on.exit({
-            seqParallel(parallel, NULL, FUN=function(mobj) {
-                .packageEnv$modobj <- NULL
-                remove(modobj, envir=.packageEnv)
-            }, split="none", mobj=mobj)
-        })
+        finalfun <- function(proc_id, param)
+        {
+            .packageEnv$modobj <- NULL
+            remove(modobj, envir=.packageEnv)
+        }
     }
 
     # scan all (selected) variants
     if (modobj$trait.type == "binary")
     {
         rv <- seqParallel(parallel, gdsfile, split="by.variant",
-            FUN = function(f, dsnode, verbose)
+            .initialize=initfun, .finalize=finalfun, .initparam=mobj,
+            .balancing=TRUE, .bl_size=25000L, .bl_progress=verbose,
+            FUN = function(f, dsnode, pverbose)
             {
                 seqApply(f, dsnode, .cfunction("saige_score_test_bin"), as.is="list",
-                    parallel=FALSE, .progress=verbose, .list_dup=FALSE, .useraw=NA)
-            }, dsnode=dsnode, verbose=verbose)
+                    parallel=FALSE, .progress=pverbose, .list_dup=FALSE, .useraw=NA)
+            }, dsnode=dsnode, pverbose=verbose & (njobs==1L))
     } else if (modobj$trait.type == "quantitative")    
     {
         stop("Quantitative implementation is not ready.")
