@@ -1,4 +1,4 @@
-SAIGEgds: Scalable and Accurate Implementation of Generalized mixed models using GDS files
+SAIGEgds: Scalable Implementation of Generalized mixed models using GDS files
 ====
 
 ![GPLv3](http://www.gnu.org/graphics/gplv3-88x31.png)

@@ -612,7 +612,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     {
         rv <- seqParallel(parallel, gdsfile, split="by.variant",
             .initialize=initfun, .finalize=finalfun, .initparam=mobj,
-            .balancing=TRUE, .bl_size=25000L, .bl_progress=verbose,
+            .balancing=TRUE, .bl_size=50000L, .bl_progress=verbose,
             FUN = function(f, dsnode, pverbose)
             {
                 seqApply(f, dsnode, .cfunction("saige_score_test_bin"), as.is="list",
