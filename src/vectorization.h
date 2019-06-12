@@ -21,11 +21,10 @@
 
 #ifndef COREARRAY_NO_COMPILER_OPTIMIZE
 #if defined(__clang__) && !defined(__APPLE__)
-#   pragma clang optimize on
+    #pragma clang optimize on
 #endif
 #if defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
-//  enable auto-vectorization and -fast-math
-#   pragma GCC optimize("Ofast")
+    #pragma GCC optimize("O3")
 #endif
 #endif
 
