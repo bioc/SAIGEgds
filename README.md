@@ -90,3 +90,8 @@ head(assoc)
 # close the GDS file
 seqClose(gdsfile)
 ```
+
+
+## Also See
+
+[SeqArray](http://www.bioconductor.org/packages/SeqArray): Data Management of Large-scale Whole-genome Sequence Variant Calls
