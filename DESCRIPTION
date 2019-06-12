@@ -2,17 +2,21 @@ Package: SAIGEgds
 Type: Package
 Title: Scalable Implementation of Generalized mixed models (SAIGE) using GDS files
 Version: 0.9.7
-Date: 2019-06-08
+Date: 2019-06-12
 Depends: R (>= 3.0), gdsfmt (>= 1.10.0), SeqArray (>= 1.24.1), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, RcppParallel, SPAtest
 Suggests: parallel, crayon, RUnit, knitr, BiocGenerics
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
         email="xiuwen.zheng@abbvie.com"),
-        person("Wei", "Zhou", role=c("ctb"),
-        comment="the original author of the SAIGE R package"))
-Description: Scalable and Accurate Implementation of Generalized mixed models
-        (SAIGE) with the support of GDS files and highly optimized C++ implementation.
+        person("Wei", "Zhou", role="ctb",
+        comment="the original author of the SAIGE R package"),
+        person("J. Wade", "Davis", role="ctb"))
+Description: Scalable and accurate implementation of generalized mixed models
+        with the support of Genomic Data Structure (GDS) files and highly optimized
+        C++ implementation. It is designed for single variant tests in large-scale
+        phenome-wide association studies (PheWAS) with millions of variants and
+        thousands of samples.
 License: GPL-3
 SystemRequirements: C++11, GNU make
 VignetteBuilder: knitr

@@ -27,6 +27,12 @@ seqSAIGE_LoadPval(fn, varnm=NULL, verbose=TRUE)
 \examples{
 (fn <- system.file("unitTests/saige_pval.rda", package="SAIGEgds"))
 pval <- seqSAIGE_LoadPval(fn)
+
+names(pval)
+#  [1] "id"         "chr"        "pos"        "rs.id"      "ref"
+#  [6] "alt"        "AF.alt"     "AC.alt"     "num"        "beta"
+# [11] "SE"         "pval"       "pval.noadj" "converged"
+
 head(pval)
 }
 

@@ -15,11 +15,11 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
 \arguments{
     \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
     \item{modobj}{an R object for SAIGE model parameters}
-    \item{maf}{minor allele frequency cutoff (>= maf)}
-    \item{mac}{minor allele count cutoff (>= mac)}
+    \item{maf}{minor allele frequency threshold (>= maf)}
+    \item{mac}{minor allele count threshold (>= mac)}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
-    \item{spa.pval}{the p-value threshold for SPA adjustment}
+    \item{spa.pval}{the p-value threshold for SPA adjustment, 0.05 by default}
     \item{var.ratio}{\code{NaN} for using the estimated variance ratio in the model
         fitting, or a user-defined variance ratio}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
@@ -32,7 +32,10 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
 }
 
 \details{
-    XXXX
+    The original SAIGE R package uses 0.05 as a threshold for unadjusted p-values to
+further calculate SPA-adjusted p-values. if \code{var.ratio=NaN}, the average of variance
+ratios (\code{mean(modobj$var.ratio$ratio) is used instead.
+})
 }
 
 \value{

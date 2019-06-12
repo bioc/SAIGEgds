@@ -2,15 +2,13 @@
 \alias{SAIGEgds-package}
 \alias{SAIGEgds}
 \docType{package}
-\title{Scalable and Accurate Implementation of Generalized mixed models using GDS files}
+\title{Scalable Implementation of Generalized mixed models using GDS files}
 \description{
-    Genome-wide association studies are widely used to investigate
-the genetic basis of diseases and traits, but they pose many computational
-challenges. We developed SNPRelate (R package for multi-core symmetric
-multiprocessing computer architectures) to accelerate two key computations
-on SNP data: principal component analysis (PCA) and relatedness analysis
-using identity-by-descent measures. The kernels of our algorithms are
-written in C/C++ and highly optimized.
+    Scalable and accurate implementation of generalized mixed mode with the support
+of Genomic Data Structure (GDS) files and highly optimized C++ implementation. It is
+designed for single variant tests in large-scale phenome-wide association studies
+(PheWAS) with millions of variants and hundreds of thousands of samples, e.g., UK
+Biobank genotype data.
 }
 \details{
     \tabular{ll}{
@@ -32,7 +30,8 @@ SeqArray -- A storage-efficient high-performance data format for WGS variant cal
 }
 \author{
     Xiuwen Zheng \email{xiuwen.zheng@abbvie.com},
-    Wei Zhou, contributor (the original author of the SAIGE R package)
+    Wei Zhou (the original author of the SAIGE R package,
+\url{https://github.com/weizhouUMICH/SAIGE})
 }
 
 \examples{
