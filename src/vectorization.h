@@ -2,7 +2,7 @@
 //
 // vectorization.h: optimization with vectorization
 //
-// Copyright (C) 2019    Xiuwen Zheng
+// Copyright (C) 2019    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //

@@ -2,7 +2,7 @@
 //
 // SPATest.cpp: C implementation of part of the R SPATest package
 //
-// Copyright (C) 2019    Xiuwen Zheng
+// Copyright (C) 2019    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds. It was created based on the R codes in the
 // SPATest package.
@@ -17,7 +17,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License along
-// with SNPRelate.
+// with SAIGEgds.
 // If not, see <http://www.gnu.org/licenses/>.
 
 #include "vectorization.h"

@@ -2,7 +2,7 @@
 //
 // saige_main.cpp: SAIGE association analysis
 //
-// Copyright (C) 2019    Xiuwen Zheng
+// Copyright (C) 2019    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -16,7 +16,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License along
-// with SNPRelate.
+// with SAIGEgds.
 // If not, see <http://www.gnu.org/licenses/>.
 
 #include "vectorization.h"
@@ -356,20 +356,11 @@ BEGIN_RCPP
 
 			// need the number of nonzeros and the nonzero indices
 			if (!is_sparse)
-			{
 				n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
-			}
 
 			// call Saddle_Prob in SPAtest
-/*			if (n_nonzero*2 < num_samp)
-			{
-				pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
-					buf_adj_g, 2, converged);
-			} else {
-*/				// fully utilize sparse structure
-				pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu,
-					buf_adj_g, n_nonzero, buf_index, 2, converged, buf_spa);
-//			}
+			pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu, buf_adj_g,
+				n_nonzero, buf_index, 2, converged, buf_spa);
 
 			// effect size
 			beta = (Tstat / var1) / sqrt(AC2);

@@ -2,7 +2,7 @@
 //
 // saige_fitnull.cpp: C++ implementation of fitting the null model
 //
-// Copyright (C) 2019    Xiuwen Zheng
+// Copyright (C) 2019    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds. It was created based on the original SAIGE
 // C++ and R codes in the SAIGE package. Compared with the original SAIGE,
@@ -20,7 +20,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License along
-// with SNPRelate.
+// with SAIGEgds.
 // If not, see <http://www.gnu.org/licenses/>.
 
 #include "vectorization.h"

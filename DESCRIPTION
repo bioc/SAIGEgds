@@ -20,6 +20,6 @@ Description: Scalable and accurate implementation of generalized mixed models
 License: GPL-3
 SystemRequirements: C++11, GNU make
 VignetteBuilder: knitr
-URL: http://github.com/zhengxwen/SAIGEgds
-BugReports: http://github.com/zhengxwen/SAIGEgds/issues
+URL: http://github.com/AbbVie-ComputationalGenomics/SAIGEgds
+BugReports: http://github.com/AbbVie-ComputationalGenomics/SAIGEgds/issues
 biocViews: Genetics, StatisticalMethod
