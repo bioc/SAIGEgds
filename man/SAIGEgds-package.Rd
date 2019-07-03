@@ -9,6 +9,11 @@ of Genomic Data Structure (GDS) files and highly optimized C++ implementation. I
 designed for single variant tests in large-scale phenome-wide association studies
 (PheWAS) with millions of variants and hundreds of thousands of samples, e.g., UK
 Biobank genotype data.
+
+    The implementation of SAIGEgds is based on the original SAIGE R package (v0.29.4.4).
+All of the calculation with single-precision floating-point numbers in SAIGE are
+replaced by the double-precision calculation in SAIGEgds. SAIGEgds also implements some
+of the SPAtest functions in C to speed up the calculation of Saddlepoint Approximation.
 }
 \details{
     \tabular{ll}{

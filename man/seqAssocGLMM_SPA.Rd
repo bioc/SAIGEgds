@@ -34,8 +34,8 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, dsnode="", spa.pval=0.05,
 \details{
     The original SAIGE R package uses 0.05 as a threshold for unadjusted p-values to
 further calculate SPA-adjusted p-values. if \code{var.ratio=NaN}, the average of variance
-ratios (\code{mean(modobj$var.ratio$ratio) is used instead.
-})
+ratios (\code{mean(modobj$var.ratio$ratio)}) is used instead.
+    For more details of SAIGE algorithm, please refer to the SAIGE paper.
 }
 
 \value{

@@ -857,7 +857,6 @@ BEGIN_RCPP
 		_["tau"] = SEXP_VEC(tau),
 		_["linear.predictors"] = SEXP_VEC(eta),
 		_["fitted.values"] = SEXP_VEC(mu),
-		_["Y"] = SEXP_VEC(Y),
 		_["residuals"] = SEXP_VEC(y - mu),
 		_["cov"] = cov,
 		_["converged"] = bool(iter <= maxiter));

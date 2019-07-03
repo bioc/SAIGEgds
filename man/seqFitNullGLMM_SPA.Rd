@@ -47,7 +47,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{geno.sparse}{if TRUE, store the sparse structure for genotypes; otherwise, save
         genotypes in a 2-bit dense matrix; see details}
     \item{num.thread}{the number of threads}
-    \item{model.savefn}{the filename of model output}
+    \item{model.savefn}{the filename of model output, R data file '.rda' or '.RData'}
     \item{seed}{an integer as a seed for random numbers}
     \item{verbose}{if \code{TRUE}, show information}
 }
@@ -55,20 +55,20 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
 \details{
     Utilizing the sparse structure of genotypes could significantly improve the
 computational efficiency of model fitting, but it also increases the memory usage.
+    For more details of SAIGE algorithm, please refer to the SAIGE paper.
 }
 
 \value{
     Returns a list with the following components:
     \code{coefficients}, the beta coefficients for fixed effects;
     \code{tau}, a numeric vector of variance components 'Sigma_E' and 'Sigma_G';
-    \code{linear.predictors}, ;
+    \code{linear.predictors}, the linear fit on link scale;
     \code{fitted.values}, fitted values from objects returned by modeling functions using
         \code{glm.fit};
-    \code{Y}, ;
-    \code{residuals}, ;
-    \code{cov}, ;
+    \code{residuals}, residuals;
+    \code{cov}, covariance matrix of beta coefficients;
     \code{converged}, whether the model is fitted or not;
-    \code{obj.noK}, ;
+    \code{obj.noK}, internal use, returned object from the SPAtest package;
     \code{var.ratio}, a data.frame with columns 'id' (variant.id), 'maf' (minor allele
         frequency), 'var1' (), 'var2' () and 'ratio' (estimated variance ratio for
         variance approximation);
