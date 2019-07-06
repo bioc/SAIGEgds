@@ -81,10 +81,10 @@ assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=10)
 ## Done.
 
 head(assoc)
-##    id chr pos rs.id ref alt AF.alt AC.alt  num        beta        SE      pval pval.noadj converged
-## 1 rs1   1   1   rs1   1   2 0.0305     61 1000  0.60500665 0.4720839 0.1999950  0.1999950      TRUE
-## 2 rs2   1   2   rs2   1   2 0.0380     76 1000 -0.09606419 0.4101637 0.8148224  0.8148224      TRUE
-## 3 rs3   1   3   rs3   1   2 0.0215     43 1000 -0.55131755 0.5699739 0.3334101  0.3334101      TRUE
+##   id chr pos rs.id ref alt AF.alt AC.alt  num        beta        SE      pval pval.noadj converged
+## 1  1   1   1   rs1   1   2 0.0305     61 1000  0.60500665 0.4720839 0.1999950  0.1999950      TRUE
+## 2  2   1   2   rs2   1   2 0.0380     76 1000 -0.09606419 0.4101637 0.8148224  0.8148224      TRUE
+## 3  3   1   3   rs3   1   2 0.0215     43 1000 -0.55131755 0.5699739 0.3334101  0.3334101      TRUE
 ## ...
 
 # close the GDS file
