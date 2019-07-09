@@ -158,9 +158,10 @@ RcppExport COREARRAY_TARGET_CLONES SEXP saige_score_test_quant(SEXP dosage)
 {
 BEGIN_RCPP
 
-	// dosages
-	NumericVector G(dosage);
-	const size_t num_samp = G.size();
+	// dosages and imputed
+	size_t num_samp = Rf_length(dosage);
+	double *G = get_real_dosage(dosage, num_samp);
+
 	// calc allele freq, and impute geno using the mean
 	double AF, AC;
 	int Num;
@@ -173,14 +174,16 @@ BEGIN_RCPP
 		bool minus = (AF > 0.5);
 		if (minus) f64_sub(mod_NSamp, 2, &G[0]);
 
+		double pval, beta;
+		size_t n_nonzero = 0;
 		const double inv_sqrt_mac = 1.0 / sqrt(mac);
 		const double inv_mac = 1.0 / mac;
-		double pval, beta;
-		// if (maf < 0.05)
-		if (maf > -0.05)
+
+		const bool is_sparse = maf < 0.05;
+		if (is_sparse)
 		{
 			// get the number of nonzeros and the nonzero indices
-			size_t n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
+			n_nonzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
 			// buf_coeff = XVX_inv_XV * G
 			f64_mul_mat_vec_sp(n_nonzero, buf_index, mod_NCoeff,
 				mod_t_XVX_inv_XV, &G[0], buf_coeff);
@@ -210,7 +213,7 @@ BEGIN_RCPP
 			//
 			double Tstat = (S1 + S2) / mod_tau[0];
 			pval = ::Rf_pchisq(Tstat*Tstat/var1, 1, FALSE, FALSE);
-			beta = (minus ? -1 : 1) * Tstat / var1 * inv_sqrt_mac;
+			beta = Tstat / var1 * inv_sqrt_mac;
 
 		} else {
 			// adj_g = G - XXVX_inv * (XV * G), adjusted genotypes
@@ -230,9 +233,10 @@ BEGIN_RCPP
 
 			// p-value and beta
 			pval = ::Rf_pchisq(Tstat*Tstat/var, 1, FALSE, FALSE);
-			beta = (minus ? -1 : 1) * Tstat / var * inv_sqrt_mac;
+			beta = Tstat / var * inv_sqrt_mac;
 		}
 
+		if (minus) beta = -beta;
 		double SE = fabs(beta/::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
 
 		NumericVector ans(6);

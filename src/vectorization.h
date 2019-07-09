@@ -25,7 +25,12 @@
 #endif
 #if defined(__GNUC__) && ((__GNUC__>4) || (__GNUC__==4 && __GNUC_MINOR__>=4))
     #pragma GCC optimize("O3")
+    #define MATH_OFAST    __attribute__((optimize("Ofast")))
 #endif
+#endif
+
+#ifndef MATH_OFAST
+#   define MATH_OFAST
 #endif
 
 

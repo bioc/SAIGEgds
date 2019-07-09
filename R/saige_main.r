@@ -531,7 +531,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
     if (any(is.na(ii)))
         stop("Sample IDs do not match.")
 
-    dm <- SeqArray:::.seldim(gdsfile)
+    dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
     nVariant <- dm[3L]
     if (verbose)
     {
