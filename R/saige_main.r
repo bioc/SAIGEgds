@@ -339,6 +339,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         verbose = verbose
     )
 
+    tau.init[is.na(tau.init)] <- 0
+    tau.init[tau.init < 0] <- 0
+
     # fit the model
     if (trait.type == "binary")
     {
@@ -362,8 +365,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         if (verbose)
         {
             cat("Initial fixed-effect coefficients:\n")
-            v <- fit0$coefficients
-            names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
+            v <- as.data.frame(t(fit0$coefficients))
+            rownames(v) <- "   "
             print(v)
         }
         obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula, data)
@@ -372,7 +375,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         tau <- fixtau <- c(0,0)
         if (fit0$family$family %in% c("binomial", "poisson"))
             tau[1] <- fixtau[1] <- 1
-        if (tau.init[fixtau==0] == 0)
+        if (sum(tau.init[fixtau==0]) == 0)
             tau[fixtau==0] <- 0.5
         else
             tau[fixtau==0] <- tau.init[fixtau==0]
@@ -398,25 +401,71 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     } else if (trait.type == "quantitative")    
     {
         # quantitative outcome
-        cat("Quantitative outcome: ", phenovar, "\n", sep="")
-
-        stop("Quantitative implementation is not ready.")
+        if (verbose)
+        {
+            cat("Quantitative outcome: ", phenovar, "\n", sep="")
+            if (isTRUE(X.transform))
+                y <- data$y
+            else
+                y <- data[[phenovar]]
+            v <- data.frame(mean=mean(y), sd=sd(y), min=min(y), max=max(y))
+            rownames(v) <- "   "
+            print(v)
+        }
 
         # fit the null model
-        # fit0 <- glm(formula, data=data, family=gaussian)
-        # if (verbose)
-        # {
-        #     cat("Initial fixed-effect coefficients:\n")
-        #     v <- fit0$coefficients
-        #     names(v) <- c(paste0("    ", names(v)[1L]), names(v)[-1L])
-        #     print(v)
-        # }
-        # obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model_q(formula, data)
+        fit0 <- glm(formula, data=data)
+        if (verbose)
+        {
+            cat("Initial fixed-effect coefficients:\n")
+            v <- as.data.frame(t(fit0$coefficients))
+            rownames(v) <- "   "
+            print(v)
+        }
+        # ScoreTest_wSaddleApprox_NULL_Model_q
+        obj.noK <- list()
+        X1 <- model.matrix(fit0)
+        X1 <- SPAtest:::ScoreTest_wSaddleApprox_Get_X1(X1)
+        obj.noK$y <- fit0$y
+        obj.noK$mu <- fit0$fitted.values
+        obj.noK$res <- fit0$y - obj.noK$mu
+        obj.noK$V <- 1
+        obj.noK$X1 <- X1
+        obj.noK$XV <- t(X1)
+        obj.noK$XVX_inv <- solve(t(X1) %*% X1)
+        obj.noK$XXVX_inv <- X1 %*% obj.noK$XVX_inv
+        class(obj.noK) <- "SA_NULL"
 
-        # system.time(modglmm<-glmmkin.ai_PCG_Rcpp_Quantitative(plinkFile,fit0,
-        #   tau = c(0,0), fixtau = c(0,0), maxiter =maxiter, tol = tol, verbose = TRUE, nrun=30, tolPCG = tolPCG, maxiterPCG = maxiterPCG, subPheno = dataMerge_sort, obj.noK=obj.noK, out.transform=out.transform, tauInit=tauInit, memoryChunk = memoryChunk, LOCO=LOCO, chromosomeStartIndexVec = chromosomeStartIndexVec, chromosomeEndIndexVec = chromosomeEndIndexVec, traceCVcutoff = traceCVcutoff))
-        # save(modglmm, file = modelOut)
-        # print("step2")
+        # initial tau
+        tau <- tau.init
+        if (sum(tau) == 0)
+        {
+            y <- fit0$y
+            offset <- fit0$offset
+            if (is.null(offset)) offset <- rep(0, length(y))
+            eta <- fit0$linear.predictors
+            mu <- fit0$fitted.values
+            mu.eta <- fit0$family$mu.eta(eta)
+            Y <- eta - offset + (y - mu)/mu.eta
+            tau[] <- var(Y)/2
+        }
+
+        # iterate
+        glmm <- .Call(saige_fit_AI_PCG_quant, fit0, X1, tau, param)
+
+        # calculate the variance ratio
+        if (verbose)
+            cat(.crayon_underline("Calculate the average ratio of variances:\n"))
+        set.seed(seed)
+        var.ratio <- .Call(saige_calc_var_ratio_quant, fit0, glmm, obj.noK,
+            param, sample.int(n_var, n_var))
+        var.ratio <- var.ratio[order(var.ratio$id), ]
+        var.ratio$id <- seqGetData(gdsfile, "variant.id")[var.ratio$id]
+        rownames(var.ratio) <- NULL
+
+        # ans$obj.glm.null <- fit0
+        glmm$obj.noK <- obj.noK
+        glmm$var.ratio <- var.ratio
 
     } else {
         stop("Invalid 'trait.type'.")    

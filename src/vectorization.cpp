@@ -96,8 +96,7 @@ COREARRAY_TARGET_CLONES
 
 
 /// get the index of each nonzero value in x and return the number of nonzeros
-COREARRAY_TARGET_CLONES
-	size_t f64_nonzero_index(size_t n, const double *x, int *i)
+COREARRAY_TARGET_CLONES size_t f64_nonzero_index(size_t n, const double *x, int *i)
 {
 	size_t n_i = 0;
 	for (size_t j=0; j < n; j++)
@@ -107,35 +106,36 @@ COREARRAY_TARGET_CLONES
 
 
 /// y[i] += x
-COREARRAY_TARGET_CLONES void f64_add(size_t n, double x, double *y)
+COREARRAY_TARGET_CLONES MATH_OFAST void f64_add(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] += x;
 }
 
 
 /// y[i] += x[i]
-COREARRAY_TARGET_CLONES void f64_add(size_t n, const double *x, double *y)
+COREARRAY_TARGET_CLONES MATH_OFAST void f64_add(size_t n, const double *x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] += x[i];
 }
 
 
 /// y[i] = x - y[i]
-COREARRAY_TARGET_CLONES void f64_sub(size_t n, double x, double *y)
+COREARRAY_TARGET_CLONES MATH_OFAST void f64_sub(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] = x - y[i];
 }
 
 
 /// y[i] = x * y[i]
-COREARRAY_TARGET_CLONES void f64_mul(size_t n, double x, double *y)
+COREARRAY_TARGET_CLONES MATH_OFAST void f64_mul(size_t n, double x, double *y)
 {
 	for (size_t i=0; i < n; i++) y[i] *= x;
 }
 
 
 /// sum_i x[i]*y[i]
-COREARRAY_TARGET_CLONES double f64_dot(size_t n, const double *x, const double *y)
+COREARRAY_TARGET_CLONES MATH_OFAST
+	double f64_dot(size_t n, const double *x, const double *y)
 {
 	double sum = 0;
 	for (size_t i=0; i < n; i++) sum += x[i] * y[i];
@@ -144,7 +144,8 @@ COREARRAY_TARGET_CLONES double f64_dot(size_t n, const double *x, const double *
 
 
 /// sum_i x[i]
-COREARRAY_TARGET_CLONES double f64_sum(size_t n, const double *x)
+COREARRAY_TARGET_CLONES MATH_OFAST
+	double f64_sum(size_t n, const double *x)
 {
 	double sum = 0;
 	for (size_t i=0; i < n; i++) sum += x[i];
@@ -153,7 +154,7 @@ COREARRAY_TARGET_CLONES double f64_sum(size_t n, const double *x)
 
 
 /// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
-COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES MATH_OFAST
 	void f64_dot_sp(size_t n, const double *x, const double *y, double &out1, double &out2)
 {
 	double sum1=0, sum2=0;
@@ -167,7 +168,7 @@ COREARRAY_TARGET_CLONES
 
 
 /// out1 = sum_i x1[i]*y[i], out2 = sum_i x2[i]*y[i]*y[i]
-COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES MATH_OFAST
 	void f64_dot_sp2(size_t n, const double *x1, const double *x2, const double *y, double &out1, double &out2)
 {
 	double sum1=0, sum2=0;
@@ -181,7 +182,7 @@ COREARRAY_TARGET_CLONES
 
 
 /// vec(p_m) = mat(x_{m*n}) * vec(y_n)
-COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES MATH_OFAST
 	void f64_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
@@ -282,7 +283,7 @@ COREARRAY_TARGET_CLONES
 
 
 /// vec(p_m) = mat(x_{m*n}) * vec(y_n), y is a sparse vector with indices
-COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES MATH_OFAST
 	void f64_mul_mat_vec_sp(size_t n_idx, const int *idx, size_t m, const double *x, const double *y, double *p)
 {
 	memset(p, 0, sizeof(double)*m);
@@ -375,7 +376,7 @@ COREARRAY_TARGET_CLONES
 
 
 /// vec(p_n) = t(mat(x_{m*n})) * vec(y_m), with a subset
-COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES MATH_OFAST
 	void f64_mul_mat_vec_sub(size_t n, const int *idx, size_t m, const double *x, const double *y, double *p)
 {
 	for (size_t i=0; i < n; i++)
@@ -390,7 +391,7 @@ COREARRAY_TARGET_CLONES
 
 
 /// vec(p_n) = vec(x_n) - t(mat(y_{m*n})) * vec(z_m)
-COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES MATH_OFAST
 	void f64_sub_mul_mat_vec(size_t n, size_t m, const double *x, const double *y, const double *z, double *p)
 {
 	switch (m)
@@ -443,7 +444,7 @@ COREARRAY_TARGET_CLONES
 
 
 /// t(vec(y)) * mat(x) * vec(y)
-COREARRAY_TARGET_CLONES
+COREARRAY_TARGET_CLONES MATH_OFAST
 	double f64_sum_mat_vec(size_t n, const double *x, const double *y)
 {
 	double sum = 0;

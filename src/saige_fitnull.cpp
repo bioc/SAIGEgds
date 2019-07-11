@@ -546,14 +546,14 @@ static COREARRAY_TARGET_CLONES
 	}
 
 	if (iter >= maxiterPCG)
-		Rprintf("PCG does not converge. You may increase maxiter number.\n");
+		Rprintf("PCG does not converge (may need to increase 'maxiter').\n");
 
 	return(x);
 }
 
 
 /// Calculate the coefficient of variation for mean of a vector
-static double calcCV(const dvec &x)
+inline static double calcCV(const dvec &x)
 {
 	double x_mean = mean(x);
 	double x_sd = stddev(x);
@@ -561,10 +561,10 @@ static double calcCV(const dvec &x)
 }
 
 
-/// Calculate the trace of matrix
+/// Calculate the trace of matrix for binary outcomes
 static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
-	const dvec& tau, const dmat& cov,
-	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff, int seed)
+	const dvec& tau, const dmat& cov, int nrun, int maxiterPCG, double tolPCG,
+	double traceCVcutoff, int seed)
 {
 	set_seed(seed);
 	dmat Sigma_iXt = Sigma_iX.t();
@@ -601,6 +601,54 @@ static double get_trace(const dmat &Sigma_iX, const dmat& X, const dvec& w,
 	}
 
 	return(mean(buf));
+}
+
+
+/// Calculate the trace of matrix for quantitative outcomes
+static void get_trace_q(const dmat &Sigma_iX, const dmat& X, const dvec& w,
+	const dvec& tau, const dmat& cov, int nrun, int maxiterPCG, double tolPCG,
+	double traceCVcutoff, int seed, double &outTrace0, double &outTrace1)
+{
+	set_seed(seed);
+	dmat Sigma_iXt = Sigma_iX.t();
+	dvec Sigma_iu;  
+	dcolvec Pu;
+	dvec Au, u;
+
+	int nrunStart = 0;
+	int nrunEnd = nrun;
+	double traceCV, traceCV0;
+	traceCV = traceCV0 = traceCVcutoff + 0.1;
+	dvec buf(nrun), buf0(nrun);
+	buf.zeros(); buf0.zeros();
+
+	while ((traceCV > traceCVcutoff) || (traceCV0 > traceCVcutoff))
+	{
+		for (int i=nrunStart; i < nrunEnd; i++)
+		{
+			u = 2 * as<dvec>(rbinom(Geno_NumSamp, 1, 0.5)) - 1;
+			Sigma_iu = get_PCG_diag_sigma(w, tau, u, maxiterPCG, tolPCG);
+			Pu = Sigma_iu - Sigma_iX * (cov *  (Sigma_iXt * u));
+			get_crossprod_b_grm(u, Au);
+			buf[i]  = dot(Au, Pu);
+			buf0[i] = dot(u, Pu);
+		}
+		traceCV  = calcCV(buf);
+		traceCV0 = calcCV(buf0);
+		if ((traceCV > traceCVcutoff) || (traceCV0 > traceCVcutoff))
+		{
+			nrunStart = nrunEnd;
+			nrunEnd = nrunEnd + 10;
+			buf.resize(nrunEnd);
+			buf0.resize(nrunEnd);
+			Rprintf("CV for trace random estimator using %d runs is %g > %g\n",
+				nrun, traceCV, traceCVcutoff);
+			Rprintf("try %d runs ...\n", nrunEnd);
+		}
+	}
+
+	outTrace0 = mean(buf);
+	outTrace1 = mean(buf0);
 }
 
 
@@ -677,34 +725,55 @@ static void get_coeff(const dvec &y, const dmat &X, const dvec &tau,
 }
 
 
-// Modified that (Sigma_iY, Sigma_iX, cov) are input parameters. Previously they are calculated in the function
-//      This function needs the function getPCG1ofSigmaAndVector and function getCrossprod and GetTrace
+// Get average information (AI) for binary outcomes
 static void get_AI_score(const dvec &Y, const dmat &X, const dvec &w,
 	const dvec &tau, const dvec &Sigma_iY, const dmat &Sigma_iX, const dmat &cov,
 	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff, int seed,
-	double &YPAPY, double &Trace, double &AI)
+	double &outYPAPY, double &outTrace, double &outAI)
 {
 	dmat Sigma_iXt = Sigma_iX.t();
 	dvec PY = Sigma_iY - Sigma_iX * (cov * (Sigma_iXt * Y));
 	dvec APY;
 	get_crossprod_b_grm(PY, APY);
-	YPAPY = dot(PY, APY);
-
-	Trace = get_trace(Sigma_iX, X, w, tau, cov, nrun, maxiterPCG,
-		tolPCG, traceCVcutoff, seed);
+	// output
+	outYPAPY = dot(PY, APY);
+	outTrace = get_trace(Sigma_iX, X, w, tau, cov, nrun, maxiterPCG, tolPCG,
+		traceCVcutoff, seed);
 	dvec PAPY_1 = get_PCG_diag_sigma(w, tau, APY, maxiterPCG, tolPCG);
 	dvec PAPY = PAPY_1 - Sigma_iX * (cov * (Sigma_iXt * PAPY_1));
-	AI = dot(APY, PAPY);
+	outAI = dot(APY, PAPY);
+}
+
+// Get average information (AI) for quantitative outcomes
+static void get_AI_score_q(const dvec &Y, const dmat &X, const dvec &w,
+	const dvec &tau, const dvec &Sigma_iY, const dmat &Sigma_iX, const dmat &cov,
+	int nrun, int maxiterPCG, double tolPCG, double traceCVcutoff, int seed,
+	double outYPAPY[], double outTrace[], dmat &outAI)
+{
+	dmat Sigma_iXt = Sigma_iX.t();
+	dvec PY = Sigma_iY - Sigma_iX * (cov * (Sigma_iXt * Y));
+	dvec A0PY = PY;
+	dvec APY;
+	get_crossprod_b_grm(PY, APY);
+	// output
+	outYPAPY[0] = dot(PY, APY);   // YPAPY
+	outYPAPY[1] = dot(PY, A0PY);  // YPA0PY
+	get_trace_q(Sigma_iX, X, w, tau, cov, nrun, maxiterPCG, tolPCG,
+		traceCVcutoff, seed, outTrace[0], outTrace[1]);
+	dvec PAPY_1 = get_PCG_diag_sigma(w, tau, APY, maxiterPCG, tolPCG);
+	dvec PAPY = PAPY_1 - Sigma_iX * (cov * (Sigma_iXt * PAPY_1));
+	dmat AI(2,2);
+	AI(1,1) = dot(APY, PAPY);
+	AI(0,1) = dot(A0PY, PAPY);
+	AI(1,0) = AI(0,1);
+	outAI = AI;
 }
 
 
-// Modified that (Sigma_iY, Sigma_iX, cov) are input parameters. Previously they are calculated in the function
-// This function needs the function get_PCG_diag_sigma and function get_crossprod, get_AI_score
-static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
-	const dvec &in_tau, const dvec &Sigma_iY, const dmat &Sigma_iX,
-	const dmat &cov,
-	int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff,
-	int seed)
+// Update tau for binary outcomes
+static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w, const dvec &in_tau,
+	const dvec &Sigma_iY, const dmat &Sigma_iX, const dmat &cov,
+	int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff, int seed)
 {
 	double YPAPY, Trace, AI;
 	get_AI_score(Y, X, w, in_tau, Sigma_iY, Sigma_iX, cov, nrun,
@@ -732,6 +801,38 @@ static dvec fitglmmaiRPCG(const dvec &Y, const dmat &X, const dvec &w,
   	return tau;
 }
 
+// Update tau for quantitative outcomes
+static dvec fitglmmaiRPCG_q(const dvec &Y, const dmat &X, const dvec &w, const dvec &in_tau,
+	const dvec &Sigma_iY, const dmat &Sigma_iX, const dmat &cov,
+	int nrun, int maxiterPCG, double tolPCG, double tol, double traceCVcutoff, int seed)
+{
+	uvec zero_v = (in_tau < tol);
+	double YPAPY[2], Trace[2];
+	dmat AI;
+	get_AI_score_q(Y, X, w, in_tau, Sigma_iY, Sigma_iX, cov, nrun,
+		maxiterPCG, tolPCG, traceCVcutoff, seed,
+		YPAPY, Trace, AI);
+	dvec score(2);
+	score[0] = YPAPY[1] - Trace[0];
+	score[1] = YPAPY[0] - Trace[1];
+	dvec Dtau = solve(AI, score);
+
+	dvec tau0 = in_tau;
+	dvec tau = tau0 + Dtau;
+	tau.elem( find(zero_v % (tau < tol)) ).zeros();
+
+	double step = 1.0;
+	while (tau[0] < 0.0 || tau[1]  < 0.0)
+	{
+		step *= 0.5;
+		tau = tau0 + step * Dtau;
+		tau.elem( find(zero_v % (tau < tol)) ).zeros();
+	}
+	tau.elem( find(tau < tol) ).zeros();
+
+	return tau;
+}
+
 
 // ========================================================================= //
 
@@ -747,6 +848,7 @@ inline static void print_vec(const char *s, dvec &x)
 }
 
 
+// Fitting the null model with binary outcomes
 RcppExport SEXP saige_fit_AI_PCG_binary(SEXP r_fit0, SEXP r_X, SEXP r_tau,
 	SEXP r_param)
 {
@@ -865,6 +967,130 @@ END_RCPP
 }
 
 
+// Fitting the null model with quantitative outcomes
+RcppExport SEXP saige_fit_AI_PCG_quant(SEXP r_fit0, SEXP r_X, SEXP r_tau,
+	SEXP r_param)
+{
+BEGIN_RCPP
+
+	// parameters for fitting the model
+	List param(r_param);
+	const double tol = Rf_asReal(param["tol"]);
+	const double tol_inv_2 = 1 / (tol*tol);
+	const double tolPCG = Rf_asReal(param["tolPCG"]);
+	const int seed = Rf_asInteger(param["seed"]);
+	const int maxiter = Rf_asInteger(param["maxiter"]);
+	const int maxiterPCG = Rf_asInteger(param["maxiterPCG"]);
+	const int nrun = Rf_asInteger(param["nrun"]);
+	const double traceCVcutoff = Rf_asReal(param["traceCVcutoff"]);
+	const bool verbose = Rf_asLogical(param["verbose"])==TRUE;
+
+	List fit0(r_fit0);
+	dvec y = as<dvec>(fit0["y"]);
+	const int n = y.size();
+	dmat X = as<dmat>(r_X);
+	dvec offset(y.size());
+	if (Rf_isNull(fit0["offset"]))
+		offset.zeros();
+	else
+		offset = as<dvec>(fit0["offset"]);
+
+	List family = fit0["family"];
+	Function fc_mu_eta = wrap(family["mu.eta"]);
+	dvec eta = as<dvec>(fit0["linear.predictors"]);
+	dvec eta0 = eta;
+	dvec mu = as<dvec>(fit0["fitted.values"]);
+	dvec mu_eta = as<dvec>(fc_mu_eta(eta0));
+	dvec Y = eta - offset + (y - mu) / mu_eta;
+	dvec alpha0 = as<dvec>(fit0["coefficients"]);
+	dvec alpha = alpha0;
+	dmat cov;
+
+	dvec tau = as<dvec>(r_tau);
+	dvec tau0 = tau;
+
+	dvec re_Y, re_mu, re_alpha, re_eta, re_W, re_Sigma_iY;
+	dmat re_cov, re_Sigma_iX;
+	get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+		tolPCG, verbose,
+		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
+
+	double YPAPY[2], Trace[2];
+	dmat AI;
+	get_AI_score_q(re_Y, X, re_W, tau, re_Sigma_iY, re_Sigma_iX, re_cov, nrun,
+		maxiterPCG, tolPCG, traceCVcutoff, seed,
+		YPAPY, Trace, AI);
+
+	tau[0] = std::max(0.0, tau0[0] + tau0[0]*tau0[0]*(YPAPY[1] - Trace[0])/n);
+	tau[1] = std::max(0.0, tau0[1] + tau0[1]*tau0[1]*(YPAPY[0] - Trace[1])/n);
+	if (verbose)
+	{
+		Rprintf(
+			"Initial variance component estimates, tau:\n    Sigma_E: %g, Sigma_G: %g\n",
+			tau[0], tau[1]);
+	}
+
+	int iter = 1;
+	for (; iter <= maxiter; iter++)
+	{
+		if (verbose)
+		{
+			Rprintf("Iteration %d:\n", iter);
+			print_vec("    tau: ", tau);
+			print_vec("    fixed coeff: ", alpha);
+		}
+
+		alpha0 = re_alpha;
+		tau0 = tau;
+		eta0 = eta;
+		get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+			tolPCG, verbose,
+			re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
+		tau = fitglmmaiRPCG_q(re_Y, X, re_W, tau, re_Sigma_iY,
+			re_Sigma_iX, re_cov, nrun, maxiterPCG, tolPCG,
+			tol, traceCVcutoff, seed);
+
+		cov = re_cov; alpha = re_alpha; eta = re_eta;
+		Y = re_Y; mu = re_mu;
+
+		if (tau[1] == 0) break;
+		if (max(abs(tau-tau0) / (abs(tau)+abs(tau0)+tol)) < tol) break;
+		if (max(tau) > tol_inv_2)
+		{
+			throw std::overflow_error(
+				"Large variance estimate observed in the iterations, model not converged ...");
+			iter = maxiter + 1;
+			break;
+		}
+	}
+
+	get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+		tolPCG, verbose,
+		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
+	cov = re_cov; alpha = re_alpha; eta = re_eta;
+	Y = re_Y; mu = re_mu;
+
+	if (verbose)
+	{
+		print_vec("Final tau: " , tau);
+		print_vec("    fixed coeff: ", alpha);
+	}
+
+	return List::create(
+		_["coefficients"] = SEXP_VEC(alpha),
+		_["tau"] = SEXP_VEC(tau),
+		_["linear.predictors"] = SEXP_VEC(eta),
+		_["fitted.values"] = SEXP_VEC(mu),
+		_["residuals"] = SEXP_VEC(y - mu),
+		_["cov"] = cov,
+		_["converged"] = bool(iter <= maxiter));
+
+END_RCPP
+}
+
+
+
+// ========================================================================= //
 
 RcppExport SEXP saige_calc_var_ratio_binary(SEXP r_fit0, SEXP r_glmm,
 	SEXP r_noK, SEXP r_param, SEXP r_marker_list)
@@ -935,6 +1161,113 @@ BEGIN_RCPP
 
 			double var1 = (sum(G % Sigma_iG) - sum(G % adj)) / AC;
 			double var2 = sum(mu % (1-mu) % g % g);
+			double ratio = var1 / var2;
+
+			num_tested ++;
+			lst_idx.push_back(i_snp);
+			lst_maf.push_back(AF);
+			lst_var1.push_back(var1);
+			lst_var2.push_back(var2);
+			lst_ratio.push_back(ratio);
+			if (verbose)
+			{
+				Rprintf("%6d, maf: %0.3f, var1: %.3g, var2: %.3g, ratio: %0.5f\n",
+					num_tested, AF, var1, var2, ratio);
+			}
+		}
+
+		ratioCV = calcCV(lst_ratio);
+		if (ratioCV > ratioCVcutoff)
+		{
+			if (verbose)
+			{
+				Rprintf(
+					"CV for variance ratio estimate using %d markers is %g > ratioCVcutoff (%g)\n",
+					num_marker, ratioCV, ratioCVcutoff);
+			}
+			num_marker += 10;
+			if (verbose) Rprintf("try %d markers ...\n", num_marker);
+		}
+	}
+
+	return DataFrame::create(
+		_["id"] = lst_idx,    _["maf"] = lst_maf,
+		_["var1"] = lst_var1, _["var2"] = lst_var2,
+		_["ratio"] = lst_ratio);
+
+END_RCPP
+}
+
+
+RcppExport SEXP saige_calc_var_ratio_quant(SEXP r_fit0, SEXP r_glmm,
+	SEXP r_noK, SEXP r_param, SEXP r_marker_list)
+{
+BEGIN_RCPP
+
+	List fit0(r_fit0);
+	List glmm(r_glmm);
+	List obj_noK(r_noK);
+	List param(r_param);
+	IntegerVector rand_index(r_marker_list);
+
+	// parameters for fitting the model
+	const double tolPCG = Rf_asReal(param["tolPCG"]);
+	const int maxiterPCG = Rf_asInteger(param["maxiterPCG"]);
+	const double ratioCVcutoff = Rf_asReal(param["ratioCVcutoff"]);
+	int num_marker = Rf_asInteger(param["num.marker"]);
+	const bool verbose = Rf_asLogical(param["verbose"])==TRUE;
+
+	List family = fit0["family"];
+	Function fc_mu_eta = wrap(family["mu.eta"]);
+	Function fc_variance = wrap(family["variance"]);
+
+	dvec eta = as<dvec>(fit0["linear.predictors"]);
+	dvec mu = as<dvec>(fit0["fitted.values"]);
+	dvec mu_eta = as<dvec>(fc_mu_eta(eta));
+	dvec W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+	dvec tau = as<dvec>(glmm["tau"]);
+	dmat X1 = as<dmat>(obj_noK["X1"]);
+	dmat Sigma_iX = get_sigma_X(W, tau, X1, maxiterPCG, tolPCG);
+
+	dvec y = as<dvec>(fit0["y"]);
+	dmat noK_XXVX_inv = as<dmat>(obj_noK["XXVX_inv"]);
+	dmat noK_XV = as<dmat>(obj_noK["XV"]);
+
+	double ratioCV = ratioCVcutoff + 0.1;
+	int num_tested = 0, snp_idx = 0;
+	const int num_rand_snp = rand_index.length();
+
+	dvec G0(Geno_NumSamp);
+	vector<int> buf_idx(Geno_NumSamp);
+	vector<int> lst_idx;
+	vector<double> lst_maf, lst_var1, lst_var2, lst_ratio;
+
+	while (ratioCV > ratioCVcutoff && snp_idx < num_rand_snp)
+	{
+		while (num_tested < num_marker && snp_idx < num_rand_snp)
+		{
+			const int i_snp = rand_index[snp_idx++];
+			get_geno_ds(i_snp - 1, G0);
+
+			double AF, AC;
+			int Num;
+			f64_af_ac_impute(&G0[0], Geno_NumSamp, AF, AC, Num, &buf_idx[0]);
+			if (AF > 0.5)
+			{
+				f64_sub(Geno_NumSamp, 2, &G0[0]);
+				AC = 2*Num - AC;
+				AF = 1 - AF;
+			}
+			if (AC <= 20) continue;
+
+			// adjusted genotypes
+			dvec G = G0 - noK_XXVX_inv * (noK_XV * G0);
+			dvec g = G / sqrt(AC);
+			dvec Sigma_iG = get_PCG_diag_sigma(W, tau, G, maxiterPCG, tolPCG);
+			dvec adj = Sigma_iX * inv_sympd(X1.t() * Sigma_iX) * X1.t() * Sigma_iG;
+
+			double var1 = (sum(G % Sigma_iG) - sum(G % adj)) / AC;
+			double var2 = sum(g % g);
 			double ratio = var1 / var2;
 
 			num_tested ++;
