@@ -88,11 +88,13 @@ SIMD <- function() .Call(saige_simd_version)
 # Load the association p-values in a GDS file
 #
 
-seqSAIGE_LoadPval <- function(fn, varnm=NULL, verbose=TRUE)
+seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
 {
     # check
     stopifnot(is.character(fn), length(fn)>0L, all(!is.na(fn)))
     stopifnot(is.null(varnm) || is.character(varnm))
+    stopifnot(is.null(index) || is.numeric(index) || is.logical(index))
+    stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (length(fn) == 1L)
     {
@@ -109,7 +111,7 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, verbose=TRUE)
                 varnm <- setdiff(varnm, "sample.id")
                 rv <- list()
                 for (nm in varnm)
-                    rv[[nm]] <- read.gdsn(index.gdsn(f, nm))
+                    rv[[nm]] <- readex.gdsn(index.gdsn(f, nm), index)
                 rv <- as.data.frame(rv, stringsAsFactors=FALSE)
             } else {
                 stop("FileFormat should be 'SAIGE_OUTPUT'.")
@@ -118,11 +120,14 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, verbose=TRUE)
         {
             rv <- get(load(fn))
             if (!is.null(varnm)) rv <- rv[, varnm]
+            if (!is.null(index)) rv <- rv[index, ]
         } else {
             stop(sprintf("Unknown format (%s), should be RData or gds.",
                 basename(fn)))
         }
     } else {
+        if (!is.null(index))
+            stop("'index' should be NULL for multiple input files.")
         rv <- sapply(fn, function(nm) seqSAIGE_LoadPval(nm, varnm), simplify=FALSE)
         if (verbose) cat("Merging ...")
         rv <- Reduce(rbind, rv)
@@ -142,7 +147,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
     X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
-    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, verbose=TRUE)
+    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, no.fork.loading=FALSE,
+    verbose=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
     stopifnot(is.data.frame(data))
@@ -167,6 +173,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.savefn), length(model.savefn)==1L)
     stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
+    stopifnot(is.logical(no.fork.loading), length(no.fork.loading)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (verbose)
@@ -229,7 +236,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # the max mumber of SNPs
     v <- seqGetFilter(gdsfile)$variant.sel
     n <- sum(v, na.rm=TRUE)
-    if (n > max.num.snp)
+    if (max.num.snp>0L && n>max.num.snp)
     {
         set.seed(seed)
         seqSetFilter(gdsfile, variant.sel=sample(which(v), max.num.snp),
@@ -295,12 +302,18 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # load SNP genotypes
     if (verbose)
         cat("Start loading SNP genotypes:\n")
+    nfork <- 1L
+    if (SeqArray:::.IsForking(num.thread) && !no.fork.loading)
+        nfork <- num.thread
     if (isTRUE(geno.sparse))
     {
         # sparse genotypes
         buffer <- integer(n_samp + 4L)
-        packed.geno <- seqApply(gdsfile, "$dosage_alt", .cfunction2("saige_get_sparse"),
-            as.is="list", y=buffer, .useraw=TRUE, .list_dup=FALSE, .progress=verbose)
+        fc <- .cfunction2("saige_get_sparse")
+        packed.geno <- seqParallel(nfork, gdsfile, FUN=function(f) {
+            seqApply(f, "$dosage_alt", fc, as.is="list", y=buffer, .useraw=TRUE,
+                .list_dup=FALSE, .progress=nfork==1L && verbose)
+        }, .balancing=TRUE, .bl_size=5000L, .bl_progress=verbose)
         rm(buffer)
     } else {
         # 2-bit packed genotypes
@@ -593,6 +606,9 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         var.ratio <- mean(modobj$var.ratio$ratio, na.rm=TRUE)
     if (verbose)
         cat("    variance ratio for approximation: ", var.ratio, "\n", sep="")
+
+    if (dm[2L] <= 0) stop("No sample in the genotypic data set!")
+    if (dm[3L] <= 0) stop("No variant in the genotypic data set!")
 
     # initialize the internal model parameters
     y <- unname(modobj$obj.noK$y)

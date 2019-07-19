@@ -11,7 +11,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     variant.id=NULL, inv.norm=TRUE, X.transform=TRUE, tol=0.02, maxiter=20L,
     nrun=30L, tolPCG=1e-5, maxiterPCG=500L, num.marker=30L, tau.init=c(0,0),
     traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE, num.thread=1L,
-    model.savefn="", seed=200L, verbose=TRUE)
+    model.savefn="", seed=200L, no.fork.loading=FALSE, verbose=TRUE)
 }
 
 \arguments{
@@ -24,7 +24,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{sample.col}{the column name of sample IDs corresponding to the GDS file}
     \item{maf}{minor allele frequency for imported genotypes, if \code{variant.id=NULL}}
     \item{missing.rate}{threshold of missing rate, if \code{variant.id=NULL}}
-    \item{max.num.snp}{the maximum number of SNPs used}
+    \item{max.num.snp}{the maximum number of SNPs used, or -1 for no limit}
     \item{variant.id}{a list of variant IDs, used to construct GRM}
     \item{inv.norm}{perform inverse normal transform or not}
     \item{X.transform}{if TRUE, perform QR decomposition on the design matrix}
@@ -49,6 +49,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{num.thread}{the number of threads}
     \item{model.savefn}{the filename of model output, R data file '.rda' or '.RData'}
     \item{seed}{an integer as a seed for random numbers}
+    \item{no.fork.loading}{forking processes in Unix can reduce loading time, but may
+        double the memory usage; not applicable on Windows}
     \item{verbose}{if \code{TRUE}, show information}
 }
 
