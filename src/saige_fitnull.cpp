@@ -7,7 +7,7 @@
 // This file is part of SAIGEgds. It was created based on the original SAIGE
 // C++ and R codes in the SAIGE package. Compared with the original SAIGE,
 // I changed all single-precision floating-point numbers to double precision,
-// and a more efficient algorithm with packed 2-bit and sparse genotypes is provided
+// and a more efficient algorithm with packed 2-bit and sparse genotypes is implemented
 // to calculate the cross product of genetic relationship matrix.
 //
 // SAIGEgds is free software: you can redistribute it and/or modify it
@@ -40,6 +40,7 @@ using namespace vectorization;
 
 // ========================================================================= //
 // Define Intel TBB macro with a thread index starting from 0
+// requiring C++11
 
 #if RCPP_PARALLEL_USE_TBB
 
@@ -836,6 +837,7 @@ static dvec fitglmmaiRPCG_q(const dvec &Y, const dmat &X, const dvec &w, const d
 
 // ========================================================================= //
 
+/// Print a numeric vector
 inline static void print_vec(const char *s, dvec &x)
 {
 	Rprintf("%s(", s);
@@ -1092,6 +1094,7 @@ END_RCPP
 
 // ========================================================================= //
 
+/// Calculate variance ratio for binary outcomes
 RcppExport SEXP saige_calc_var_ratio_binary(SEXP r_fit0, SEXP r_glmm,
 	SEXP r_noK, SEXP r_param, SEXP r_marker_list)
 {
@@ -1199,6 +1202,7 @@ END_RCPP
 }
 
 
+/// Calculate variance ratio for quantitative outcomes
 RcppExport SEXP saige_calc_var_ratio_quant(SEXP r_fit0, SEXP r_glmm,
 	SEXP r_noK, SEXP r_param, SEXP r_marker_list)
 {

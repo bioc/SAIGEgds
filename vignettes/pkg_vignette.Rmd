@@ -32,6 +32,26 @@ Here we develop a new high-performance statistical package (SAIGEgds) for large-
 
 .
 
+# Installation
+
+* Bioconductor repository (available soon):
+```R
+if (!requireNamespace("BiocManager", quietly=TRUE))
+    install.packages("BiocManager")
+BiocManager::install("SAIGEgds")
+```
+
+* Development version from Github:
+```R
+library("devtools")
+install_github("AbbVie-ComputationalGenomics/SAIGEgds")
+```
+The `install_github()` approach requires that you build from source, i.e. `make` and compilers must be installed on your system -- see the [R FAQ](http://cran.r-project.org/faqs.html) for your operating system; you may also need to install dependencies manually.
+
+.
+
+.
+
 # Examples
 
 ```{r message=FALSE}
@@ -104,6 +124,24 @@ glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_fn)
 assoc <- seqAssocGLMM_SPA(geno_fn, glmm, mac=10, parallel=2)
 
 head(assoc)
+
+# filtering based on p-value
+assoc[assoc$pval < 5e-4, ]
+```
+
+.
+
+## QQ plot for p-values
+
+```{r fig.width=5, fig.height=5, fig.align='center'}
+n <- nrow(assoc)
+# expected p-values
+exp.pval <- (1:n) / n
+# observed p-values
+obs.pval <- sort(assoc$pval)
+
+plot(-log10(obs.pval), -log10(exp.pval), xlab="-log10(expected P)", ylab="-log10(observed P)", cex=2/3)
+abline(0, 1, col="red", lty=2)
 ```
 
 .
@@ -131,3 +169,11 @@ unlink("grm_geno.gds", force=TRUE)
 2. Zheng X, Davis J.Wade, SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models; (Abstract 1920276). Presented at the 69th Annual Meeting of The American Society of Human Genetics (ASHG), Oct 15-19, Houston, US.
 
 3. Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D. SeqArray -- A storage-efficient high-performance data format for WGS variant calls. *Bioinformatics* (2017). [DOI: 10.1093/bioinformatics/btx145](http://dx.doi.org/10.1093/bioinformatics/btx145).
+
+.
+
+# Also See
+
+[SeqArray](http://www.bioconductor.org/packages/SeqArray): Data Management of Large-scale Whole-genome Sequence Variant Calls
+
+[SNPRelate](http://www.bioconductor.org/packages/SNPRelate): Parallel Computing Toolset for Relatedness and Principal Component Analysis of SNP Data
