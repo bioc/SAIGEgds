@@ -16,12 +16,12 @@ Benchmarks using the UKBiobank White British genotype data (N=430K) with coronar
 
 ## Package Maintainer
 
-Dr. [Xiuwen Zheng](email: xiuwen.zheng@abbvie.com)
+Dr. [Xiuwen Zheng](xiuwen.zheng@abbvie.com)
 
 
 ## Installation
 
-Requires R (≥ v3.5.0), [SeqArray](http://www.bioconductor.org/packages/SeqArray) (≥ v1.24.1)
+* Requires R (≥ v3.5.0), [SeqArray](http://www.bioconductor.org/packages/SeqArray) (≥ v1.24.1)
 
 * Bioconductor repository (available soon)
 ```R
@@ -38,6 +38,7 @@ install_github("AbbVie-ComputationalGenomics/SAIGEgds")
 The `install_github()` approach requires that you build from source, i.e. `make` and compilers must be installed on your system -- see the [R FAQ](http://cran.r-project.org/faqs.html) for your operating system; you may also need to install dependencies manually.
 
 * Package vignette
+
 If the package is installed from Bioconductor repository, users can start R and enter to view documentation:
 ```R
 browseVignettes("SAIGEgds")
