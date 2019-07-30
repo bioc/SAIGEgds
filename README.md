@@ -16,7 +16,7 @@ Benchmarks using the UKBiobank White British genotype data (N=430K) with coronar
 
 ## Package Maintainer
 
-Dr. [Xiuwen Zheng](xiuwen.zheng@abbvie.com)
+Dr. [Xiuwen Zheng](<xiuwen.zheng@abbvie.com>)
 
 
 ## Installation
