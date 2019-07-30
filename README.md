@@ -39,6 +39,11 @@ install_github("AbbVie-ComputationalGenomics/SAIGEgds")
 ```
 The `install_github()` approach requires that you build from source, i.e. `make` and compilers must be installed on your system -- see the [R FAQ](http://cran.r-project.org/faqs.html) for your operating system; you may also need to install dependencies manually.
 
+* Package vignette:
+```R
+browseVignettes("SAIGEgds")
+```
+
 
 ## Examples
 
