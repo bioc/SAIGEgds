@@ -66,14 +66,14 @@ head(pheno)
 ## ...
 
 # fit the null model
-glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_gds)
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_gds, num.thread=2)
 ## SAIGE association analysis:
 ## Filtering variants:
 ## [==================================================] 100%, completed (0s)
 ## Fit the null model: y ~ x1 + x2 + var(GRM)
 ##     # of samples: 1,000
 ##     # of variants: 9,976
-##     using 1 thread
+##     using 2 threads
 ## ...
 
 # close the file
@@ -88,12 +88,13 @@ geno_fn <- system.file("extdata/assoc_100snp.gds", package="SAIGEgds")
 (geno_gds <- seqOpen(geno_fn))
 
 # p-value calculation
-assoc <- seqAssocGLMM_SPA(geno_gds, glmm, mac=10)
+assoc <- seqAssocGLMM_SPA(geno_gds, glmm, mac=10, parallel=2)
 ## SAIGE association analysis:
 ##     # of samples: 1,000
 ##     # of variants: 100
 ##     p-value threshold for SPA adjustment: 0.05
 ##     variance ratio for approximation: 0.9410486
+##     # of processes: 2
 ## [==================================================] 100%, completed, 0s
 ## # of variants after filtering MAF/MAC: 38
 ## Done.
