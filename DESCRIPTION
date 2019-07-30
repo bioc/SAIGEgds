@@ -6,7 +6,7 @@ Date: 2019-07-10
 Depends: R (>= 3.0), gdsfmt (>= 1.10.0), SeqArray (>= 1.24.1), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, RcppParallel, SPAtest (>= 3.0.0)
-Suggests: parallel, crayon, RUnit, knitr, BiocGenerics
+Suggests: parallel, crayon, RUnit, knitr, BiocGenerics, SNPRelate
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
         email="xiuwen.zheng@abbvie.com"),
         person("Wei", "Zhou", role="ctb",

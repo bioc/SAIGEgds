@@ -49,10 +49,11 @@ ratios (\code{mean(modobj$var.ratio$ratio)}) is used instead.
     \code{AF.alt}, allele frequency for the alternative allele;
     \code{AC.alt}, allele count for the alternative allele;
     \code{num}, the number of samples with non-missing genotypes;
-    \code{beta}, beta coefficient, effect size;
+    \code{beta}, beta coefficient, odds ratio if binary outcomes (alternative allele
+        vs. reference allele);
     \code{SE}, standard error for beta coefficient;
     \code{pval}, adjusted p-value with SPA;
-    \code{pval.noadj}, p-value without adjustment;
+    \code{pval.noadj}, p-value without adjustment (it is used for model checking only);
     \code{converged}, whether the SPA algorithm converges or not for adjusted p-value
 }
 
@@ -82,7 +83,7 @@ pheno <- read.table(phenofn, head=TRUE, as.is=TRUE)
 glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
 
 # p-value calculation
-assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=4)
+assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=10)
 
 head(assoc)
 

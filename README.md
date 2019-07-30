@@ -14,7 +14,7 @@ The implementation of SAIGEgds is based on the original [SAIGE](https://github.c
 
 ## Citation
 
-Zheng X, Davis J.Wade, SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models; (Abstract/Program #XX). Presented at the 69th Annual Meeting of The American Society of Human Genetics (ASHG), Oct 15-19, Houston, US.
+Zheng X, Davis J.Wade, SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models; (Abstract 1920276). Presented at the 69th Annual Meeting of The American Society of Human Genetics (ASHG), Oct 15-19, Houston, US.
 
 Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J, VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K, Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control imbalance and sample relatedness in large-scale genetic association studies. *Nat Genet* (2018). Sep;50(9):1335-1341.
 
@@ -44,9 +44,9 @@ The `install_github()` approach requires that you build from source, i.e. `make`
 library(SeqArray)
 library(SAIGEgds)
 
-# open a GDS file
-fn <- system.file("extdata/grm1k_10k_snp.gds", package="SAIGEgds")
-gdsfile <- seqOpen(fn)
+# open the GDS file for genetic relationship matrix
+grm_fn <- system.file("extdata/grm1k_10k_snp.gds", package="SAIGEgds")
+(grm_gds <- seqOpen(grm_fn))
 
 # load phenotype
 phenofn <- system.file("extdata/pheno.txt.gz", package="SAIGEgds")
@@ -59,7 +59,7 @@ head(pheno)
 ## ...
 
 # fit the null model
-glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_gds)
 ## SAIGE association analysis:
 ## Filtering variants:
 ## [==================================================] 100%, completed (0s)
@@ -69,26 +69,37 @@ glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
 ##     using 1 thread
 ## ...
 
+# close the file
+seqClose(grm_gds)
+
+
+
+################################
+
+# open the GDS file for association testing
+geno_fn <- system.file("extdata/assoc_100snp.gds", package="SAIGEgds")
+(geno_gds <- seqOpen(geno_fn))
+
 # p-value calculation
-assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=10)
+assoc <- seqAssocGLMM_SPA(geno_gds, glmm, mac=10)
 ## SAIGE association analysis:
 ##     # of samples: 1,000
-##     # of variants: 10,000
+##     # of variants: 100
 ##     p-value threshold for SPA adjustment: 0.05
 ##     variance ratio for approximation: 0.9410486
-## [==================================================] 100%, completed (1s)
-## # of variants after filtering MAF/MAC: 9,976
+## [==================================================] 100%, completed, 0s
+## # of variants after filtering MAF/MAC: 38
 ## Done.
 
 head(assoc)
 ##   id chr pos rs.id ref alt AF.alt AC.alt  num        beta        SE      pval pval.noadj converged
-## 1  1   1   1   rs1   1   2 0.0305     61 1000  0.60500665 0.4720839 0.1999950  0.1999950      TRUE
-## 2  2   1   2   rs2   1   2 0.0380     76 1000 -0.09606419 0.4101637 0.8148224  0.8148224      TRUE
-## 3  3   1   3   rs3   1   2 0.0215     43 1000 -0.55131755 0.5699739 0.3334101  0.3334101      TRUE
+## 1  4   1   4   rs4   A   C 0.0100     20 1000 -0.07483772 0.7908730 0.9246113  0.9246113      TRUE
+## 2 12   1  12  rs12   A   C 0.0150     30 1000 -0.09081536 0.6564667 0.8899720  0.8899720      TRUE
+## 3 14   1  14  rs14   A   C 0.0375     75 1000 -0.07530118 0.4337073 0.8621624  0.8621624      TRUE
 ## ...
 
-# close the GDS file
-seqClose(gdsfile)
+# close the file
+seqClose(geno_gds)
 ```
 
 

@@ -40,7 +40,7 @@ SeqArray -- A storage-efficient high-performance data format for WGS variant cal
 }
 
 \examples{
-# open a GDS file
+# open the GDS file
 fn <- system.file("extdata/grm1k_10k_snp.gds", package="SAIGEgds")
 gdsfile <- seqOpen(fn)
 
@@ -52,7 +52,7 @@ pheno <- read.table(phenofn, head=TRUE, as.is=TRUE)
 glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
 
 # p-value calculation
-assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=4)
+assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=10)
 
 head(assoc)
 

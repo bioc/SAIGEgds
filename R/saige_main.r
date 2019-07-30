@@ -426,6 +426,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             print(v)
         }
 
+        stop("Quantitative implementation is not ready!")
+
         # fit the null model
         fit0 <- glm(formula, data=data)
         if (verbose)

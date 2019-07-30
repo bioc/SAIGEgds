@@ -72,8 +72,9 @@ computational efficiency of model fitting, but it also increases the memory usag
     \code{converged}, whether the model is fitted or not;
     \code{obj.noK}, internal use, returned object from the SPAtest package;
     \code{var.ratio}, a data.frame with columns 'id' (variant.id), 'maf' (minor allele
-        frequency), 'var1' (), 'var2' () and 'ratio' (estimated variance ratio for
-        variance approximation);
+        frequency), 'var1' (the variance of score statistic), 'var2' (a variance estimate
+        without accounting for estimated random effects) and 'ratio' (var1/var2,
+        estimated variance ratio for variance approximation);
     \code{trait.type}, either "binary" or "quantitative";
     \code{sample.id}, the sample IDs used in the model fitting;
     \code{variant.id}, the variant IDs used in the model fitting.
