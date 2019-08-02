@@ -213,6 +213,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # remove missing values
     data <- data[, c(sample.col, vars)]
     data <- na.omit(data)
+    data <- droplevels(data)
     seqResetFilter(gdsfile, sample=TRUE, verbose=FALSE)
     sid <- seqGetData(gdsfile, "sample.id")
     i <- match(sid, data[[sample.col]])
@@ -288,7 +289,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             }
         }
         X_name <- colnames(X)
-        Xqr = qr(X)  # QR decomposition
+        Xqr <- qr(X)  # QR decomposition
         X_new <- qr.Q(Xqr) * sqrt(nrow(X))
         X_qrr <- qr.R(Xqr)
         data <- data.frame(cbind(y, X_new))
