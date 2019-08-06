@@ -178,6 +178,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (verbose)
         cat(.crayon_inverse("SAIGE association analysis:\n"))
+    set.seed(seed)
 
     if (is.character(gdsfile))
     {
