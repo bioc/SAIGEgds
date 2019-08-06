@@ -369,6 +369,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             else
                 y <- data[[phenovar]]
             v <- table(y)
+            if (length(v) > 2L)
+                stop("The outcome variable has more than 2 categories!")
             v <- data.frame(v, as.numeric(prop.table(v)))
             v[, 1L] <- paste0("      ", v[, 1L])
             colnames(v) <- c(phenovar, "Number", "Proportion")

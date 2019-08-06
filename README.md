@@ -76,7 +76,7 @@ head(pheno)
 ## ...
 
 # fit the null model
-glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_gds, num.thread=2)
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_gds, trait.type="binary", num.thread=2)
 ## SAIGE association analysis:
 ## Filtering variants:
 ## [==================================================] 100%, completed, 0s
