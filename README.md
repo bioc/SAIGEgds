@@ -43,8 +43,8 @@ The `install_github()` approach requires that you build from source, i.e. `make`
 ```sh
 git clone https://github.com/AbbVie-ComputationalGenomics/SAIGEgds
 R CMD build SAIGEgds
-R CMD check SAIGEgds_0.9.9.tar.gz
-R CMD INSTALL SAIGEgds_0.9.9.tar.gz
+R CMD check SAIGEgds_0.9.10.tar.gz
+R CMD INSTALL SAIGEgds_0.9.10.tar.gz
 ```
 
 * Singularity container
@@ -64,7 +64,7 @@ singularity run --app R R-3.6.1_SAIGEgds.simg
 ```
 
 
-* Package vignette
+## Package vignette
 
 If the package is installed from Bioconductor repository or package rebuilding, users can start R and enter to view documentation:
 ```R
