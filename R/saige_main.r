@@ -464,11 +464,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         obj.noK$y <- fit0$y
         obj.noK$mu <- fit0$fitted.values
         obj.noK$res <- fit0$y - obj.noK$mu
-        obj.noK$V <- 1
+        obj.noK$V <- rep(1, length(fit0$y))
         obj.noK$X1 <- X1
         obj.noK$XV <- t(X1)
-        obj.noK$XVX_inv <- solve(t(X1) %*% X1)
-        obj.noK$XXVX_inv <- X1 %*% obj.noK$XVX_inv
+        obj.noK$XXVX_inv <- X1 %*% solve(t(X1) %*% X1)
         class(obj.noK) <- "SA_NULL"
 
         # initial tau
@@ -640,7 +639,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         maf = maf, mac = mac, spa.pval = spa.pval,
         tau = modobj$tau,
         y = y[ii], mu = mu[ii],
-        y_mu = y[ii] - mu[ii],  # y - mu
+        y_mu = (y - mu)[ii],  # y - mu
         mu2 = (mu * (1 - mu))[ii],
         t_XXVX_inv = t(modobj$obj.noK$XXVX_inv[ii, ]),  # K x n_samp (K << n_samp, more efficient)
         XV = modobj$obj.noK$XV[, ii],  # K x n_samp
@@ -657,8 +656,17 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
         buf_spa = double(n+n),
         buf_tmp = double(ncol(X1))
     )
-    mobj$XVX <- t(X1) %*% (X1 * mobj$mu2)  # a matrix: K x K
-    mobj$S_a <- colSums(X1 * mobj$y_mu)    # a vector of size K
+    if (modobj$trait.type == "binary")
+    {
+        mobj$XVX <- t(X1) %*% (X1 * mobj$mu2)  # a matrix: K x K
+        mobj$S_a <- colSums(X1 * mobj$y_mu)    # a vector of size K
+    } else if (modobj$trait.type == "quantitative")
+    {
+        mobj$XVX <- t(X1) %*% X1               # a matrix: K x K
+        mobj$S_a <- colSums(X1 * mobj$y_mu)    # a vector of size K
+    } else {
+        stop("Invalid 'modobj$trait.type'.")
+    }
 
     if (!is.finite(mobj$var.ratio))
         stop("Invalid variance ratio in the SAIGE model.")
@@ -704,7 +712,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10,
                 seqApply(f, dsnode, .cfunction("saige_score_test_bin"), as.is="list",
                     parallel=FALSE, .progress=pverbose, .list_dup=FALSE, .useraw=NA)
             }, dsnode=dsnode, pverbose=verbose & (njobs==1L))
-    } else if (modobj$trait.type == "quantitative")    
+    } else if (modobj$trait.type == "quantitative")
     {
         rv <- seqParallel(parallel, gdsfile, split="by.variant",
             .initialize=initfun, .finalize=finalfun, .initparam=mobj,
