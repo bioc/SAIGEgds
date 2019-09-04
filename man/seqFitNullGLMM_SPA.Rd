@@ -26,8 +26,9 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{missing.rate}{threshold of missing rate, if \code{variant.id=NULL}}
     \item{max.num.snp}{the maximum number of SNPs used, or -1 for no limit}
     \item{variant.id}{a list of variant IDs, used to construct GRM}
-    \item{inv.norm}{perform inverse normal transformation on residuals or not}
-    \item{X.transform}{if TRUE, perform QR decomposition on the design matrix}
+    \item{inv.norm}{if \code{TRUE}, perform inverse normal transformation on residuals
+        for quantitative outcomes, see the reference [Sofer, 2019]}
+    \item{X.transform}{if \code{TRUE}, perform QR decomposition on the design matrix}
     \item{tol}{overall tolerance for model fitting}
     \item{maxiter}{the maximum number of iterations for model fitting}
     \item{nrun}{the number of random vectors in the trace estimation}
@@ -82,11 +83,14 @@ computational efficiency of model fitting, but it also increases the memory usag
 
 \references{
     Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J,
-    VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K,
-    Kang HM, Abecasis GR, Willer CJ, Lee S.
-    Efficiently controlling for case-control imbalance and sample relatedness in
-    large-scale genetic association studies.
-    Nat Genet (2018). Sep;50(9):1335-1341.
+VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K,
+Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control
+imbalance and sample relatedness in large-scale genetic association studies.
+Nat Genet (2018). Sep;50(9):1335-1341.
+
+    T Sofer, X Zheng, SM Gogarten, CA Laurie, etc. A fully adjusted two‐stage procedure
+for rank‐normalization in genetic association studies. 2019.
+Genetic Epidemiology 43(3), 263-275
 }
 \author{Xiuwen Zheng}
 \seealso{
