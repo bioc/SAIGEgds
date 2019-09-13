@@ -198,6 +198,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     vars <- all.vars(formula)
     phenovar <- all.vars(formula)[1L]
     y <- data[[phenovar]]
+    if (is.null(y))
+        stop("There is no '", phenovar, "' in the input data frame.")
     if (!is.factor(y) && !is.numeric(y) && !is.logical(y))
         stop("The response variable should be numeric or a factor.")
 
