@@ -11,7 +11,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     variant.id=NULL, inv.norm=TRUE, X.transform=TRUE, tol=0.02, maxiter=20L,
     nrun=30L, tolPCG=1e-5, maxiterPCG=500L, num.marker=30L, tau.init=c(0,0),
     traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE, num.thread=1L,
-    model.savefn="", seed=200L, no.fork.loading=FALSE, verbose=TRUE)
+    model.savefn="", seed=200L, fork.loading=FALSE, verbose=TRUE)
 }
 
 \arguments{
@@ -50,8 +50,9 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{num.thread}{the number of threads}
     \item{model.savefn}{the filename of model output, R data file '.rda' or '.RData'}
     \item{seed}{an integer as a seed for random numbers}
-    \item{no.fork.loading}{forking processes in Unix can reduce loading time, but may
-        double the memory usage; not applicable on Windows}
+    \item{fork.loading}{load genotypes via forking or not; forking processes in Unix can
+        reduce loading time of genotypes, but may double the memory usage; not applicable
+        on Windows}
     \item{verbose}{if \code{TRUE}, show information}
 }
 
@@ -89,7 +90,7 @@ imbalance and sample relatedness in large-scale genetic association studies.
 Nat Genet (2018). Sep;50(9):1335-1341.
 
     T Sofer, X Zheng, SM Gogarten, CA Laurie, etc. A fully adjusted two‐stage procedure
-for rank‐normalization in genetic association studies. 2019.
+for rank-normalization in genetic association studies. 2019.
 Genetic Epidemiology 43(3), 263-275
 }
 \author{Xiuwen Zheng}

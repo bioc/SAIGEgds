@@ -149,7 +149,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
     X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
-    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, no.fork.loading=FALSE,
+    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L, fork.loading=FALSE,
     verbose=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
@@ -175,7 +175,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.savefn), length(model.savefn)==1L)
     stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
-    stopifnot(is.logical(no.fork.loading), length(no.fork.loading)==1L)
+    stopifnot(is.logical(fork.loading), length(fork.loading)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (verbose)
@@ -309,7 +309,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (verbose)
         cat("Start loading SNP genotypes:\n")
     nfork <- 1L
-    if (SeqArray:::.IsForking(num.thread) && !no.fork.loading)
+    if (SeqArray:::.IsForking(num.thread) && isTRUE(fork.loading))
         nfork <- num.thread
     if (isTRUE(geno.sparse))
     {

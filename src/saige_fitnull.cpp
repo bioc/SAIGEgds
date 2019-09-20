@@ -1183,7 +1183,7 @@ BEGIN_RCPP
 			lst_ratio.push_back(ratio);
 			if (verbose)
 			{
-				Rprintf("%6d, maf: %0.3f, var1: %.3g, var2: %.3g, ratio: %0.5f\n",
+				Rprintf("%6d, maf: %0.4f, var1: %.3g, var2: %.3g, ratio: %0.5f\n",
 					num_tested, AF, var1, var2, ratio);
 			}
 		}
@@ -1194,11 +1194,10 @@ BEGIN_RCPP
 			if (verbose)
 			{
 				Rprintf(
-					"CV for variance ratio estimate using %d markers is %g > ratioCVcutoff (%g)\n",
+					"CV for variance ratio estimate using %d markers is %g > ratioCVcutoff (%g), try more markers ...\n",
 					num_marker, ratioCV, ratioCVcutoff);
 			}
 			num_marker += 10;
-			if (verbose) Rprintf("try %d markers ...\n", num_marker);
 		}
 	}
 
@@ -1291,7 +1290,7 @@ BEGIN_RCPP
 			lst_ratio.push_back(ratio);
 			if (verbose)
 			{
-				Rprintf("%6d, maf: %0.3f, var1: %.3g, var2: %.3g, ratio: %0.5f\n",
+				Rprintf("%6d, maf: %0.4f, var1: %.3g, var2: %.3g, ratio: %0.5f\n",
 					num_tested, AF, var1, var2, ratio);
 			}
 		}
