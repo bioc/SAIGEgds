@@ -89,7 +89,7 @@ Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control
 imbalance and sample relatedness in large-scale genetic association studies.
 Nat Genet (2018). Sep;50(9):1335-1341.
 
-    T Sofer, X Zheng, SM Gogarten, CA Laurie, etc. A fully adjusted two‐stage procedure
+    T Sofer, X Zheng, SM Gogarten, CA Laurie, etc. A fully adjusted two-stage procedure
 for rank-normalization in genetic association studies. 2019.
 Genetic Epidemiology 43(3), 263-275
 }
@@ -105,7 +105,7 @@ gdsfile <- seqOpen(fn)
 
 # load phenotype
 phenofn <- system.file("extdata/pheno.txt.gz", package="SAIGEgds")
-pheno <- read.table(phenofn, head=TRUE, as.is=TRUE)
+pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
 head(pheno)
 
 # fit the null model

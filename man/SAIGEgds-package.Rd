@@ -46,7 +46,7 @@ gdsfile <- seqOpen(fn)
 
 # load phenotype
 phenofn <- system.file("extdata/pheno.txt.gz", package="SAIGEgds")
-pheno <- read.table(phenofn, head=TRUE, as.is=TRUE)
+pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
 head(pheno)
 
 # fit the null model

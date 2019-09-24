@@ -179,7 +179,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (verbose)
+    {
         cat(.crayon_inverse("SAIGE association analysis:\n"))
+        cat(.crayon_underline(date()), "\n", sep="")
+    }
     set.seed(seed)
 
     if (is.character(gdsfile))
@@ -408,7 +411,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
         # calculate the variance ratio
         if (verbose)
-            cat(.crayon_underline("Calculate the average ratio of variances:\n"))
+        {
+            cat(.crayon_inverse("Calculate the average ratio of variances:\n"))
+            cat(.crayon_underline(date()), "\n", sep="")
+        }
         set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
@@ -490,7 +496,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
         # calculate the variance ratio
         if (verbose)
-            cat(.crayon_underline("Calculate the average ratio of variances:\n"))
+        {
+            cat(.crayon_inverse("Calculate the average ratio of variances:\n"))
+            cat(.crayon_underline(date()), "\n", sep="")
+        }
         set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_quant, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
@@ -533,7 +542,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         save(.glmm, file=model.savefn)
     }
     if (verbose)
+    {
+        cat(.crayon_underline(date()), "\n", sep="")
         cat(.crayon_inverse("Done."), "\n", sep="")
+    }
 
     if (!is.na(model.savefn) && model.savefn!="")
         return(invisible(glmm))
