@@ -363,7 +363,7 @@ static void get_geno_ds(int snp_idx, dvec &ds)
 /// Cross-product of standardized genotypes and a numeric vector
 /// Input: b (n_samp-length)
 /// Output: out_b (n_samp-length)
-static COREARRAY_TARGET_CLONES
+static COREARRAY_TARGET_CLONES MATH_OFAST
 	void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 {
 	// initialize
