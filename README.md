@@ -43,8 +43,8 @@ The `install_github()` approach requires that you build from source, i.e. `make`
 ```sh
 git clone https://github.com/AbbVie-ComputationalGenomics/SAIGEgds
 R CMD build SAIGEgds
-R CMD check SAIGEgds_0.9.11.tar.gz
-R CMD INSTALL SAIGEgds_0.9.11.tar.gz
+R CMD check SAIGEgds_0.99.0.tar.gz
+R CMD INSTALL SAIGEgds_0.99.0.tar.gz
 ```
 
 * Singularity container
