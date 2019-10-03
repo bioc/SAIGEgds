@@ -16,7 +16,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
 
 \arguments{
     \item{formula}{an object of class \code{formula} (or one that can be coerced to
-          that class), e.g., \code{y ~ x1 + x2}, see \code{\link{lm}}}
+        that class), e.g., \code{y ~ x1 + x2}, see \code{\link{lm}}}
     \item{data}{a data frame for the formulas}
     \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
     \item{trait.type}{"binary" for binary outcomes, "quantitative" for continuous

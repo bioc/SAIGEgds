@@ -3,19 +3,19 @@ title: "Generalized Mixed Models in GWAS using SAIGEgds"
 author: "Xiuwen Zheng (Genomics Research Center, AbbVie, North Chicago)"
 date: "Aug, 2019"
 output:
-  html_document:
-    theme: spacelab
-    toc: true
-    number_sections: true
-  pdf_document:
-    toc: true
-    toc_depth: 3
+    html_document:
+        theme: spacelab
+        toc: true
+        number_sections: true
+    pdf_document:
+        toc: true
+        toc_depth: 3
 vignette: >
-  %\VignetteIndexEntry{SAIGEgds Tutorial}
-  %\VignetteDepends{SAIGEgds}
-  %\VignetteKeywords{GWAS, PheWAS, mixed models}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+    %\VignetteIndexEntry{SAIGEgds Tutorial}
+    %\VignetteDepends{SAIGEgds}
+    %\VignetteKeywords{GWAS, PheWAS, mixed models}
+    %\VignetteEngine{knitr::rmarkdown}
+    %\VignetteEncoding{UTF-8}
 ---
 
 .

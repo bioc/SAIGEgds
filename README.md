@@ -35,13 +35,13 @@ BiocManager::install("SAIGEgds")
 * Development version from Github
 ```R
 library("devtools")
-install_github("AbbVie-ComputationalGenomics/SAIGEgds")
+install_github("zhengxwen/SAIGEgds")
 ```
 The `install_github()` approach requires that you build from source, i.e. `make` and compilers must be installed on your system -- see the [R FAQ](http://cran.r-project.org/faqs.html) for your operating system; you may also need to install dependencies manually.
 
 * Package rebuilding and unit testing
 ```sh
-git clone https://github.com/AbbVie-ComputationalGenomics/SAIGEgds
+git clone https://github.com/zhengxwen/SAIGEgds
 R CMD build SAIGEgds
 R CMD check SAIGEgds_0.99.0.tar.gz
 R CMD INSTALL SAIGEgds_0.99.0.tar.gz

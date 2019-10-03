@@ -5,7 +5,7 @@ Version: 0.99.0
 Date: 2019-10-02
 Depends: R (>= 3.5.0), gdsfmt (>= 1.20.0), SeqArray (>= 1.24.1), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
-Imports: methods, RcppParallel, SPAtest (>= 3.0.0)
+Imports: methods, stats, utils, RcppParallel, SPAtest (>= 3.0.0)
 Suggests: parallel, crayon, RUnit, knitr, BiocGenerics, SNPRelate
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
         email="xiuwen.zheng@abbvie.com", comment=c(ORCID="0000-0002-1390-0708")),
