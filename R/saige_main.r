@@ -183,7 +183,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         cat(.crayon_inverse("SAIGE association analysis:\n"))
         cat(.crayon_underline(date()), "\n", sep="")
     }
-    set.seed(seed)
+
+    rand_seed <- eval(parse(text="set.seed"))
+    rand_seed(seed)
 
     if (is.character(gdsfile))
     {
@@ -247,7 +249,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     n <- sum(v, na.rm=TRUE)
     if (max.num.snp>0L && n>max.num.snp)
     {
-        set.seed(seed)
+        rand_seed(seed)
         seqSetFilter(gdsfile, variant.sel=sample(which(v), max.num.snp),
             verbose=FALSE)
     }
@@ -415,7 +417,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             cat(.crayon_inverse("Calculate the average ratio of variances:\n"))
             cat(.crayon_underline(date()), "\n", sep="")
         }
-        set.seed(seed)
+        rand_seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
         var.ratio <- var.ratio[order(var.ratio$id), ]
@@ -500,7 +502,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             cat(.crayon_inverse("Calculate the average ratio of variances:\n"))
             cat(.crayon_underline(date()), "\n", sep="")
         }
-        set.seed(seed)
+        rand_seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_quant, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
         var.ratio <- var.ratio[order(var.ratio$id), ]
