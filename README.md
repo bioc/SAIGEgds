@@ -1,4 +1,4 @@
-SAIGEgds: Scalable Implementation of Generalized mixed models using GDS files
+SAIGEgds: Scalable Implementation of Generalized mixed models in PheWAS using GDS files
 ====
 
 ![GPLv3](http://www.gnu.org/graphics/gplv3-88x31.png)
@@ -7,9 +7,9 @@ SAIGEgds: Scalable Implementation of Generalized mixed models using GDS files
 
 ## Features
 
-Scalable and accurate implementation of generalized mixed mode with the support of Genomic Data Structure ([GDS](https://github.com/zhengxwen/SeqArray)) files and highly optimized C++ implementation. It is designed for single variant tests in large-scale phenome-wide association studies (PheWAS) with millions of variants and hundreds of thousands of samples, e.g., [UK Biobank genotype data](https://www.ukbiobank.ac.uk/scientists-3/genetic-data).
+Scalable implementation of generalized mixed mode with the support of Genomic Data Structure ([GDS](https://github.com/zhengxwen/SeqArray)) files and highly optimized C++ implementation. It is designed for single variant tests in large-scale phenome-wide association studies (PheWAS) with millions of variants and hundreds of thousands of samples (e.g., [UK Biobank genotype data](https://www.ukbiobank.ac.uk/scientists-3/genetic-data)), controlling for case-control imbalance and sample structure in single variant association studies.
 
-The implementation of SAIGEgds is based on the original [SAIGE](https://github.com/weizhouUMICH/SAIGE) R package (v0.29.4). It is implemented with optimized C++ codes taking advantage of sparse structure of genotypes. All of the calculation with single-precision floating-point numbers in [SAIGE](https://github.com/weizhouUMICH/SAIGE) are replaced by the double-precision calculation in SAIGEgds. SAIGEgds also implements some of the [SPAtest](https://cran.r-project.org/web/packages/SPAtest/index.html) functions in C to speed up the calculation of Saddlepoint Approximation.
+The implementation of SAIGEgds is based on the original [SAIGE](https://github.com/weizhouUMICH/SAIGE) R package (v0.29.4) [Zhou et al. 2018]. It is implemented with optimized C++ codes taking advantage of sparse structure of genotypes. All of the calculation with single-precision floating-point numbers in [SAIGE](https://github.com/weizhouUMICH/SAIGE) are replaced by the double-precision calculation in SAIGEgds. SAIGEgds also implements some of the [SPAtest](https://cran.r-project.org/web/packages/SPAtest/index.html) functions in C to speed up the calculation of Saddlepoint approximation.
 
 Benchmarks using the UKBiobank White British genotype data (N=430K) with coronary heart disease and simulated cases, show that SAIGEgds is 5 to 6 times faster than the SAIGE R package in the steps of fitting null models and p-value calculations. When used in conjunction with high-performance computing (HPC) clusters and/or cloud resources, SAIGEgds provides an efficient analysis pipeline for biobank-scale PheWAS.
 
@@ -31,20 +31,14 @@ if (!requireNamespace("BiocManager", quietly=TRUE))
     install.packages("BiocManager")
 BiocManager::install("SAIGEgds")
 ```
-
-* Development version from Github
-```R
-library("devtools")
-install_github("zhengxwen/SAIGEgds")
-```
-The `install_github()` approach requires that you build from source, i.e. `make` and compilers must be installed on your system -- see the [R FAQ](http://cran.r-project.org/faqs.html) for your operating system; you may also need to install dependencies manually.
+The `BiocManager::install()` approach may require that you build from source, i.e. `make` and compilers must be installed on your system -- see the [R FAQ](http://cran.r-project.org/faqs.html) for your operating system; you may also need to install dependencies manually.
 
 * Package rebuilding and unit testing
 ```sh
 git clone https://github.com/zhengxwen/SAIGEgds
 R CMD build SAIGEgds
-R CMD check SAIGEgds_0.99.0.tar.gz
-R CMD INSTALL SAIGEgds_0.99.0.tar.gz
+R CMD check SAIGEgds_0.99.2.tar.gz
+R CMD INSTALL SAIGEgds_0.99.2.tar.gz
 ```
 
 * Singularity container
@@ -79,11 +73,11 @@ library(SeqArray)
 library(SAIGEgds)
 
 # open the GDS file for genetic relationship matrix (GRM)
-grm_fn <- system.file("extdata/grm1k_10k_snp.gds", package="SAIGEgds")
+grm_fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds")
 (grm_gds <- seqOpen(grm_fn))
 
 # load phenotype
-phenofn <- system.file("extdata/pheno.txt.gz", package="SAIGEgds")
+phenofn <- system.file("extdata", "pheno.txt.gz", package="SAIGEgds")
 pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
 head(pheno)
 ##   sample.id y     yy      x1 x2
@@ -111,7 +105,7 @@ seqClose(grm_gds)
 ################################
 
 # open the GDS file for association testing
-geno_fn <- system.file("extdata/assoc_100snp.gds", package="SAIGEgds")
+geno_fn <- system.file("extdata", "assoc_100snp.gds", package="SAIGEgds")
 (geno_gds <- seqOpen(geno_fn))
 ## File: assoc_100snp.gds (10.5K)
 ## +    [  ] *

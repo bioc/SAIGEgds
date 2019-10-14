@@ -1,8 +1,8 @@
 Package: SAIGEgds
 Type: Package
-Title: Scalable Implementation of Generalized mixed models using GDS files
-Version: 0.99.1
-Date: 2019-10-04
+Title: Scalable Implementation of Generalized mixed models using GDS files in PheWAS
+Version: 0.99.2
+Date: 2019-10-13
 Depends: R (>= 3.6.0), gdsfmt (>= 1.20.0), SeqArray (>= 1.24.1), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, stats, utils, RcppParallel, SPAtest (>= 3.0.0)
@@ -15,11 +15,12 @@ Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
 Description: Scalable implementation of generalized mixed models with highly optimized
         C++ implementation and the support of Genomic Data Structure (GDS) files.
         It is designed for single variant tests in large-scale phenome-wide association
-        studies (PheWAS) with millions of variants and thousands of samples. The
-        implementation is based on the original SAIGE R package (v0.29.4.4). SAIGEgds
-        also implements some of the SPAtest functions in C to speed up the calculation
-        of Saddlepoint Approximation. Benchmarks show that SAIGEgds is 5 to 6 times
-        faster than the original SAIGE R package.
+        studies (PheWAS) with millions of variants and samples, controlling for sample
+        structure and case-control imbalance. The implementation is based on the original
+        SAIGE R package (v0.29.4.4). SAIGEgds also implements some of the SPAtest
+        functions in C to speed up the calculation of Saddlepoint approximation.
+        Benchmarks show that SAIGEgds is 5 to 6 times faster than the original SAIGE R
+        package.
 License: GPL-3
 SystemRequirements: C++11, GNU make
 VignetteBuilder: knitr

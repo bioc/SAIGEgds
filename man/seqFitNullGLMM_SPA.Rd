@@ -59,7 +59,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
 \details{
     Utilizing the sparse structure of genotypes could significantly improve the
 computational efficiency of model fitting, but it also increases the memory usage.
-    For more details of SAIGE algorithm, please refer to the SAIGE paper.
+    For more details of SAIGE algorithm, please refer to the SAIGE paper
+[Zhou et al. 2018] (see the reference section).
 }
 
 \value{
@@ -100,11 +101,11 @@ Genetic Epidemiology 43(3), 263-275
 
 \examples{
 # open a GDS file
-fn <- system.file("extdata/grm1k_10k_snp.gds", package="SAIGEgds")
+fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds")
 gdsfile <- seqOpen(fn)
 
 # load phenotype
-phenofn <- system.file("extdata/pheno.txt.gz", package="SAIGEgds")
+phenofn <- system.file("extdata", "pheno.txt.gz", package="SAIGEgds")
 pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
 head(pheno)
 
