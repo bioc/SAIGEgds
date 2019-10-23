@@ -1,9 +1,9 @@
 Package: SAIGEgds
 Type: Package
 Title: Scalable Implementation of Generalized mixed models using GDS files in PheWAS
-Version: 0.99.2
+Version: 0.99.3
 Date: 2019-10-13
-Depends: R (>= 3.6.0), gdsfmt (>= 1.20.0), SeqArray (>= 1.24.1), Rcpp
+Depends: R (>= 3.5.0), gdsfmt (>= 1.20.0), SeqArray (>= 1.24.1), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
 Imports: methods, stats, utils, RcppParallel, SPAtest (>= 3.0.0)
 Suggests: parallel, crayon, RUnit, knitr, BiocGenerics, SNPRelate
@@ -13,7 +13,7 @@ Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
         comment="the original author of the SAIGE R package"),
         person("J. Wade", "Davis", role="ctb"))
 Description: Scalable implementation of generalized mixed models with highly optimized
-        C++ implementation and the support of Genomic Data Structure (GDS) files.
+        C++ implementation and integration with Genomic Data Structure (GDS) files.
         It is designed for single variant tests in large-scale phenome-wide association
         studies (PheWAS) with millions of variants and samples, controlling for sample
         structure and case-control imbalance. The implementation is based on the original
@@ -24,4 +24,6 @@ Description: Scalable implementation of generalized mixed models with highly opt
 License: GPL-3
 SystemRequirements: C++11, GNU make
 VignetteBuilder: knitr
+ByteCompile: TRUE
+URL: https://github.com/AbbVie-ComputationalGenomics/SAIGEgds
 biocViews: Software, Genetics, StatisticalMethod
