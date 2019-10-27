@@ -14,9 +14,18 @@ The implementation of SAIGEgds is based on the original [SAIGE](https://github.c
 Benchmarks using the UKBiobank White British genotype data (N=430K) with coronary heart disease and simulated cases, show that SAIGEgds is 5 to 6 times faster than the SAIGE R package in the steps of fitting null models and p-value calculations. When used in conjunction with high-performance computing (HPC) clusters and/or cloud resources, SAIGEgds provides an efficient analysis pipeline for biobank-scale PheWAS.
 
 
+## Bioconductor:
+
+Release Version: v1.0.0 ([http://www.bioconductor.org/packages/SAIGEgds](http://www.bioconductor.org/packages/SAIGEgds))
+
+* [Help Documents](https://rdrr.io/bioc/SAIGEgds/man)
+* [Tutorial](http://www.bioconductor.org/packages/devel/bioc/vignettes/SAIGEgds/inst/doc/SAIGEgds.html)
+* [News](http://www.bioconductor.org/packages/release/bioc/news/SAIGEgds/NEWS)
+
+
 ## Package Maintainer
 
-Dr. [Xiuwen Zheng](xiuwen.zheng@abbvie.com)
+[Xiuwen Zheng](xiuwen.zheng@abbvie.com)
 
 
 ## Installation
