@@ -1,7 +1,7 @@
 Package: SAIGEgds
 Type: Package
 Title: Scalable Implementation of Generalized mixed models using GDS files in PheWAS
-Version: 0.99.3
+Version: 1.0.0
 Date: 2019-10-13
 Depends: R (>= 3.5.0), gdsfmt (>= 1.20.0), SeqArray (>= 1.24.1), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel
