@@ -104,9 +104,10 @@ pheno <- data.frame(
     x1 = rnorm(length(sampid)),
     x2 = rnorm(length(sampid)),
     stringsAsFactors = FALSE)
+head(pheno)
 
 # model fitting
-glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_fn, trait.type="binary")
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_fn, trait.type="binary", sample.col="sample.id")
 ```
 
 .
