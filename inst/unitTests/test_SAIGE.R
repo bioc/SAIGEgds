@@ -62,11 +62,13 @@ test.saige_fit_null_model <- function()
 
 	# fit the null model, check binary outcomes
 	glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
+	glmm$var.ratio <- glmm$var.ratio[, -3]
 	checkEquals(mod1, glmm, "check the SAIGE parameters (binary outcomes)",
 		tolerance=1e-4)
 
 	# fit the null model, check quantitative outcomes
 	glmm <- seqFitNullGLMM_SPA(yy ~ x1 + x2, pheno, gdsfile, trait.type="quantitative")
+	glmm$var.ratio <- glmm$var.ratio[, -3]
 	checkEquals(mod2, glmm, "check the SAIGE parameters (quantitative outcomes)",
 		tolerance=1e-4)
 }
