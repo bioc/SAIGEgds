@@ -1,3 +1,9 @@
+CHANGES IN VERSION 1.0.2
+-------------------------
+
+    o fix an issue when there is no covariate in the formula (e.g., y ~ 1)
+
+
 CHANGES IN VERSION 1.0.1
 -------------------------
 
@@ -5,6 +11,9 @@ CHANGES IN VERSION 1.0.1
       `seqAssocGLMM_SPA()`
 
     o change the output column 'AC.alt' to 'mac' in `seqAssocGLMM_SPA()`
+
+    o retry model fitting at least 10 times if matrix is singular or not
+      positive definite, or large variance is observed
 
 
 CHANGES IN VERSION 1.0.0

@@ -49,7 +49,9 @@ test.saige_fit_null_model <- function()
 
 	# load the previous models
 	mod1 <- get(load(system.file("unitTests", "saige_model.rda", package="SAIGEgds")))
+	class(mod1) <- "ClassSAIGE_NullModel"
 	mod2 <- get(load(system.file("unitTests", "saige_model_quant.rda", package="SAIGEgds")))
+	class(mod2) <- "ClassSAIGE_NullModel"
 
 	# open a GDS file
 	fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds")
@@ -78,7 +80,9 @@ test.saige_pval <- function()
 {
 	# load the previous models and results
 	mod1 <- get(load(system.file("unitTests", "saige_model.rda", package="SAIGEgds")))
+	class(mod1) <- "ClassSAIGE_NullModel"
 	mod2 <- get(load(system.file("unitTests", "saige_model_quant.rda", package="SAIGEgds")))
+	class(mod2) <- "ClassSAIGE_NullModel"
 	pval1 <- get(load(system.file("unitTests", "saige_pval.rda", package="SAIGEgds")))
 	pval2 <- get(load(system.file("unitTests", "saige_pval_quant.rda", package="SAIGEgds")))
 

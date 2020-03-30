@@ -74,25 +74,11 @@ SIMD <- function() .Call(saige_simd_version)
 }
 
 
-# Internal model checking
-.check_saige_model <- function(obj)
-{
-    stopifnot(is.list(obj))
-    for (nm in c("sample.id", "trait.type", "var.ratio"))
-    {
-        if (!(nm %in% names(obj)))
-            stop("'", nm, "' should be stored in the SAIGE model.")
-    }
-    if (!(obj$trait.type %in% c("binary", "quantitative")))
-        stop("'trait.type' should be binary or quantitative.")
-    invisible()
-}
-
-
 # Write to GDS file
 .write_gds <- function(out.gds, out.nm, in.gds, in.nm, cm)
 {
-    n <- add.gdsn(out.gds, out.nm, storage=index.gdsn(in.gds, in.nm), compress=cm)
+    i <- index.gdsn(in.gds, in.nm)
+    n <- add.gdsn(out.gds, out.nm, storage=i, compress=cm)
     seqApply(in.gds, in.nm, `c`, as.is=n)
     readmode.gdsn(n)
     invisible()
@@ -296,11 +282,12 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             ifelse(num.thread>1L, "s", ""), "\n", sep="")
     }
 
+    X <- model.matrix(formula, data)
+    if (NCOL(X) <= 1L) X.transform <- FALSE
     if (isTRUE(X.transform))
     {
         if (verbose)
             cat("Transform on the design matrix with QR decomposition:\n")
-        X <- model.matrix(formula, data)
         frm <- model.frame(formula, data)
         y <- model.response(frm, type="any")
         # check multi-collinearity
@@ -554,6 +541,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     glmm$trait.type <- trait.type
     glmm$sample.id <- seqGetData(gdsfile, "sample.id")
     glmm$variant.id <- seqGetData(gdsfile, "variant.id")
+    class(glmm) <- "ClassSAIGE_NullModel"
 
     if (!is.na(model.savefn) && model.savefn!="")
     {
@@ -572,3 +560,6 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     else
         return(glmm)
 }
+
+
+print.ClassSAIGE_NullModel <- function(x, ...) str(x)

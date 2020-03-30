@@ -118,7 +118,7 @@ head(pheno)
 
 # fit the null model
 glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary")
-
+glmm
 
 # close the GDS file
 seqClose(gdsfile)
