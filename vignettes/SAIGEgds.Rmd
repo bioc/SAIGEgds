@@ -1,5 +1,5 @@
 ---
-title: "Generalized Mixed Models in PheWAS using SAIGEgds"
+title: "Scalable Generalized Mixed Models in PheWAS using SAIGEgds"
 author: "Xiuwen Zheng (Genomics Research Center, AbbVie, North Chicago)"
 date: "Mar, 2020"
 output:
@@ -49,6 +49,7 @@ The `BiocManager::install()` approach may require that you build from source, i.
 # Examples
 
 ```{r message=FALSE}
+library(SeqArray)
 library(SAIGEgds)
 
 # the genotype file in SeqArray GDS format (1000 Genomes Phase1, chromosome 22)
@@ -182,8 +183,10 @@ unlink(c("grm_geno.gds", "assoc.gds"), force=TRUE)
 .
 
 
-# Also See
+# See also
 
 [SeqArray](http://www.bioconductor.org/packages/SeqArray): Data Management of Large-scale Whole-genome Sequence Variant Calls
 
 [SNPRelate](http://www.bioconductor.org/packages/SNPRelate): Parallel Computing Toolset for Relatedness and Principal Component Analysis of SNP Data
+
+[gds2bgen](https://github.com/zhengxwen/gds2bgen): Format conversion from bgen to gds

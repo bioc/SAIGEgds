@@ -76,6 +76,7 @@ browseVignettes("SAIGEgds")
 ## Examples
 
 ```R
+library(SeqArray)
 library(SAIGEgds)
 
 # open the GDS file for genetic relationship matrix (GRM)
@@ -159,7 +160,7 @@ Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J, Va
 Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D. SeqArray -- A storage-efficient high-performance data format for WGS variant calls. *Bioinformatics* (2017). [DOI: 10.1093/bioinformatics/btx145](http://dx.doi.org/10.1093/bioinformatics/btx145).
 
 
-## Also See
+## See Also
 
 [SeqArray](https://www.bioconductor.org/packages/SeqArray): Data management of large-scale whole-genome sequence variant calls
 
