@@ -15,9 +15,12 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, dsnode="",
 \arguments{
     \item{gdsfile}{a SeqArray GDS filename, or a GDS object}
     \item{modobj}{an R object for SAIGE model parameters}
-    \item{maf}{minor allele frequency threshold (checking >= maf)}
-    \item{mac}{minor allele count threshold (checking >= mac)}
-    \item{missing}{missing threshold for variants (checking <= missing)}
+    \item{maf}{minor allele frequency threshold (checking >= maf), \code{NaN}
+        for no filter}
+    \item{mac}{minor allele count threshold (checking >= mac), \code{NaN}
+        for no filter}
+    \item{missing}{missing threshold for variants (checking <= missing),
+        \code{NaN} for no filter}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
     \item{spa.pval}{the p-value threshold for SPA adjustment, 0.05 by default
@@ -38,7 +41,8 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, dsnode="",
 
 \details{
     The original SAIGE R package uses 0.05 as a threshold for unadjusted
-p-values to further calculate SPA-adjusted p-values. If \code{var.ratio=NaN},
+p-values (based on asymptotic normality) to further calculate adjusted
+p-values (Saddlepoint approximation, SPA). If \code{var.ratio=NaN},
 the average of variance ratios (\code{mean(modobj$var.ratio$ratio)}) is used
 instead.
     For more details of SAIGE algorithm, please refer to the SAIGE paper
@@ -55,16 +59,16 @@ a file:
     \item{ref}{the reference allele;}
     \item{alt}{the alternative allele;}
     \item{AF.alt}{allele frequency for the alternative allele; the minor allele
-        frequency is \code{pmin(AF.alt, 1-AF.alt)}}
+        frequency is \code{pmin(AF.alt, 1-AF.alt)};}
     \item{mac}{minor allele count; the allele count for the alternative allele
-        is \code{ifelse(AF.alt<=0.5, mac, 2*num-mac)}}
+        is \code{ifelse(AF.alt<=0.5, mac, 2*num-mac)};}
     \item{num}{the number of samples with non-missing genotypes;}
     \item{beta}{beta coefficient, odds ratio if binary outcomes (alternative
         allele vs. reference allele);}
     \item{SE}{standard error for beta coefficient;}
-    \item{pval}{adjusted p-value with SPA;}
-    \item{pval.noadj}{p-value without adjustment (it is used for model
-        checking only);}
+    \item{pval}{adjusted p-value with the Saddlepoint approximation method;}
+    \item{pval.noadj}{p-values based on asymptotic normality (could be 0 if it
+        is too small, e.g., \code{pnorm(-50) = 0} in R;}
     \item{converged}{whether the SPA algorithm converges or not for adjusted
         p-values.}
 }

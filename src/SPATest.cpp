@@ -39,7 +39,7 @@ inline static double sq(double v) { return v*v; }
 // Cumulant-generating function (CGF) of the score statistic: K(t)
 
 /// The log term of CGF
-inline static COREARRAY_TARGET_CLONES MATH_OFAST  // auto-vectorize if possible
+inline static COREARRAY_TARGET_CLONES
 	double Korg(double t, size_t n_g, const double mu[], const double g[])
 {
 	double sum = 0;
@@ -53,7 +53,7 @@ inline static COREARRAY_TARGET_CLONES MATH_OFAST  // auto-vectorize if possible
 
 
 /// The first term of the first-order derivative of CGF
-inline static COREARRAY_TARGET_CLONES MATH_OFAST  // auto-vectorize if possible
+inline static COREARRAY_TARGET_CLONES
 	double K1_adj(double t, size_t n_g, const double mu[], const double g[],
 		double q)
 {
