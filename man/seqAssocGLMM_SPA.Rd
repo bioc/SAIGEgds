@@ -59,16 +59,16 @@ a file:
     \item{ref}{the reference allele;}
     \item{alt}{the alternative allele;}
     \item{AF.alt}{allele frequency for the alternative allele; the minor allele
-        frequency is \code{pmin(AF.alt, 1-AF.alt)}}
+        frequency is \code{pmin(AF.alt, 1-AF.alt)};}
     \item{mac}{minor allele count; the allele count for the alternative allele
-        is \code{ifelse(AF.alt<=0.5, mac, 2*num-mac)}}
+        is \code{ifelse(AF.alt<=0.5, mac, 2*num-mac)};}
     \item{num}{the number of samples with non-missing genotypes;}
     \item{beta}{beta coefficient, odds ratio if binary outcomes (alternative
         allele vs. reference allele);}
     \item{SE}{standard error for beta coefficient;}
-    \item{pval}{adjusted p-value with SPA;}
-    \item{pval.noadj}{p-value without adjustment (it is used for model
-        checking only);}
+    \item{pval}{adjusted p-value with the Saddlepoint approximation method;}
+    \item{pval.noadj}{p-values based on asymptotic normality (could be 0 if it
+        is too small, e.g., \code{pnorm(-50) = 0} in R;}
     \item{converged}{whether the SPA algorithm converges or not for adjusted
         p-values.}
 }

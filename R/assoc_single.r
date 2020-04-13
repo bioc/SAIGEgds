@@ -187,8 +187,9 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
             .balancing=TRUE, .bl_size=50000L, .bl_progress=verbose,
             FUN = function(f, dsnode, pverbose)
             {
-                seqApply(f, dsnode, .cfunction("saige_score_test_bin"), as.is="list",
-                    parallel=FALSE, .progress=pverbose, .list_dup=FALSE, .useraw=NA)
+                seqApply(f, dsnode, .cfunction("saige_score_test_bin"),
+                    as.is="list", parallel=FALSE, .progress=pverbose,
+                    .list_dup=FALSE, .useraw=NA)
             }, dsnode=dsnode, pverbose=verbose & (njobs==1L))
     } else if (modobj$trait.type == "quantitative")
     {
@@ -197,8 +198,9 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
             .balancing=TRUE, .bl_size=50000L, .bl_progress=verbose,
             FUN = function(f, dsnode, pverbose)
             {
-                seqApply(f, dsnode, .cfunction("saige_score_test_quant"), as.is="list",
-                    parallel=FALSE, .progress=pverbose, .list_dup=FALSE, .useraw=NA)
+                seqApply(f, dsnode, .cfunction("saige_score_test_quant"),
+                    as.is="list", parallel=FALSE, .progress=pverbose,
+                    .list_dup=FALSE, .useraw=NA)
             }, dsnode=dsnode, pverbose=verbose & (njobs==1L))
     } else {
         stop("Invalid 'modobj$trait.type'.")
