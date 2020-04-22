@@ -32,11 +32,25 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         stop("`res.compress` should be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none.")
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
+    if (verbose)
+        cat(.crayon_inverse("SAIGE association analysis:\n"))
+
     # check model
     if (is.character(modobj))
     {
         stopifnot(length(modobj)==1L)
-        modobj <- get(load(modobj))
+        if (grepl("\\.(rda|RData)$", modobj, ignore.case=TRUE))
+        {
+            if (verbose)
+                cat("    load the null model from ", sQuote(modobj), "\n", sep="")
+            modobj <- get(load(modobj))
+        } else if (grepl("\\.rds$", modobj, ignore.case=TRUE))
+        {
+            if (verbose)
+                cat("    load the null model from ", sQuote(modobj), "\n", sep="")
+            modobj <- readRDS(modobj)
+        } else
+            stop("Invalid extended file name of model: ", modobj)
     }
     stopifnot(inherits(modobj, "ClassSAIGE_NullModel"))
 
@@ -44,7 +58,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
     if (is.character(gdsfile))
     {
         if (verbose)
-            cat("Open '", gdsfile, "' ...\n", sep="")
+            cat("    open ", sQuote(gdsfile), "\n", sep="")
         gdsfile <- seqOpen(gdsfile)
         on.exit(seqClose(gdsfile))
     } else {
@@ -74,9 +88,6 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
             }
         }
     }
-
-    if (verbose)
-        cat(.crayon_inverse("SAIGE association analysis:\n"))
 
     # check sample ID
     seqSetFilter(gdsfile, sample.id=modobj$sample.id, verbose=FALSE)
@@ -291,19 +302,22 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         # save file?
         if (isfn)
         {
+            cm <- switch(res.compress, LZMA="xz", LZMA_RA="xz", ZIP="gzip",
+                ZIP_RA="gzip", TRUE)
+            if (verbose)
+                cat("Save to '", res.savefn, "' ...\n", sep="")
             if (grepl("\\.(rda|RData)$", res.savefn, ignore.case=TRUE))
             {
-                if (verbose)
-                    cat("Save to '", res.savefn, "' ...\n", sep="")
-                cm <- switch(res.compress, LZMA="xz", LZMA_RA="xz",
-                    ZIP="gzip", ZIP_RA="gzip", none="gzip", TRUE)
                 .res <- ans
                 save(.res, file=res.savefn, compress=cm)
-                if (verbose) cat(.crayon_inverse("Done.\n"))
-                invisible()
+            } else if (grepl("\\.rds$", res.savefn, ignore.case=TRUE))
+            {
+                saveRDS(ans, file=res.savefn, compress=cm)
             } else {
-                stop("Unknown format of the output file, and it should be RData or gds.")
+                stop("Unknown format of the output file, and it should be RData, RDS or gds.")
             }
+            if (verbose) cat(.crayon_inverse("Done.\n"))
+            invisible()
         } else {
             if (verbose) cat(.crayon_inverse("Done.\n"))
             ans
