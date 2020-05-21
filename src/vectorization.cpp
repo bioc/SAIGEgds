@@ -37,6 +37,7 @@ static COREARRAY_TARGET_DEFAULT const char *simd_version() { return "generic"; }
 static COREARRAY_TARGET_SSE2 const char *simd_version() { return "SSE2"; }
 #endif
 
+#if (!defined(__GNUC__) || (__GNUC__ < 10))
 #ifdef COREARRAY_TARGET_SSE3
 static COREARRAY_TARGET_SSE3 const char *simd_version() { return "SSE3"; }
 #endif
@@ -51,6 +52,7 @@ static COREARRAY_TARGET_AVX2 const char *simd_version() { return "AVX2"; }
 
 #ifdef COREARRAY_TARGET_AVX512F
 static COREARRAY_TARGET_AVX512F const char *simd_version() { return "AVX512F"; }
+#endif
 #endif
 
 /// SIMD version
