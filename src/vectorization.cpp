@@ -2,7 +2,7 @@
 //
 // vectorization.cpp: optimization with vectorization
 //
-// Copyright (C) 2019    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -29,43 +29,68 @@ using namespace std;
 
 // ========================================================================= //
 
-#ifdef COREARRAY_TARGET_DEFAULT
-static COREARRAY_TARGET_DEFAULT const char *simd_version() { return "generic"; }
-#endif
-
-#ifdef COREARRAY_TARGET_SSE2
-static COREARRAY_TARGET_SSE2 const char *simd_version() { return "SSE2"; }
-#endif
-
-#if (!defined(__GNUC__) || (__GNUC__ < 10))
-#ifdef COREARRAY_TARGET_SSE3
-static COREARRAY_TARGET_SSE3 const char *simd_version() { return "SSE3"; }
-#endif
-
-#ifdef COREARRAY_TARGET_AVX
-static COREARRAY_TARGET_AVX const char *simd_version() { return "AVX"; }
-#endif
-
-#ifdef COREARRAY_TARGET_AVX2
-static COREARRAY_TARGET_AVX2 const char *simd_version() { return "AVX2"; }
-#endif
-
-#ifdef COREARRAY_TARGET_AVX512F
-static COREARRAY_TARGET_AVX512F const char *simd_version() { return "AVX512F"; }
-#endif
-#endif
-
 /// SIMD version
 extern "C" SEXP saige_simd_version()
 {
-	const char *s = simd_version();
 #ifdef COREARRAY_HAVE_TARGET_CLONES
-	char buffer[256];
-	stpncpy(buffer, s, sizeof(buffer));
-	strcpy(buffer+strlen(s), " (FMV)");
-	s = buffer;
+	const bool fmv = true;
+	const bool avx512f = __builtin_cpu_supports("avx512f") != 0;
+	const bool avx2 = __builtin_cpu_supports("avx2") != 0;
+	const bool avx  = __builtin_cpu_supports("avx")  != 0;
+	const bool sse3 = __builtin_cpu_supports("sse3") != 0;
+	const bool sse2 = __builtin_cpu_supports("sse2") != 0;
+#else
+	const bool fmv = false;
+#ifdef __AVX512F__
+	const bool avx512f = true;
+#else
+	const bool avx512f = false;
 #endif
-	return mkString(s);
+#ifdef __AVX2__
+	const bool avx2 = true;
+#else
+	const bool avx2 = false;
+#endif
+#ifdef __AVX__
+	const bool avx = true;
+#else
+	const bool avx = false;
+#endif
+#ifdef __SSE3__
+	const bool sse3 = true;
+#else
+	const bool sse3 = false;
+#endif
+#ifdef __SSE2__
+	const bool sse2 = true;
+#else
+	const bool sse2 = false;
+#endif
+#endif
+	char buffer[256], *p=buffer;
+	if (avx512f)
+	{
+		strcpy(p, "AVX512F"); p += strlen(p);
+	} else if (avx2)
+	{
+		strcpy(p, "AVX2"); p += strlen(p);
+	} else if (avx)
+	{
+		strcpy(p, "AVX"); p += strlen(p);
+	} else if (sse3)
+	{
+		strcpy(p, "SSE3"); p += strlen(p);
+	} else if (sse2)
+	{
+		strcpy(p, "SSE2"); p += strlen(p);
+	} else {
+		strcpy(p, "basic x86"); p += strlen(p);
+	}
+	if (fmv)
+	{
+		strcpy(p, " (FMV)"); p += strlen(p);
+	}
+	return mkString(buffer);
 }
 
 

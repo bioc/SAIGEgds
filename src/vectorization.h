@@ -2,7 +2,7 @@
 //
 // vectorization.h: optimization with vectorization
 //
-// Copyright (C) 2019    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -35,7 +35,7 @@
 
 
 // Function multiversioning (requiring target_clones)
-#if (defined(__GNUC__) && (__GNUC__ >= 6) && !defined(COREARRAY_NO_TARGET)) && !defined(__AVX512F__) && !defined(_WIN32)
+#if (defined(__GNUC__) && (__GNUC__ >= 6) && !defined(COREARRAY_NO_TARGET)) && !defined(__AVX512F__) && !defined(_WIN32) && !defined(__APPLE__)
 #   if defined(__x86_64__) || defined(__i386__)
 #       define COREARRAY_HAVE_TARGET
 #       define COREARRAY_TARGET(opt)    __attribute__((target(opt)))
@@ -50,29 +50,6 @@
 #else
 #   define COREARRAY_TARGET(opt)
 #   define COREARRAY_TARGET_CLONES
-#endif
-
-#ifdef COREARRAY_HAVE_TARGET
-#   define COREARRAY_TARGET_DEFAULT    COREARRAY_TARGET("default")
-#   define COREARRAY_TARGET_SSE2       COREARRAY_TARGET("sse2")
-#   define COREARRAY_TARGET_SSE3       COREARRAY_TARGET("sse3")
-#   define COREARRAY_TARGET_AVX        COREARRAY_TARGET("avx")
-#   define COREARRAY_TARGET_AVX2       COREARRAY_TARGET("avx2")
-#   define COREARRAY_TARGET_AVX512F    COREARRAY_TARGET("avx512f")
-#else
-#   if defined(__AVX512F__)
-#       define COREARRAY_TARGET_AVX512F
-#   elif defined(__AVX2__)
-#       define COREARRAY_TARGET_AVX2
-#   elif defined(__AVX__)
-#       define COREARRAY_TARGET_AVX
-#   elif defined(__SSE3__)
-#       define COREARRAY_TARGET_SSE3
-#   elif defined(__SSE2__)
-#       define COREARRAY_TARGET_SSE2
-#   else
-#       define COREARRAY_TARGET_DEFAULT
-#   endif
 #endif
 
 
