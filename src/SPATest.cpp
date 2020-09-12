@@ -305,7 +305,7 @@ extern "C" double COREARRAY_TARGET_CLONES
 	double qinv = -s + m1;
 	double pval_noadj = Rf_pchisq(s*s/var1, 1, FALSE, FALSE);
 	double pval;
-	double NAmu, NAsigma;
+	double NAmu=0, NAsigma=0;
 	double g_pos=0, g_neg=0;
 	double init=false;
 
