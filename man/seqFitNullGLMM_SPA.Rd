@@ -53,8 +53,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile, trait.type=c("binary", "quantitative"
     \item{geno.sparse}{if \code{TRUE}, store the sparse structure for genotypes;
         otherwise, save genotypes in a 2-bit dense matrix; see details}
     \item{num.thread}{the number of threads}
-    \item{model.savefn}{the filename of model output, R data file '.rda' or
-        '.RData'}
+    \item{model.savefn}{the filename of model output, R data file '.rda',
+        '.RData', or '.rds'}
     \item{seed}{an integer as a seed for random numbers}
     \item{fork.loading}{load genotypes via forking or not; forking processes
         in Unix can reduce loading time of genotypes, but may double the memory

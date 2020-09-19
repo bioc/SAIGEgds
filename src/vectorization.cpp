@@ -99,6 +99,89 @@ extern "C" SEXP saige_simd_version()
 namespace vectorization
 {
 
+/// get mean and sd
+COREARRAY_TARGET_CLONES
+	void f64_mean_sd(const double x[], size_t n, double &mean, double &sd)
+{
+	size_t m=0;
+	double sum = 0, sum2 = 0;
+	for (size_t i=0; i < n; i++)
+	{
+		const double v = x[i];
+		if (isfinite(v))
+			{ m++; sum += v; sum2 += v*v; }
+	}
+	mean = sd = R_NaN;
+	if (m > 0)
+	{
+		mean = sum / m;
+		if (m > 1) sd = sqrt((sum2 - sum*sum/m) / (m - 1));
+	}
+}
+
+/// get max and min
+void f64_maxmin(const double x[], size_t n, double &max, double &min)
+{
+	double vmax = -INFINITY, vmin = INFINITY;
+	for (size_t i=0; i < n; i++)
+	{
+		const double v = x[i];
+		if (isfinite(v))
+		{
+			if (v > vmax) vmax = v;
+			if (v < vmin) vmin = v;
+		}
+	}
+	if (!isfinite(vmax)) vmax = R_NaN;
+	if (!isfinite(vmin)) vmin = R_NaN;
+	max = vmax; min = vmin;
+}
+
+/// get max, min, median
+void f64_medmaxmin(const double x[], size_t n, double &med, double &max, double &min)
+{
+	double vmax = -INFINITY, vmin = INFINITY;
+	size_t num = 0;
+	for (size_t i=0; i < n; i++)
+	{
+		const double v = x[i];
+		if (isfinite(v))
+		{
+			if (v > vmax) vmax = v;
+			if (v < vmin) vmin = v;
+			num ++;
+		}
+	}
+	if (!isfinite(vmax)) vmax = R_NaN;
+	if (!isfinite(vmin)) vmin = R_NaN;
+	max = vmax; min = vmin;
+	// find median
+	if (num > 0)
+	{
+		const size_t i1_med = (num - 1) / 2;
+		const size_t i2_med = num / 2;
+		double v1, v2;
+		vmin = INFINITY; num = 0;
+		for (size_t i=0; i < n; i++)
+		{
+			const double v = x[i];
+			if (isfinite(v))
+			{
+				if (v <= vmin)
+				{
+					vmin = v;
+					if (num == i1_med) v1 = v;
+					if (num == i2_med) v2 = v;
+					if (num > i2_med) break;
+					num ++;
+				}
+			}
+		}
+		med = (v1 + v2) * 0.5;
+	} else
+		med = R_NaN;
+}
+
 /// return allele frequency and impute genotype using the mean
 COREARRAY_TARGET_CLONES
 	void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC, int &Num, int buf_idx[])
@@ -171,12 +254,26 @@ COREARRAY_TARGET_CLONES MATH_OFAST
 
 
 /// sum_i x[i]
-COREARRAY_TARGET_CLONES MATH_OFAST
-	double f64_sum(size_t n, const double *x)
+COREARRAY_TARGET_CLONES MATH_OFAST double f64_sum(size_t n, const double *x)
 {
 	double sum = 0;
 	for (size_t i=0; i < n; i++) sum += x[i];
 	return sum;
+}
+
+
+/// x[i] = x[i] / sum_i x[i] (excluding not finite numbers)
+COREARRAY_TARGET_CLONES void f64_normalize(size_t n, double *x)
+{
+	double sum = 0;
+	for (size_t i=0; i < n; i++)
+		if (isfinite(x[i])) sum += x[i];
+	if (sum > 0)
+	{
+		sum = 1 / sum;
+		for (size_t i=0; i < n; i++)
+			if (isfinite(x[i])) x[i] *= sum;
+	}
 }
 
 

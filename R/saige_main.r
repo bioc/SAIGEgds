@@ -4,7 +4,7 @@
 #
 # Description:
 #     Scalable and accurate implementation of generalized mixed models
-# using GDS files
+# using GDS framework
 #
 # Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
@@ -38,6 +38,12 @@
     body(fn) <- f
     fn
 }
+
+.cat <- function(...) cat(..., "\n", sep="")
+
+.load_pkg <- quote({
+    library(Rcpp, quietly=TRUE)
+    library(SAIGEgds, quietly=TRUE) })
 
 .pretty <- function(x) prettyNum(x, big.mark=",", scientific=FALSE)
 
@@ -73,7 +79,6 @@ SIMD <- function() .Call(saige_simd_version)
     s
 }
 
-
 # Write to GDS file
 .write_gds <- function(out.gds, out.nm, in.gds, in.nm, cm)
 {
@@ -82,6 +87,45 @@ SIMD <- function() .Call(saige_simd_version)
     seqApply(in.gds, in.nm, `c`, as.is=n)
     readmode.gdsn(n)
     invisible()
+}
+
+# Check null model
+.check_modobj <- function(modobj, verbose)
+{
+    if (is.character(modobj))
+    {
+        stopifnot(length(modobj)==1L)
+        if (verbose)
+            .cat("    load the null model from ", sQuote(modobj))
+        if (grepl("\\.(rda|RData)$", modobj, ignore.case=TRUE))
+        {
+            modobj <- get(load(modobj))
+        } else if (grepl("\\.rds$", modobj, ignore.case=TRUE))
+        {
+            modobj <- readRDS(modobj)
+        } else
+            stop("It should be an RData, rda or rds file.")
+    }
+    stopifnot(inherits(modobj, "ClassSAIGE_NullModel"))
+    modobj
+}
+
+
+#######################################################################
+# p-value from Cauchy-based ACAT combination method
+#
+
+pACAT <- function(p, w=NULL)
+{
+    .Call(saige_acat_p, p, w)
+}
+
+pACAT2 <- function(p, maf, wbeta=c(1,25))
+{
+    stopifnot(is.numeric(wbeta), length(wbeta)==2L)
+    stopifnot(length(p) == length(maf))
+    w <- dbeta(maf, wbeta[1L], wbeta[2L])
+    .Call(saige_acat_p, p, w * w * maf * (1-maf))
 }
 
 
@@ -101,12 +145,13 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
     if (length(fn) == 1L)
     {
         if (verbose)
-            cat("Loading '", fn, "' ...\n", sep="")
+            .cat("Loading ", sQuote(fn), " ...")
         if (grepl("\\.gds$", fn, ignore.case=TRUE))
         {
             f <- openfn.gds(fn)
             on.exit(closefn.gds(f))
-            if (identical(get.attr.gdsn(f$root)$FileFormat, "SAIGE_OUTPUT"))
+            fm <- get.attr.gdsn(f$root)$FileFormat[1L]
+            if (fm %in% c("SAIGE_OUTPUT", "SAIGE_OUTPUT_SET"))
             {
                 if (is.null(varnm))
                     varnm <- ls.gdsn(f$root)
@@ -116,17 +161,20 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
                     rv[[nm]] <- readex.gdsn(index.gdsn(f, nm), index)
                 rv <- as.data.frame(rv, stringsAsFactors=FALSE)
             } else {
-                stop("FileFormat should be 'SAIGE_OUTPUT'.")
+                stop("FileFormat should be 'SAIGE_OUTPUT' or 'SAIGE_OUTPUT_BURDEN'.")
             }
         } else if (grepl("\\.(rda|RData)$", fn, ignore.case=TRUE))
         {
             rv <- get(load(fn))
             if (!is.null(varnm)) rv <- rv[, varnm]
             if (!is.null(index)) rv <- rv[index, ]
-        } else {
-            stop(sprintf("Unknown format (%s), should be RData or gds.",
-                basename(fn)))
-        }
+        } else if (grepl("\\.rds$", fn, ignore.case=TRUE))
+        {
+            rv <- readRDS(fn)
+            if (!is.null(varnm)) rv <- rv[, varnm]
+            if (!is.null(index)) rv <- rv[index, ]
+        } else
+            stop("Unknown format, should be RData, RDS or gds.")
     } else {
         if (!is.null(index))
             stop("'index' should be NULL for multiple input files.")
@@ -134,7 +182,7 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
             seqSAIGE_LoadPval(nm, varnm, verbose=verbose), simplify=FALSE)
         if (verbose) cat("Merging ...")
         rv <- Reduce(rbind, rv)
-        if (verbose) cat(" [done]\n")
+        if (verbose) cat(" [Done]\n")
     }
     rv
 }
@@ -181,8 +229,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (verbose)
     {
-        cat(.crayon_inverse("SAIGE association analysis:\n"))
-        cat(.crayon_underline(date()), "\n", sep="")
+        .cat(.crayon_inverse("SAIGE association analysis:"))
+        .cat(.crayon_underline(date()))
     }
 
     rand_seed <- eval(parse(text="set.seed"))
@@ -191,7 +239,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (is.character(gdsfile))
     {
         if (verbose)
-            cat("Open the genotype file '", gdsfile, "'\n", sep="")
+            .cat("Open ", sQuote(gdsfile))
         gdsfile <- seqOpen(gdsfile)
         on.exit(seqClose(gdsfile))
     } else {
@@ -266,7 +314,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (verbose)
     {
         cat("Fit the null model:", format(formula), "+ var(GRM)\n")
-        cat("    # of samples: ", .pretty(n_samp), "\n", sep="")
+        .cat("    # of samples: ", .pretty(n_samp))
         cat("    # of variants:", .pretty(n_var))
         if (n > max.num.snp)
             cat(" (randomly selected from ", .pretty(n), ")", sep="")
@@ -279,8 +327,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     setThreadOptions(num.thread)
     if (verbose)
     {
-        cat("    using ", num.thread, " thread",
-            ifelse(num.thread>1L, "s", ""), "\n", sep="")
+        .cat("    using ", num.thread, " thread",
+            ifelse(num.thread>1L, "s", ""))
     }
 
     X <- model.matrix(formula, data)
@@ -299,9 +347,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             X <- X[, -i_na]
             if (verbose)
             {
-                cat("    exclude ", length(i_na), " covariates (",
+                .cat("    exclude ", length(i_na), " covariates (",
                     paste(colnames(X)[i_na], collapse=", "),
-                    ") to avoid multi collinearity.\n", sep="")
+                    ") to avoid multi collinearity.")
             }
         }
         X_name <- colnames(X)
@@ -313,7 +361,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         colnames(data) <- c("y", nm)
         formula <- as.formula(paste("y ~", paste(nm, collapse=" + "), "-1"))
         if (verbose)
-            cat("    new formula: ", format(formula), "\n", sep="")
+            .cat("    new formula: ", format(formula))
     }
 
     # load SNP genotypes
@@ -338,9 +386,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     }
     if (verbose)
     {
-        cat("    using ")
-        cat(.pretty_size(as.double(object.size(packed.geno))))
-        cat(ifelse(isTRUE(geno.sparse), " (sparse matrix)\n", " (dense matrix)\n"))
+        .cat("    using ", .pretty_size(as.double(object.size(packed.geno))),
+            " (", ifelse(isTRUE(geno.sparse), "sparse", "dense"), " matrix)")
     }
 
     # initialize internal variables and buffers
@@ -378,7 +425,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # binary outcome
         if (verbose)
         {
-            cat("Binary outcome: ", phenovar, "\n", sep="")
+            .cat("Binary outcome: ", phenovar)
             if (isTRUE(X.transform))
                 y <- data$y
             else
@@ -420,8 +467,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # calculate the variance ratio
         if (verbose)
         {
-            cat(.crayon_inverse("Calculate the average ratio of variances:\n"))
-            cat(.crayon_underline(date()), "\n", sep="")
+            .cat(.crayon_inverse("Calculate the average ratio of variances:"))
+            .cat(.crayon_underline(date()))
         }
         rand_seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
@@ -439,7 +486,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # quantitative outcome
         if (verbose)
         {
-            cat("Quantitative outcome: ", phenovar, "\n", sep="")
+            .cat("Quantitative outcome: ", phenovar)
             if (isTRUE(X.transform))
                 y <- data$y
             else
@@ -459,8 +506,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             data[[phenovar]] <- new.y
             if (verbose)
             {
-                cat("Inverse normal transformation on residuals with standard deviation: ",
-                    resid.sd, "\n", sep="")
+                .cat("Inverse normal transformation on residuals with standard deviation: ",
+                    resid.sd)
             }
         }
 
@@ -505,8 +552,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         # calculate the variance ratio
         if (verbose)
         {
-            cat(.crayon_inverse("Calculate the average ratio of variances:\n"))
-            cat(.crayon_underline(date()), "\n", sep="")
+            .cat(.crayon_inverse("Calculate the average ratio of variances:"))
+            .cat(.crayon_underline(date()))
         }
         rand_seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_quant, fit0, glmm, obj.noK,
@@ -525,8 +572,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (verbose)
     {
-        cat("    ratio avg. is ", mean(var.ratio$ratio),
-            ", sd: ", sd(var.ratio$ratio), "\n", sep="")
+        .cat("    ratio avg. is ", mean(var.ratio$ratio), ", sd: ",
+            sd(var.ratio$ratio))
     }
 
     # tweak the result
@@ -546,14 +593,22 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (!is.na(model.savefn) && model.savefn!="")
     {
-        cat("Save the model to '", model.savefn, "'\n", sep="")
-        .glmm <- glmm
-        save(.glmm, file=model.savefn)
+        .cat("Save the model to ", sQuote(model.savefn))
+        if (grepl("\\.(rda|RData)$", model.savefn, ignore.case=TRUE))
+        {
+            .glmm <- glmm
+            save(.glmm, file=model.savefn)
+        } else if (grepl("\\.rds$", model.savefn, ignore.case=TRUE))
+        {
+            saveRDS(glmm, file=model.savefn)
+        } else {
+            stop("Unknown format of the output file, and it should be RData or RDS.")
+        }
     }
     if (verbose)
     {
-        cat(.crayon_underline(date()), "\n", sep="")
-        cat(.crayon_inverse("Done."), "\n", sep="")
+        .cat(.crayon_underline(date()))
+        .cat(.crayon_inverse("Done."))
     }
 
     if (!is.na(model.savefn) && model.savefn!="")
@@ -563,4 +618,5 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 }
 
 
+# S3 print method
 print.ClassSAIGE_NullModel <- function(x, ...) str(x)

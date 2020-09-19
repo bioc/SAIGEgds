@@ -53,11 +53,18 @@
 #endif
 
 
-#include <string.h>
+#include <stddef.h>
 
 
 namespace vectorization
 {
+	/// get mean and sd
+	void f64_mean_sd(const double x[], size_t n, double &mean, double &sd);
+	/// get max and min
+	void f64_maxmin(const double x[], size_t n, double &max, double &min);
+	/// get max, min, median
+	void f64_medmaxmin(const double x[], size_t n, double &med, double &max, double &min);
+
 	/// return allele frequency and impute genotype using the mean
 	void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC,
 		int &Num, int buf_idx[]);
@@ -76,6 +83,8 @@ namespace vectorization
 	double f64_dot(size_t n, const double *x, const double *y);
 	/// sum_i x[i]
 	double f64_sum(size_t n, const double *x);
+	/// x[i] = x[i] / sum_i x[i] (excluding not finite numbers)
+	void f64_normalize(size_t n, double *x);
 
 	/// out1 = sum_i x[i]*y[i], out2 = sum_i y[i]*y[i]
 	void f64_dot_sp(size_t n, const double *x, const double *y,
