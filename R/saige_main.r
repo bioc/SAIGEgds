@@ -101,12 +101,13 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
     if (length(fn) == 1L)
     {
         if (verbose)
-            cat("Loading '", fn, "' ...\n", sep="")
+            cat("Loading ", sQuote(fn), " ...\n", sep="")
         if (grepl("\\.gds$", fn, ignore.case=TRUE))
         {
             f <- openfn.gds(fn)
             on.exit(closefn.gds(f))
-            if (identical(get.attr.gdsn(f$root)$FileFormat, "SAIGE_OUTPUT"))
+            fm <- get.attr.gdsn(f$root)$FileFormat[1L]
+            if (fm %in% c("SAIGE_OUTPUT", "SAIGE_OUTPUT_SET"))
             {
                 if (is.null(varnm))
                     varnm <- ls.gdsn(f$root)
@@ -116,17 +117,20 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
                     rv[[nm]] <- readex.gdsn(index.gdsn(f, nm), index)
                 rv <- as.data.frame(rv, stringsAsFactors=FALSE)
             } else {
-                stop("FileFormat should be 'SAIGE_OUTPUT'.")
+                stop("FileFormat should be 'SAIGE_OUTPUT' or 'SAIGE_OUTPUT_BURDEN'.")
             }
         } else if (grepl("\\.(rda|RData)$", fn, ignore.case=TRUE))
         {
             rv <- get(load(fn))
             if (!is.null(varnm)) rv <- rv[, varnm]
             if (!is.null(index)) rv <- rv[index, ]
-        } else {
-            stop(sprintf("Unknown format (%s), should be RData or gds.",
-                basename(fn)))
-        }
+        } else if (grepl("\\.rds$", fn, ignore.case=TRUE))
+        {
+            rv <- readRDS(fn)
+            if (!is.null(varnm)) rv <- rv[, varnm]
+            if (!is.null(index)) rv <- rv[index, ]
+        } else
+            stop("Unknown format, should be RData, RDS or gds.")
     } else {
         if (!is.null(index))
             stop("'index' should be NULL for multiple input files.")
@@ -134,7 +138,7 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
             seqSAIGE_LoadPval(nm, varnm, verbose=verbose), simplify=FALSE)
         if (verbose) cat("Merging ...")
         rv <- Reduce(rbind, rv)
-        if (verbose) cat(" [done]\n")
+        if (verbose) cat(" [Done]\n")
     }
     rv
 }
@@ -546,9 +550,17 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
     if (!is.na(model.savefn) && model.savefn!="")
     {
-        cat("Save the model to '", model.savefn, "'\n", sep="")
-        .glmm <- glmm
-        save(.glmm, file=model.savefn)
+        cat("Save the model to ", sQuote(model.savefn), "\n", sep="")
+        if (grepl("\\.(rda|RData)$", model.savefn, ignore.case=TRUE))
+        {
+            .glmm <- glmm
+            save(.glmm, file=model.savefn)
+        } else if (grepl("\\.rds$", model.savefn, ignore.case=TRUE))
+        {
+            saveRDS(glmm, file=model.savefn)
+        } else {
+            stop("Unknown format of the output file, and it should be RData or RDS.")
+        }
     }
     if (verbose)
     {

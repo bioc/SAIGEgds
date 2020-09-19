@@ -10,7 +10,7 @@ seqSAIGE_LoadPval(fn, varnm=NULL, index=NULL, verbose=TRUE)
 }
 
 \arguments{
-    \item{fn}{RData or GDS file names, merging datasets if multiple files}
+    \item{fn}{RData, RDS or GDS file names, merging datasets if multiple files}
     \item{varnm}{NULL, or a character vector to include the column names; e.g.,
         \code{c("chr", "position", "rs.id", "ref", "alt", "pval")}}
     \item{index}{NULL, or a logical/numeric vector for a set of rows}
