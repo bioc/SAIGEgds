@@ -160,7 +160,7 @@ void f64_medmaxmin(const double x[], size_t n, double &med, double &max, double 
 	{
 		const size_t i1_med = (num - 1) / 2;
 		const size_t i2_med = num / 2;
-		double v1, v2;
+		double v1 = R_NaN, v2 = R_NaN;
 		vmin = INFINITY; num = 0;
 		for (size_t i=0; i < n; i++)
 		{
