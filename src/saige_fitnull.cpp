@@ -2,7 +2,7 @@
 //
 // saige_fitnull.cpp: C++ implementation of fitting the null model
 //
-// Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2021    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds. It was created based on the original SAIGE
 // C++ and R codes in the SAIGE package. Compared with the original SAIGE,
@@ -217,13 +217,61 @@ END_RCPP
 /// List vector of sparse structure of genotypes, with a format:
 /// integer vector: n1, n2, n3, n1-length int vector, n2-length, n3-length
 static SEXP Geno_Sparse = NULL;
+/// the number of samples
+static int Geno_Sp_NumSamp = 0;
+/// sparse genotype buffer
+static int *Geno_Sp_Buffer = NULL;
+
+RcppExport SEXP saige_init_sparse(SEXP nsamp, SEXP buffer)
+{
+	Geno_Sp_NumSamp = Rf_asInteger(nsamp);
+	Geno_Sp_Buffer = INTEGER(buffer);
+	return R_NilValue;
+}
 
 /// Get sparse structure of genotypes
-RcppExport SEXP saige_get_sparse(SEXP geno, SEXP buffer)
+RcppExport SEXP saige_get_sparse(SEXP geno)
 {
 BEGIN_RCPP
-	const size_t num = Rf_length(geno);
-	BYTE *gs = (BYTE*)RAW(geno);
+	const size_t num = Geno_Sp_NumSamp;
+	if (num > Rf_length(geno))
+		throw std::invalid_argument("No enough genotypes.");
+
+	void *base_ptr;
+	switch (TYPEOF(geno))
+	{
+		case RAWSXP:
+			base_ptr = RAW(geno); break;
+		case INTSXP:
+			{
+				base_ptr = INTEGER(geno);
+				BYTE *p = (BYTE*)base_ptr;
+				int *s = (int*)base_ptr;
+				for (size_t i=0; i < num; i++)
+					if (0<=s[i] && s[i]<=2) p[i]=s[i]; else p[i]=3;
+			}
+			break;
+		case REALSXP:
+			{
+				base_ptr = REAL(geno);
+				BYTE *p = (BYTE*)base_ptr;
+				double *s = (double*)base_ptr;
+				for (size_t i=0; i < num; i++)
+				{
+					if (R_FINITE(s[i]))
+					{
+						int g = (int)round(s[i]);
+						if (0<=g && g<=2) p[i]=g; else p[i]=3;
+					} else
+						p[i] = 3;
+				}
+			}
+			break;
+		default:
+			throw std::invalid_argument("Invalid data type.");
+	}
+
+	BYTE *gs = (BYTE*)base_ptr;
 	// determine whether need to flip
 	int n=0, sum=0;
 	for (size_t i=0; i < num; i++)
@@ -235,7 +283,7 @@ BEGIN_RCPP
 			if (gs[i] < 3) gs[i] = 2 - gs[i];
 	}
 	// get sparse structure
-	int *base = INTEGER(buffer), *p = base+3;
+	int *base = Geno_Sp_Buffer, *p = base+3;
 	int &n1 = base[0], &n2 = base[1], &n3 = base[2];
 	n1 = n2 = n3 = 0;
 	// genotype: 1

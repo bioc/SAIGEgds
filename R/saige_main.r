@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS framework
 #
-# Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2021    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -240,7 +240,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     {
         if (verbose)
             .cat("Open ", sQuote(gdsfile))
-        gdsfile <- seqOpen(gdsfile)
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
         on.exit(seqClose(gdsfile))
     } else {
         # save the filter on GDS file
@@ -326,10 +326,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         num.thread <- 1L
     setThreadOptions(num.thread)
     if (verbose)
-    {
-        .cat("    using ", num.thread, " thread",
-            ifelse(num.thread>1L, "s", ""))
-    }
+        .cat("    using ", num.thread, " thread", ifelse(num.thread>1L, "s", ""))
 
     X <- model.matrix(formula, data)
     if (NCOL(X) <= 1L) X.transform <- FALSE
@@ -373,11 +370,24 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (isTRUE(geno.sparse))
     {
         # sparse genotypes
+        # integer genotypes or numeric dosages
+        if (!is.null(index.gdsn(gdsfile, "genotype/data", silent=TRUE)))
+        {
+            nm <- "$dosage_alt"
+        } else if (!is.null(index.gdsn(gdsfile, "annotation/format/DS/data", silent=TRUE)))
+        {
+            nm <- "annotation/format/DS"
+            if (verbose) cat("    using 'annotation/format/DS'\n")
+        } else
+            stop("'genotype' and 'annotation/format/DS' are not available.")
+        # internal buffer
         buffer <- integer(n_samp + 4L)
-        fc <- .cfunction2("saige_get_sparse")
+        .cfunction2("saige_init_sparse")(n_samp, buffer)
+        fc <- .cfunction("saige_get_sparse")
+        # run
         packed.geno <- seqParallel(nfork, gdsfile, FUN=function(f) {
-            seqApply(f, "$dosage_alt", fc, as.is="list", y=buffer, .useraw=TRUE,
-                .list_dup=FALSE, .progress=nfork==1L && verbose)
+            seqApply(f, nm, fc, as.is="list", .useraw=TRUE, .list_dup=FALSE,
+                .progress=nfork==1L && verbose)
         }, .balancing=TRUE, .bl_size=5000L, .bl_progress=verbose)
         rm(buffer)
     } else {
@@ -620,3 +630,36 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
 # S3 print method
 print.ClassSAIGE_NullModel <- function(x, ...) str(x)
+
+
+
+#######################################################################
+# Heritability estimation
+#
+
+glmmHeritability <- function(modobj, adjust=TRUE)
+{
+    # check
+    stopifnot(is.logical(adjust), length(adjust)==1L)
+    modobj <- .check_modobj(modobj, FALSE)
+
+    if (modobj$trait.type == "binary")
+    {
+        tau <- modobj$tau[2L]
+        r <- 1
+        if (isTRUE(adjust))
+        {
+            y <- unname(modobj$obj.noK$y)
+            p <- sum(y==1) / length(y)
+            # based on Supplementary Table 7 (Zhou et al. 2018)
+            r <- 2.970 + 0.372*log10(p)
+        }
+        h <- tau / (pi*pi/3 + tau) * r
+    } else if (modobj$trait.type == "quantitative")
+    {
+        h <- modobj$tau[2L] / sum(modobj$tau)
+    } else
+        stop("Invalid 'modobj$trait.type'.")
+
+    unname(h)
+}

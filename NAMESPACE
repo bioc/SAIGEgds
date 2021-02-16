@@ -12,7 +12,7 @@ useDynLib(SAIGEgds,
 
 # Export all names
 exportPattern("^seq*")
-export(pACAT, pACAT2)
+export(pACAT, pACAT2, glmmHeritability)
 
 # Import all packages listed as Imports or Depends
 import(methods)

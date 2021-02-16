@@ -16,7 +16,7 @@ Benchmarks using the UK Biobank White British genotype data (N=430K) with corona
 
 ## Bioconductor:
 
-Release Version: v1.2.2 ([http://www.bioconductor.org/packages/SAIGEgds](http://www.bioconductor.org/packages/SAIGEgds))
+Release Version: v1.4.0 ([http://www.bioconductor.org/packages/SAIGEgds](http://www.bioconductor.org/packages/SAIGEgds))
 
 * [Help Documents](https://rdrr.io/bioc/SAIGEgds/man)
 * [Tutorial](http://www.bioconductor.org/packages/devel/bioc/vignettes/SAIGEgds/inst/doc/SAIGEgds.html)
