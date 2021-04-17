@@ -4,7 +4,7 @@
 #
 # Description:
 #     Scalable and accurate implementation of generalized mixed models
-# using GDS framework
+# using GDS files
 #
 # Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3

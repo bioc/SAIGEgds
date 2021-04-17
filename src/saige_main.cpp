@@ -2,7 +2,7 @@
 //
 // saige_main.cpp: SAIGE association analysis
 //
-// Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2021    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -43,11 +43,11 @@ using namespace vectorization;
 
 /// SPAtest
 extern "C" double Saddle_Prob(double q, double m1, double var1, size_t n_g,
-	const double mu[], const double g[], double cutoff, bool &converged);
+	const double mu[], const double g[], double cutoff, bool &converged, double *p_noadj);
 
 extern "C" double Saddle_Prob_Fast(double q, double m1, double var1, size_t n_g,
 	const double mu[], const double g[], size_t n_nonzero, const int nonzero_idx[],
-	double cutoff, bool &converged, double buf_spa[]);
+	double cutoff, bool &converged, double buf_spa[], double *p_noadj);
 
 /// square
 inline double sq(double v) { return v*v; }
@@ -386,7 +386,7 @@ static bool single_test_bin(size_t num_samp, double G[],
 
 			// call Saddle_Prob in SPAtest
 			pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu,
-				buf_adj_g, n_nonzero, buf_index, 2, converged, buf_spa);
+				buf_adj_g, n_nonzero, buf_index, 2, converged, buf_spa, NULL);
 			if (pval==0 && pval_noadj>0)
 				{ pval = pval_noadj; converged = false; }
 

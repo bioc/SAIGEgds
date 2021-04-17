@@ -4,7 +4,7 @@
 #
 # Description:
 #     Scalable and accurate implementation of generalized mixed models
-# using GDS framework
+# using GDS files
 #
 # Copyright (C) 2019-2021    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
@@ -67,14 +67,14 @@ SIMD <- function() .Call(saige_simd_version)
 
 .crayon_inverse <- function(s)
 {
-    if (requireNamespace("crayon", quietly=TRUE))
+    if (getOption("gds.crayon", TRUE) && requireNamespace("crayon", quietly=TRUE))
         s <- crayon::inverse(s)
     s
 }
 
 .crayon_underline <- function(s)
 {
-    if (requireNamespace("crayon", quietly=TRUE))
+    if (getOption("gds.crayon", TRUE) && requireNamespace("crayon", quietly=TRUE))
         s <- crayon::underline(s)
     s
 }
@@ -108,6 +108,33 @@ SIMD <- function() .Call(saige_simd_version)
     }
     stopifnot(inherits(modobj, "ClassSAIGE_NullModel"))
     modobj
+}
+
+# Show the distribution
+.show_outcome <- function(trait.type, y, phenovar=NULL)
+{
+    if (trait.type == "binary")
+    {
+        # binary outcome
+        if (!is.null(phenovar))
+            .cat("Binary outcome: ", phenovar)
+        v <- table(y)
+        n <- length(v) 
+        v <- data.frame(v, as.numeric(prop.table(v)))
+        v[, 1L] <- paste0("      ", v[, 1L])
+        colnames(v) <- c(phenovar, "Number", "Proportion")
+        print(v, row.names=FALSE)
+        if (n != 2L)
+            stop("The outcome variable has more than 2 categories!")
+    } else if (trait.type == "quantitative")
+    {
+        # quantitative outcome
+        if (!is.null(phenovar))
+            .cat("Quantitative outcome: ", phenovar)
+        v <- data.frame(mean=mean(y), sd=sd(y), min=min(y), max=max(y))
+        rownames(v) <- "   "
+        print(v)
+    }
 }
 
 
@@ -233,9 +260,6 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         .cat(.crayon_underline(date()))
     }
 
-    rand_seed <- eval(parse(text="set.seed"))
-    rand_seed(seed)
-
     if (is.character(gdsfile))
     {
         if (verbose)
@@ -251,6 +275,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # show warnings immediately
     saveopt <- options(warn=1L)
     on.exit(options(warn=saveopt$warn), add=TRUE)
+    set.seed(seed)
 
     # variables in the formula
     vars <- all.vars(formula)
@@ -302,7 +327,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     n <- sum(v, na.rm=TRUE)
     if (max.num.snp>0L && n>max.num.snp)
     {
-        rand_seed(seed)
+        set.seed(seed)
         seqSetFilter(gdsfile, variant.sel=sample(which(v), max.num.snp),
             verbose=FALSE)
     }
@@ -324,7 +349,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # set the number of internal threads
     if (is.na(num.thread) || num.thread < 1L)
         num.thread <- 1L
-    setThreadOptions(num.thread)
+    # setThreadOptions(num.thread)  # no need to call setThreadOptions()
     if (verbose)
         .cat("    using ", num.thread, " thread", ifelse(num.thread>1L, "s", ""))
 
@@ -423,7 +448,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         num.marker = num.marker,
         traceCVcutoff = traceCVcutoff,
         ratioCVcutoff = ratioCVcutoff,
-        verbose = verbose
+        verbose = verbose,
+        indent = ""
     )
 
     tau.init[is.na(tau.init)] <- 0
@@ -480,7 +506,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             .cat(.crayon_inverse("Calculate the average ratio of variances:"))
             .cat(.crayon_underline(date()))
         }
-        rand_seed(seed)
+        set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
         var.ratio <- var.ratio[order(var.ratio$id), ]
@@ -491,7 +517,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         glmm$obj.noK <- obj.noK
         glmm$var.ratio <- var.ratio
 
-    } else if (trait.type == "quantitative")    
+    } else if (trait.type == "quantitative")
     {
         # quantitative outcome
         if (verbose)
@@ -565,7 +591,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             .cat(.crayon_inverse("Calculate the average ratio of variances:"))
             .cat(.crayon_underline(date()))
         }
-        rand_seed(seed)
+        set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_quant, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
         var.ratio <- var.ratio[order(var.ratio$id), ]
@@ -577,8 +603,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         glmm$var.ratio <- var.ratio
 
     } else {
-        stop("Invalid 'trait.type'.")    
-    } 
+        stop("Invalid 'trait.type'.")
+    }
 
     if (verbose)
     {
