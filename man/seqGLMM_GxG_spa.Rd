@@ -20,7 +20,8 @@ seqGLMM_GxG_spa(formula, data, gds_grm, gds_assoc, snp_pair,
         coerced to that class), e.g., \code{y ~ x1 + x2}, see \code{\link{lm}}}
     \item{data}{a data frame for the formulas}
     \item{gds_grm}{a SeqArray GDS filename, or a GDS object}
-    \item{gds_assoc}{a SeqArray GDS filename, or a GDS object}
+    \item{gds_assoc}{a SeqArray GDS filename, a GDS object, or a 0/1/2/NA matrix with
+        row names for sample IDs}
     \item{snp_pair}{a \code{data.frame} with the first two columns for the variant IDs in
         \code{gds_assoc}}
     \item{trait.type}{"binary" for binary outcomes, "quantitative" for

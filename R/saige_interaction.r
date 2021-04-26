@@ -50,7 +50,7 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
     stopifnot(is.data.frame(data))
     stopifnot(is.character(gds_grm) | inherits(gds_grm, "SeqVarGDSClass"))
     stopifnot(is.null(gds_assoc) | is.character(gds_assoc) |
-    	inherits(gds_assoc, "SeqVarGDSClass"))
+    	inherits(gds_assoc, "SeqVarGDSClass") | is.matrix(gds_assoc))
     stopifnot(is.data.frame(snp_pair), ncol(snp_pair)>=2L, nrow(snp_pair)>0L)
     trait.type <- match.arg(trait.type)
     stopifnot(is.character(sample.col), length(sample.col)==1L, !is.na(sample.col))
@@ -106,10 +106,19 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
             .cat("Open ", sQuote(gds_assoc))
         gds_assoc <- seqOpen(gds_assoc, allow.duplicate=TRUE)
         on.exit(seqClose(gds_assoc), add=TRUE)
-    } else {
+    } else if (is.null(gds_assoc))
+    {
+        gds_assoc <- gds_grm
+    } else if (inherits(gds_assoc, "SeqVarGDSClass")) {
         # save the filter on GDS file
         seqSetFilter(gds_assoc, action="push", verbose=FALSE)
         on.exit(seqSetFilter(gds_assoc, action="pop", verbose=FALSE), add=TRUE)
+    } else {
+        # should be a matrix
+        if (is.null(rownames(gds_assoc)))
+            stop("rownames(gds_assoc) should be sample IDs, if gds_assoc is a matrix.")
+        if (is.null(colnames(gds_assoc)))
+            colnames(gds_assoc) <- seq_len(ncol(gds_assoc))
     }
 
     # show warnings immediately
@@ -264,13 +273,24 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
 
     # check gds_assoc: SNP variant IDs
     ii <- unique(c(snp_pair[,1L], snp_pair[,2L]))
-    i <- seqSetFilter(gds_assoc, variant.id=ii, ret.idx=TRUE, warn=FALSE, verbose=FALSE)
+    if (inherits(gds_assoc, "SeqVarGDSClass"))
+    {
+        i <- seqSetFilter(gds_assoc, variant.id=ii, ret.idx=TRUE, warn=FALSE,
+            verbose=FALSE)
+    } else {
+        i <- match(ii, colnames(gds_assoc))
+    }
     if (anyNA(i))
         stop("No variant ID(s): ", paste(ii[is.na(i)], collapse=", "))
 
     # check gds_assoc: sample IDs
-    i_geno <- seqSetFilter(gds_assoc, sample.id=sid, ret.idx=TRUE,
-        verbose=FALSE)$sample_idx
+    if (inherits(gds_assoc, "SeqVarGDSClass"))
+    {
+        i_geno <- seqSetFilter(gds_assoc, sample.id=sid, ret.idx=TRUE,
+            verbose=FALSE)$sample_idx
+    } else {
+        i_geno <- match(sid, rownames(gds_assoc))
+    }
     if (anyNA(i_geno))
     {
         if (all(is.na(i_geno)))
@@ -306,16 +326,33 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
             .cat("==> ", ii, ": SNP ", i1, " x SNP ", i2, "\t[", date(), "] <==")
 
         # first SNP
-        seqSetFilter(gds_assoc, variant.id=i1, verbose=FALSE)
-        g1 <- .minor_allele_geno(seqGetData(gds_assoc, "$dosage_alt")[i_geno])
-        s1 <- seqGetData(gds_assoc, "$chrom_pos_allele")
+        if (inherits(gds_assoc, "SeqVarGDSClass"))
+        {
+            seqSetFilter(gds_assoc, variant.id=i1, verbose=FALSE)
+            g1 <- .minor_allele_geno(seqGetData(gds_assoc, "$dosage_alt")[i_geno])
+            s1 <- seqGetData(gds_assoc, "$chrom_pos_allele")
+        } else {
+            i <- match(i1, colnames(gds_assoc))
+            g1 <- .minor_allele_geno(gds_assoc[i_geno, i])
+            s1 <- i1
+            i1 <- i
+        }
         maf1 <- mean(g1)*0.5
         if (verbose)
             cat(sprintf("    SNP1 (%s), MAF: %.5g\n", s1, maf1))
+
         # second SNP
-        seqSetFilter(gds_assoc, variant.id=i2, verbose=FALSE)
-        g2 <- .minor_allele_geno(seqGetData(gds_assoc, "$dosage_alt")[i_geno])
-        s2 <- seqGetData(gds_assoc, "$chrom_pos_allele")
+        if (inherits(gds_assoc, "SeqVarGDSClass"))
+        {
+            seqSetFilter(gds_assoc, variant.id=i2, verbose=FALSE)
+            g2 <- .minor_allele_geno(seqGetData(gds_assoc, "$dosage_alt")[i_geno])
+            s2 <- seqGetData(gds_assoc, "$chrom_pos_allele")
+        } else {
+            i <- match(i2, colnames(gds_assoc))
+            g2 <- .minor_allele_geno(gds_assoc[i_geno, i])
+            s2 <- i2
+            i2 <- i
+        }
         maf2 <- mean(g2)*0.5
         if (verbose)
             cat(sprintf("    SNP2 (%s), MAF: %.5g\n", s2, maf2))
