@@ -117,7 +117,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
     {
         if (verbose)
             .cat("    open ", sQuote(gdsfile))
-        gdsfile <- seqOpen(gdsfile)
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
         on.exit(seqClose(gdsfile))
     } else {
         # save the filter on GDS file

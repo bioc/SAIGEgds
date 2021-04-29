@@ -7,19 +7,20 @@ useDynLib(SAIGEgds,
     saige_burden_test_bin, saige_burden_test_quant,
     saige_acatv_test_bin, saige_acatv_test_quant,
     saige_acato_test_bin, saige_acato_test_quant,
-    saige_acat_p
+    saige_acat_p,
+    saige_GxG_snp_bin
 )
 
 # Export all names
 exportPattern("^seq*")
-export(pACAT, pACAT2)
+export(pACAT, pACAT2, glmmHeritability)
 
 # Import all packages listed as Imports or Depends
 import(methods)
 import(Rcpp)
 importFrom(stats, as.formula, binomial, gaussian, glm, lm, model.frame,
     model.matrix, model.response, na.omit, sd, var, qnorm, dbeta)
-importFrom(utils, object.size, packageVersion, str)
+importFrom(utils, object.size, packageVersion, str, write.csv, write.table)
 importFrom(gdsfmt, createfn.gds, openfn.gds, closefn.gds, index.gdsn, ls.gdsn,
     add.gdsn, read.gdsn, readex.gdsn, readmode.gdsn, put.attr.gdsn,
     get.attr.gdsn)

@@ -4,7 +4,7 @@
 #
 # Description:
 #     Scalable and accurate implementation of generalized mixed models
-# using GDS framework
+# using GDS files
 #
 # Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
@@ -77,7 +77,7 @@ seqAssocGLMM_spaBurden <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
     {
         if (verbose)
             .cat("    open ", sQuote(gdsfile))
-        gdsfile <- seqOpen(gdsfile)
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
         on.exit(seqClose(gdsfile))
     } else {
         # save the filter on GDS file
@@ -339,7 +339,7 @@ seqAssocGLMM_spaACAT_V <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
     {
         if (verbose)
             .cat("    open ", sQuote(gdsfile))
-        gdsfile <- seqOpen(gdsfile)
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
         on.exit(seqClose(gdsfile))
     } else {
         # save the filter on GDS file
@@ -594,7 +594,7 @@ seqAssocGLMM_spaACAT_O <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
     {
         if (verbose)
             .cat("    open ", sQuote(gdsfile))
-        gdsfile <- seqOpen(gdsfile)
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
         on.exit(seqClose(gdsfile))
     } else {
         # save the filter on GDS file

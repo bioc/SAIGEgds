@@ -4,9 +4,9 @@
 #
 # Description:
 #     Scalable and accurate implementation of generalized mixed models
-# using GDS framework
+# using GDS files
 #
-# Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2021    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -67,14 +67,14 @@ SIMD <- function() .Call(saige_simd_version)
 
 .crayon_inverse <- function(s)
 {
-    if (requireNamespace("crayon", quietly=TRUE))
+    if (getOption("gds.crayon", TRUE) && requireNamespace("crayon", quietly=TRUE))
         s <- crayon::inverse(s)
     s
 }
 
 .crayon_underline <- function(s)
 {
-    if (requireNamespace("crayon", quietly=TRUE))
+    if (getOption("gds.crayon", TRUE) && requireNamespace("crayon", quietly=TRUE))
         s <- crayon::underline(s)
     s
 }
@@ -108,6 +108,33 @@ SIMD <- function() .Call(saige_simd_version)
     }
     stopifnot(inherits(modobj, "ClassSAIGE_NullModel"))
     modobj
+}
+
+# Show the distribution
+.show_outcome <- function(trait.type, y, phenovar=NULL)
+{
+    if (trait.type == "binary")
+    {
+        # binary outcome
+        if (!is.null(phenovar))
+            .cat("Binary outcome: ", phenovar)
+        v <- table(y)
+        n <- length(v) 
+        v <- data.frame(v, as.numeric(prop.table(v)))
+        v[, 1L] <- paste0("      ", v[, 1L])
+        colnames(v) <- c(phenovar, "Number", "Proportion")
+        print(v, row.names=FALSE)
+        if (n != 2L)
+            stop("The outcome variable has more than 2 categories!")
+    } else if (trait.type == "quantitative")
+    {
+        # quantitative outcome
+        if (!is.null(phenovar))
+            .cat("Quantitative outcome: ", phenovar)
+        v <- data.frame(mean=mean(y), sd=sd(y), min=min(y), max=max(y))
+        rownames(v) <- "   "
+        print(v)
+    }
 }
 
 
@@ -233,14 +260,11 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         .cat(.crayon_underline(date()))
     }
 
-    rand_seed <- eval(parse(text="set.seed"))
-    rand_seed(seed)
-
     if (is.character(gdsfile))
     {
         if (verbose)
             .cat("Open ", sQuote(gdsfile))
-        gdsfile <- seqOpen(gdsfile)
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
         on.exit(seqClose(gdsfile))
     } else {
         # save the filter on GDS file
@@ -251,6 +275,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # show warnings immediately
     saveopt <- options(warn=1L)
     on.exit(options(warn=saveopt$warn), add=TRUE)
+    set.seed(seed)
 
     # variables in the formula
     vars <- all.vars(formula)
@@ -302,7 +327,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     n <- sum(v, na.rm=TRUE)
     if (max.num.snp>0L && n>max.num.snp)
     {
-        rand_seed(seed)
+        set.seed(seed)
         seqSetFilter(gdsfile, variant.sel=sample(which(v), max.num.snp),
             verbose=FALSE)
     }
@@ -324,12 +349,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     # set the number of internal threads
     if (is.na(num.thread) || num.thread < 1L)
         num.thread <- 1L
-    setThreadOptions(num.thread)
+    # setThreadOptions(num.thread)  # no need to call setThreadOptions()
     if (verbose)
-    {
-        .cat("    using ", num.thread, " thread",
-            ifelse(num.thread>1L, "s", ""))
-    }
+        .cat("    using ", num.thread, " thread", ifelse(num.thread>1L, "s", ""))
 
     X <- model.matrix(formula, data)
     if (NCOL(X) <= 1L) X.transform <- FALSE
@@ -357,7 +379,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         X_new <- qr.Q(Xqr) * sqrt(nrow(X))
         X_qrr <- qr.R(Xqr)
         data <- data.frame(cbind(y, X_new))
-        nm <- paste0("x", seq_len(ncol(X_new))-1L)
+        nm <- paste0("x_", seq_len(ncol(X_new))-1L)
         colnames(data) <- c("y", nm)
         formula <- as.formula(paste("y ~", paste(nm, collapse=" + "), "-1"))
         if (verbose)
@@ -373,11 +395,24 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
     if (isTRUE(geno.sparse))
     {
         # sparse genotypes
+        # integer genotypes or numeric dosages
+        if (!is.null(index.gdsn(gdsfile, "genotype/data", silent=TRUE)))
+        {
+            nm <- "$dosage_alt"
+        } else if (!is.null(index.gdsn(gdsfile, "annotation/format/DS/data", silent=TRUE)))
+        {
+            nm <- "annotation/format/DS"
+            if (verbose) cat("    using 'annotation/format/DS'\n")
+        } else
+            stop("'genotype' and 'annotation/format/DS' are not available.")
+        # internal buffer
         buffer <- integer(n_samp + 4L)
-        fc <- .cfunction2("saige_get_sparse")
+        .cfunction2("saige_init_sparse")(n_samp, buffer)
+        fc <- .cfunction("saige_get_sparse")
+        # run
         packed.geno <- seqParallel(nfork, gdsfile, FUN=function(f) {
-            seqApply(f, "$dosage_alt", fc, as.is="list", y=buffer, .useraw=TRUE,
-                .list_dup=FALSE, .progress=nfork==1L && verbose)
+            seqApply(f, nm, fc, as.is="list", .useraw=TRUE, .list_dup=FALSE,
+                .progress=nfork==1L && verbose)
         }, .balancing=TRUE, .bl_size=5000L, .bl_progress=verbose)
         rm(buffer)
     } else {
@@ -408,12 +443,13 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         num.thread = num.thread,
         seed = seed,
         tol = tol, tolPCG = tolPCG,
-        maxiter = maxiter, maxiterPCG = maxiterPCG,
+        maxiter = maxiter, maxiterPCG = maxiterPCG, no_iteration = FALSE,
         nrun = nrun,
         num.marker = num.marker,
         traceCVcutoff = traceCVcutoff,
         ratioCVcutoff = ratioCVcutoff,
-        verbose = verbose
+        verbose = verbose,
+        indent = ""
     )
 
     tau.init[is.na(tau.init)] <- 0
@@ -470,7 +506,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             .cat(.crayon_inverse("Calculate the average ratio of variances:"))
             .cat(.crayon_underline(date()))
         }
-        rand_seed(seed)
+        set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_binary, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
         var.ratio <- var.ratio[order(var.ratio$id), ]
@@ -481,7 +517,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         glmm$obj.noK <- obj.noK
         glmm$var.ratio <- var.ratio
 
-    } else if (trait.type == "quantitative")    
+    } else if (trait.type == "quantitative")
     {
         # quantitative outcome
         if (verbose)
@@ -555,7 +591,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
             .cat(.crayon_inverse("Calculate the average ratio of variances:"))
             .cat(.crayon_underline(date()))
         }
-        rand_seed(seed)
+        set.seed(seed)
         var.ratio <- .Call(saige_calc_var_ratio_quant, fit0, glmm, obj.noK,
             param, sample.int(n_var, n_var))
         var.ratio <- var.ratio[order(var.ratio$id), ]
@@ -567,8 +603,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         glmm$var.ratio <- var.ratio
 
     } else {
-        stop("Invalid 'trait.type'.")    
-    } 
+        stop("Invalid 'trait.type'.")
+    }
 
     if (verbose)
     {
@@ -620,3 +656,36 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
 
 # S3 print method
 print.ClassSAIGE_NullModel <- function(x, ...) str(x)
+
+
+
+#######################################################################
+# Heritability estimation
+#
+
+glmmHeritability <- function(modobj, adjust=TRUE)
+{
+    # check
+    stopifnot(is.logical(adjust), length(adjust)==1L)
+    modobj <- .check_modobj(modobj, FALSE)
+
+    if (modobj$trait.type == "binary")
+    {
+        tau <- modobj$tau[2L]
+        r <- 1
+        if (isTRUE(adjust))
+        {
+            y <- unname(modobj$obj.noK$y)
+            p <- sum(y==1) / length(y)
+            # based on Supplementary Table 7 (Zhou et al. 2018)
+            r <- 2.970 + 0.372*log10(p)
+        }
+        h <- tau / (pi*pi/3 + tau) * r
+    } else if (modobj$trait.type == "quantitative")
+    {
+        h <- modobj$tau[2L] / sum(modobj$tau)
+    } else
+        stop("Invalid 'modobj$trait.type'.")
+
+    unname(h)
+}

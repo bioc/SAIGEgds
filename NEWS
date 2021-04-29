@@ -1,4 +1,13 @@
-CHANGES IN VERSION 1.3.3
+CHANGES IN VERSION 1.4.1
+-------------------------
+
+    o `seqFitNullGLMM_SPA()` can use imputed dosages directly without converting the
+      dosages to the best-guess genotypes
+
+    o new function `glmmHeritability()`
+
+
+CHANGES IN VERSION 1.4.0
 -------------------------
 
     o set-based tests: burden, ACAT-V
