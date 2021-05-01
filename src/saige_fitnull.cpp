@@ -941,8 +941,7 @@ inline static void print_vec(const char *s, dvec &x, const char *indent=NULL,
 
 
 // Fitting the null model with binary outcomes
-RcppExport SEXP saige_fit_AI_PCG_binary(SEXP r_fit0, SEXP r_X, SEXP r_tau,
-	SEXP r_param)
+RcppExport SEXP saige_fit_AI_PCG_binary(SEXP r_fit0, SEXP r_X, SEXP r_tau, SEXP r_param)
 {
 BEGIN_RCPP
 
@@ -957,6 +956,7 @@ BEGIN_RCPP
 	const int seed = param["seed"];
 	const int maxiter = param["maxiter"];
 	const int maxiterPCG = param["maxiterPCG"];
+	const bool no_iteration = Rf_asLogical(param["no_iteration"])==TRUE;
 	const int nrun = param["nrun"];
 	const double traceCVcutoff = param["traceCVcutoff"];
 	const bool verbose = Rf_asLogical(param["verbose"])==TRUE;
@@ -981,9 +981,14 @@ BEGIN_RCPP
 	dvec alpha0 = as<dvec>(fit0["coefficients"]);
 	dvec alpha = alpha0;
 	dmat cov;
-
 	dvec tau = as<dvec>(r_tau);
 	dvec tau0 = tau;
+
+	if (verbose && !no_iteration)
+	{
+		Rprintf("%sInitial variance component estimates, tau:\n", indent);
+		Rprintf("%s    Sigma_E: %g, Sigma_G: %g\n", tau[0], tau[1], indent);
+	}
 
 	dvec re_Y, re_mu, re_alpha, re_eta, re_W, re_Sigma_iY;
 	dmat re_cov, re_Sigma_iX;
@@ -991,18 +996,24 @@ BEGIN_RCPP
 		tolPCG, verbose,
 		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
 
+	if (no_iteration)
+	{
+		return List::create(
+			_["coefficients"] = SEXP_VEC(re_alpha),
+			_["tau"] = SEXP_VEC(tau),
+			_["linear.predictors"] = SEXP_VEC(re_eta),
+			_["fitted.values"] = SEXP_VEC(re_mu),
+			_["residuals"] = SEXP_VEC(y - re_mu),
+			_["cov"] = re_cov,
+			_["converged"] = true);
+	}
+
 	double YPAPY, Trace, AI;
 	get_AI_score(re_Y, X, re_W, tau, re_Sigma_iY, re_Sigma_iX, re_cov, nrun,
 		maxiterPCG, tolPCG, traceCVcutoff, seed,
 		YPAPY, Trace, AI);
 
 	tau[1] = std::max(0.0, tau0[1] + tau0[1]*tau0[1]*(YPAPY - Trace)/y.size());
-	if (verbose)
-	{
-		Rprintf("%sInitial variance component estimates, tau:\n", indent);
-		Rprintf("%s    Sigma_E: %g, Sigma_G: %g\n", tau[0], tau[1], indent);
-	}
-
 	int iter = 1;
 	for (; iter <= maxiter; iter++)
 	{
@@ -1121,21 +1132,20 @@ BEGIN_RCPP
 	dvec alpha0 = as<dvec>(fit0["coefficients"]);
 	dvec alpha = alpha0;
 	dmat cov;
-
 	dvec tau = as<dvec>(r_tau);
 	dvec tau0 = tau;
-
-	dvec re_Y, re_mu, re_alpha, re_eta, re_W, re_Sigma_iY;
-	dmat re_cov, re_Sigma_iX;
-	get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
-		tolPCG, verbose,
-		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
 
 	if (verbose)
 	{
 		Rprintf("%sInitial variance component estimates, tau:\n", indent);
 		Rprintf("%s    Sigma_E: %g, Sigma_G: %g\n", indent, tau[0], tau[1]);
 	}
+
+	dvec re_Y, re_mu, re_alpha, re_eta, re_W, re_Sigma_iY;
+	dmat re_cov, re_Sigma_iX;
+	get_coeff(y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+		tolPCG, verbose,
+		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX);
 
 	double YPAPY[2], Trace[2];
 	dmat AI;
@@ -1516,14 +1526,15 @@ BEGIN_RCPP
 
 	if (verbose)
 	{
-		Rprintf("    Nonzero #: %d(%.3g%%), beta: %6g, SE: %6g, pval: %6g, pnorm: %6g\n",
-			n_nonzero, 100.0*n_nonzero/G.size(), beta, SE, pval, pnorm);
+		Rprintf(
+			"    Nonzero #: %d(%.3g%%), beta: %.6g, SE: %.6g, pval: %.6g, pnorm: %.6g, tau_G: %.5g\n",
+			n_nonzero, 100.0*n_nonzero/G.size(), beta, SE, pval, pnorm, tau[1]);
 	}
 
 	return DataFrame::create(
 		_["beta"] = beta,  _["SE"] = SE, _["n_nonzero"] = n_nonzero,
 		_["pval"] = pval,  _["p.norm"] = pnorm,
-		_["converged"] = converged
+		_["converged"] = converged, _["tau_G"] = tau[1]
 	);
 
 END_RCPP

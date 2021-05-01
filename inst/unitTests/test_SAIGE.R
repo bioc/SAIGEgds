@@ -27,7 +27,7 @@ library(SAIGEgds)
 	# fit the null model for binary outcomes
 	glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
 	# save model
-	save(glmm, file="saige_model.rda", compress="xz")
+	saveRDS(glmm, file="saige_model.rds", compress="xz")
 	# p-value calculation
 	seqAssocGLMM_SPA(gdsfile, glmm, mac=4, res.savefn="saige_pval.rds")
 
@@ -35,7 +35,7 @@ library(SAIGEgds)
 	glmm <- seqFitNullGLMM_SPA(yy ~ x1 + x2, pheno, gdsfile,
 		trait.type="quantitative")
 	# save model
-	save(glmm, file="saige_model_quant.rds", compress="xz")
+	saveRDS(glmm, file="saige_model_quant.rds", compress="xz")
 	# p-value calculation
 	seqAssocGLMM_SPA(gdsfile, glmm, mac=4, res.savefn="saige_pval_quant.rds")
 }
@@ -65,14 +65,12 @@ test.saige_fit_null_model <- function()
 
 	# fit the null model, check binary outcomes
 	glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile)
-	glmm$var.ratio <- glmm$var.ratio[, -3]
 	checkEquals(mod1, glmm, "check the SAIGE parameters (binary outcomes)",
 		tolerance=1e-4)
 
 	# fit the null model, check quantitative outcomes
 	glmm <- seqFitNullGLMM_SPA(yy ~ x1 + x2, pheno, gdsfile,
 		trait.type="quantitative")
-	glmm$var.ratio <- glmm$var.ratio[, -3]
 	checkEquals(mod2, glmm,
 		"check the SAIGE parameters (quantitative outcomes)", tolerance=1e-4)
 }

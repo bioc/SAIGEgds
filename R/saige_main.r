@@ -379,7 +379,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         X_new <- qr.Q(Xqr) * sqrt(nrow(X))
         X_qrr <- qr.R(Xqr)
         data <- data.frame(cbind(y, X_new))
-        nm <- paste0("x", seq_len(ncol(X_new))-1L)
+        nm <- paste0("x_", seq_len(ncol(X_new))-1L)
         colnames(data) <- c("y", nm)
         formula <- as.formula(paste("y ~", paste(nm, collapse=" + "), "-1"))
         if (verbose)
@@ -443,7 +443,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile,
         num.thread = num.thread,
         seed = seed,
         tol = tol, tolPCG = tolPCG,
-        maxiter = maxiter, maxiterPCG = maxiterPCG,
+        maxiter = maxiter, maxiterPCG = maxiterPCG, no_iteration = FALSE,
         nrun = nrun,
         num.marker = num.marker,
         traceCVcutoff = traceCVcutoff,

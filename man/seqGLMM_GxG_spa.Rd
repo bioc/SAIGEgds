@@ -2,16 +2,17 @@
 \alias{seqGLMM_GxG_spa}
 \title{SNP Interaction Testing}
 \description{
-    SNP interaction testing with Saddlepoint approximation method.
+    SNP interaction testing with Saddlepoint approximation method in the mixed framework.
 }
 
 \usage{
 seqGLMM_GxG_spa(formula, data, gds_grm, gds_assoc, snp_pair,
     trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.005,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
-    X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE,
-    num.thread=1L, model.savefn="", seed=200L, fork.loading=FALSE, verbose=TRUE,
+    X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5,
+    maxiterPCG=500L, tau.init=c(0,0), use_approx_tau=FALSE,
+    traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE, num.thread=1L,
+    model.savefn="", seed=200L, fork.loading=FALSE, verbose=TRUE,
     verbose.detail=TRUE)
 }
 
@@ -47,6 +48,9 @@ seqGLMM_GxG_spa(formula, data, gds_grm, gds_assoc, snp_pair,
         components, tau; for binary traits, the first element is always be set
         to 1. if \code{tau.init} is not specified, the second element will be
         0.5 for binary traits}
+    \item{use_approx_tau}{if \code{TRUE}, fit the model defined in
+        \code{formula} without any SNP markers for the interactions to provide
+        the estimated tau value (variance component estimates)}
     \item{traceCVcutoff}{the threshold for coefficient of variation (CV) for
         the trace estimator, and the number of runs for trace estimation will
         be increased until the CV is below the threshold}

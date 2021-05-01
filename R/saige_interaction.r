@@ -24,9 +24,12 @@
     geno
 }
 
-.show_coeff <- function(fit0, indent="")
+.show_coeff <- function(fit0, indent="", initial=TRUE)
 {
-    .cat(indent, "Initial fixed-effect coefficients:")
+    if (initial)
+        .cat(indent, "Initial fixed-effect coefficients:")
+    else
+        .cat(indent, "Fixed-effect coefficients:")
     v <- as.data.frame(t(fit0$coefficients))
     rownames(v) <- paste0("   ", indent)
     print(v)
@@ -41,19 +44,23 @@
 seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
     trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.005,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
-    X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE,
-    num.thread=1L, model.savefn="", seed=200L, fork.loading=FALSE, verbose=TRUE,
+    X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5,
+    maxiterPCG=500L, tau.init=c(0,0), use_approx_tau=FALSE,
+    traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE, num.thread=1L,
+    model.savefn="", seed=200L, fork.loading=FALSE, verbose=TRUE,
     verbose.detail=TRUE)
 {
     stopifnot(inherits(formula, "formula"))
     stopifnot(is.data.frame(data))
     stopifnot(is.character(gds_grm) | inherits(gds_grm, "SeqVarGDSClass"))
     stopifnot(is.null(gds_assoc) | is.character(gds_assoc) |
-    	inherits(gds_assoc, "SeqVarGDSClass") | is.matrix(gds_assoc))
+        inherits(gds_assoc, "SeqVarGDSClass") | is.matrix(gds_assoc))
+    if (is.matrix(gds_assoc))
+        stopifnot(is.matrix(gds_assoc), is.numeric(gds_assoc))
     stopifnot(is.data.frame(snp_pair), ncol(snp_pair)>=2L, nrow(snp_pair)>0L)
     trait.type <- match.arg(trait.type)
-    stopifnot(is.character(sample.col), length(sample.col)==1L, !is.na(sample.col))
+    stopifnot(is.character(sample.col), length(sample.col)==1L,
+        !is.na(sample.col))
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
     stopifnot(is.numeric(max.num.snp), length(max.num.snp)==1L)
@@ -65,6 +72,8 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
     stopifnot(is.numeric(tolPCG), length(tolPCG)==1L)
     stopifnot(is.numeric(maxiterPCG), length(maxiterPCG)==1L)
     stopifnot(is.numeric(tau.init), length(tau.init)==2L)
+    stopifnot(is.logical(use_approx_tau), length(use_approx_tau)==1L,
+        !is.na(use_approx_tau))
     stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
     stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
     stopifnot(is.logical(geno.sparse), length(geno.sparse)==1L)
@@ -260,7 +269,7 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
         num.thread = num.thread,
         seed = seed,
         tol = tol, tolPCG = tolPCG,
-        maxiter = maxiter, maxiterPCG = maxiterPCG,
+        maxiter = maxiter, maxiterPCG = maxiterPCG, no_iteration = FALSE,
         nrun = nrun,
         num.marker = 1L,
         traceCVcutoff = traceCVcutoff,
@@ -302,7 +311,6 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
         }
     }
 
-
     # show the distribution of outcomes
     if (verbose)
     {
@@ -310,20 +318,100 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
         .show_outcome(trait.type, y, phenovar)
     }
 
+
+    ####  Initial guess of tau  ####
+
+    ori_X <- X <- model.matrix(formula, data)
+    y <- data[[phenovar]]
+    if (use_approx_tau)
+    {
+        if (verbose)
+        {
+            cat("Fitting the model without the SNP markers to find the initial tau:\n")
+            cat("    Formula: ")
+            print(formula)
+        }
+        if (NCOL(X) > 1L && isTRUE(X.transform))
+        {
+            if (verbose)
+                cat("    Transform on the design matrix with QR decomposition:\n")
+            # check multi-collinearity
+            m <- lm(y ~ X - 1)
+            i_na <- which(is.na(m$coefficients))
+            if (length(i_na) > 0L)
+            {
+                X <- X[, -i_na]
+                if (verbose)
+                {
+                    .cat("        exclude ", length(i_na), " covariates (",
+                        paste(colnames(X)[i_na], collapse=", "),
+                        ") to avoid multi collinearity.")
+                }
+            }
+            X_name <- colnames(X)
+            Xqr <- qr(X)  # QR decomposition
+            X_new <- qr.Q(Xqr) * sqrt(nrow(X))
+            X_qrr <- qr.R(Xqr)
+            data <- data.frame(cbind(y, X_new))
+            nm <- paste0("x_", seq_len(ncol(X_new))-1L)
+            colnames(data) <- c("y", nm)
+            formula <- as.formula(paste("y ~", paste(nm, collapse=" + "), "-1"))
+            if (verbose)
+                .cat("        new formula: ", format(formula))
+        }
+
+        # fit the null model without SNP markers
+        fit0 <- glm(formula, data=data, family=binomial)
+        if (verbose)
+            .show_coeff(fit0, "    ")
+        obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula, data)
+        # initial tau
+        tau <- fixtau <- c(0,0)
+        if (fit0$family$family %in% c("binomial", "poisson"))
+            tau[1L] <- fixtau[1L] <- 1
+        if (sum(tau.init[fixtau==0]) == 0)
+            tau[fixtau==0] <- 0.5
+        else
+            tau[fixtau==0] <- tau.init[fixtau==0]
+        fixtau <- tau
+        # iterate
+        X <- model.matrix(fit0)
+        glmm <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
+        tau.init <- glmm$tau
+        if (verbose) cat("    ")
+    } else {
+        # no initial guess
+        tau <- c(0,0)
+        if (trait.type == "binary")
+            tau[1L] <- 1
+        if (sum(tau.init[tau==0]) == 0)
+            tau[tau==0] <- 0.5
+        else
+            tau[tau==0] <- tau.init[tau==0]
+        tau.init <- tau
+    }
+
+    if (verbose && use_approx_tau)
+        .cat("Use tau for the interaction: (", tau.init[1L], ", ", tau.init[2L], ")")
+
+
     ####  Enumerate each SNP pair  ####
 
+    param$no_iteration <- use_approx_tau
     rv_dat <- NULL  # output data
-    ori_X <- model.matrix(formula, data)
-    y <- data[[phenovar]]
     if (verbose)
-        .cat("# of SNP pairs: ", nrow(snp_pair))
+        .cat("Testing the interaction, # of SNP pairs: ", nrow(snp_pair))
 
     for (ii in seq_len(nrow(snp_pair)))
     {
         i1 <- snp_pair[ii, 1L]
         i2 <- snp_pair[ii, 2L]
         if (verbose)
-            .cat("==> ", ii, ": SNP ", i1, " x SNP ", i2, "\t[", date(), "] <==")
+        {
+            s <- paste0("==> ", ii, ": SNP ", i1, " x SNP ", i2,
+                "\t[", date(), "] <==")
+            .cat(.crayon_inverse(s))
+        }
 
         # first SNP
         if (inherits(gds_assoc, "SeqVarGDSClass"))
@@ -379,7 +467,7 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
         X_new <- qr.Q(Xqr) * sqrt(nrow(X))
         X_qrr <- qr.R(Xqr)
         new_dat <- data.frame(cbind(y, X_new))
-        nm <- paste0("x", seq_len(ncol(X_new))-1L)
+        nm <- paste0("x_", seq_len(ncol(X_new))-1L)
         colnames(new_dat) <- c("y", nm)
         fm <- as.formula(paste("y ~", paste(nm, collapse=" + "), "-1"))
         if (verbose.detail)
@@ -389,26 +477,18 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
         if (trait.type == "binary")
         {
             fit0 <- glm(fm, data=new_dat, family=binomial)
-            if (verbose.detail) .show_coeff(fit0, "    ")
-
-            obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(formula, data)
-
-            # initial tau
-            tau <- fixtau <- c(0,0)
-            if (fit0$family$family %in% c("binomial", "poisson"))
-                tau[1] <- fixtau[1] <- 1
-            if (sum(tau.init[fixtau==0]) == 0)
-                tau[fixtau==0] <- 0.5
-            else
-                tau[fixtau==0] <- tau.init[fixtau==0]
+            if (verbose.detail)
+                .show_coeff(fit0, "    ", !param$no_iteration)
+            obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(fm, new_dat)
 
             # iterate
+            tau <- tau.init
             X <- model.matrix(fit0)
             glmm <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
 
             # calculate the interaction term
             if (verbose.detail)
-                .cat(.crayon_inverse("    Calculate the interaction term:"))
+                .cat("    Calculate the interaction term:")
             d <- .Call(saige_GxG_snp_bin, fit0, glmm, g1*g2, obj.noK, param, verbose)
 
         } else if (trait.type == "quantitative")    
@@ -462,7 +542,7 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
 
             # calculate the variance ratio
             if (verbose)
-                .cat(.crayon_inverse("Calculate the interaction term:"))
+                .cat("Calculate the interaction term:")
             set.seed(seed)
             var.ratio <- .Call(saige_calc_var_ratio_quant, fit0, glmm, obj.noK,
                 param, sample.int(n_var, n_var))
@@ -488,6 +568,8 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
             rv_ans <- cbind(rv_ans, snp_pair[1:nrow(rv_ans), 3:ncol(snp_pair)])
             colnames(rv_ans) <- s
         }
+        if (use_approx_tau)
+            attr(rv_ans, "tau_G") <- tau.init[2L]
         # save to a file
         if (!is.na(model.savefn) && model.savefn!="")
         {
