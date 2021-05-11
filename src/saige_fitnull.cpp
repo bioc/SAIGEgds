@@ -31,6 +31,14 @@
 #include <algorithm>
 
 
+#ifdef _WIN32
+#   ifdef RCPP_PARALLEL_USE_TBB
+#       undef RCPP_PARALLEL_USE_TBB
+#   endif
+#   define RCPP_PARALLEL_USE_TBB 0
+#endif
+
+
 using namespace std;
 using namespace Rcpp;
 using namespace arma;
@@ -70,7 +78,7 @@ using namespace vectorization;
 #define PARALLEL_FOR(i, SIZE, balancing)    \
 	{  \
 		const int th_idx = 0;  \
-		for (size_t i=0; i < SIZE; i++)
+		for (size_t i=0; i < (size_t)SIZE; i++)
 #define PARALLEL_RANGE(st, ed, SIZE, balancing)    \
 	{  \
 		const int th_idx = 0;  \
