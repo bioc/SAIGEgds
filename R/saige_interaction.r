@@ -45,7 +45,7 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
     trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.005,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
     X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5,
-    maxiterPCG=500L, tau.init=c(0,0), use_approx_tau=FALSE,
+    maxiterPCG=500L, tau.init=c(0,0), use_approx_tau=FALSE, glm_threshold=FALSE,
     traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE, num.thread=1L,
     model.savefn="", seed=200L, fork.loading=FALSE, verbose=TRUE,
     verbose.detail=TRUE)
@@ -74,6 +74,8 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
     stopifnot(is.numeric(tau.init), length(tau.init)==2L)
     stopifnot(is.logical(use_approx_tau), length(use_approx_tau)==1L,
         !is.na(use_approx_tau))
+    stopifnot(is.logical(glm_threshold) | is.numeric(glm_threshold),
+        length(glm_threshold)==1L)
     stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
     stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
     stopifnot(is.logical(geno.sparse), length(geno.sparse)==1L)
@@ -394,6 +396,12 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
     if (verbose && use_approx_tau)
         .cat("Use tau for the interaction: (", tau.init[1L], ", ", tau.init[2L], ")")
 
+    # check whether use glm p-value threshold
+    if (is.na(glm_threshold)) glm_threshold <- FALSE
+    if (isTRUE(glm_threshold)) glm_threshold <- 0.01
+    if (verbose && !isFALSE(glm_threshold))
+        .cat("GLM p-value threshold: ", glm_threshold)
+
 
     ####  Enumerate each SNP pair  ####
 
@@ -480,19 +488,49 @@ seqGLMM_GxG_spa <- function(formula, data, gds_grm, gds_assoc, snp_pair,
             if (verbose.detail)
                 .show_coeff(fit0, "    ", !param$no_iteration)
             obj.noK <- SPAtest:::ScoreTest_wSaddleApprox_NULL_Model(fm, new_dat)
-
-            # iterate
-            tau <- tau.init
-            X <- model.matrix(fit0)
-            glmm <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
-
-            # calculate the interaction term
             if (verbose.detail)
                 .cat("    Calculate the interaction term:")
-            d <- .Call(saige_GxG_snp_bin, fit0, glmm, g1*g2, obj.noK, param, verbose)
+            X <- model.matrix(fit0)
+            pv <- NA_real_
+            run_glmm <- TRUE
+            if (!isFALSE(glm_threshold))
+            {
+                # calculate the interaction term using glm
+                param$no_iteration <- TRUE
+                tau <- c(1, 0)
+                glmm <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
+                d <- .Call(saige_GxG_snp_bin, fit0, glmm, g1*g2, obj.noK,
+                    param, verbose)
+                param$no_iteration <- use_approx_tau
+                pv <- d$pval
+                pv2 <- d$p.norm
+                d$pval <- d$p.norm <- NaN
+                d$p.glm <- pv
+                d$p.glm.norm <- pv2
+                run_glmm <- is.finite(pv) && (pv <= glm_threshold)
+                if (verbose.detail)
+                {
+                    .cat("    glm p-value: ", pv, " ",
+                        ifelse(run_glmm, "<= threshold", "> threshold (skip glmm)"))
+                }
+            }
+            if (run_glmm)
+            {
+                # iterate
+                tau <- tau.init
+                glmm <- .Call(saige_fit_AI_PCG_binary, fit0, X, tau, param)
+                d <- .Call(saige_GxG_snp_bin, fit0, glmm, g1*g2, obj.noK, param,
+                    verbose)
+                if (!is.na(pv))
+                {
+                    d$p.glm <- pv
+                    d$p.glm.norm <- pv2
+                }
+            }
 
         } else if (trait.type == "quantitative")    
         {
+            stop("Not implement yet.")
             # inverse normal transformation
             if (isTRUE(inv.norm))
             {

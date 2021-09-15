@@ -10,7 +10,7 @@ seqGLMM_GxG_spa(formula, data, gds_grm, gds_assoc, snp_pair,
     trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.005,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL, inv.norm=TRUE,
     X.transform=TRUE, tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5,
-    maxiterPCG=500L, tau.init=c(0,0), use_approx_tau=FALSE,
+    maxiterPCG=500L, tau.init=c(0,0), use_approx_tau=FALSE, glm_threshold=FALSE,
     traceCVcutoff=0.0025, ratioCVcutoff=0.001, geno.sparse=TRUE, num.thread=1L,
     model.savefn="", seed=200L, fork.loading=FALSE, verbose=TRUE,
     verbose.detail=TRUE)
@@ -21,10 +21,10 @@ seqGLMM_GxG_spa(formula, data, gds_grm, gds_assoc, snp_pair,
         coerced to that class), e.g., \code{y ~ x1 + x2}, see \code{\link{lm}}}
     \item{data}{a data frame for the formulas}
     \item{gds_grm}{a SeqArray GDS filename, or a GDS object}
-    \item{gds_assoc}{a SeqArray GDS filename, a GDS object, or a 0/1/2/NA matrix with
-        row names for sample IDs}
-    \item{snp_pair}{a \code{data.frame} with the first two columns for the variant IDs in
-        \code{gds_assoc}}
+    \item{gds_assoc}{a SeqArray GDS filename, a GDS object, or a 0/1/2/NA
+        matrix with row names for sample IDs}
+    \item{snp_pair}{a \code{data.frame} with the first two columns for the
+        variant IDs in \code{gds_assoc}}
     \item{trait.type}{"binary" for binary outcomes, "quantitative" for
         continuous outcomes}
     \item{sample.col}{the column name of sample IDs corresponding to the GDS
@@ -51,6 +51,8 @@ seqGLMM_GxG_spa(formula, data, gds_grm, gds_assoc, snp_pair,
     \item{use_approx_tau}{if \code{TRUE}, fit the model defined in
         \code{formula} without any SNP markers for the interactions to provide
         the estimated tau value (variance component estimates)}
+    \item{glm_threshold}{FALSE, TRUE or a numeric value for p-value threshold;
+        if TRUE use 0.01 as a threshold}
     \item{traceCVcutoff}{the threshold for coefficient of variation (CV) for
         the trace estimator, and the number of runs for trace estimation will
         be increased until the CV is below the threshold}
@@ -91,6 +93,8 @@ seqGLMM_GxG_spa(formula, data, gds_grm, gds_assoc, snp_pair,
         is too small, e.g., \code{pnorm(-50) = 0} in R; used for checking only}
     \item{converged}{whether the SPA algorithm converges or not for adjusted
         p-values.}
+    \item{p.glm}{glm p-value with SPA calculation}
+    \item{p.glm.norm}{glm p-value without SPA calculation}
 }
 
 \references{
@@ -118,8 +122,8 @@ head(pheno)
 # define the SNP pairs
 snp_pair <- data.frame(s1=2:3, s2=6:7, note=c("F1", "F2"))
 
-seqGLMM_GxG_spa(y ~ x1 + x2, pheno, grm_gds, grm_fn, snp_pair, trait.type="binary",
-	verbose.detail=FALSE)
+seqGLMM_GxG_spa(y ~ x1 + x2, pheno, grm_gds, grm_fn, snp_pair,
+    trait.type="binary", verbose.detail=FALSE)
 }
 
 \keyword{GDS}
