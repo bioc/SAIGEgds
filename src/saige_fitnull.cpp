@@ -960,6 +960,7 @@ BEGIN_RCPP
 	const double traceCVcutoff = param["traceCVcutoff"];
 	const bool verbose = Rf_asLogical(param["verbose"])==TRUE;
 	const char *indent = param["indent"];
+	if (!indent) indent = "";
 
 	List fit0(r_fit0);
 	dvec y = as<dvec>(fit0["y"]);
@@ -1110,6 +1111,7 @@ BEGIN_RCPP
 	const double traceCVcutoff = param["traceCVcutoff"];
 	const bool verbose = Rf_asLogical(param["verbose"])==TRUE;
 	const char *indent = param["indent"];
+	if (!indent) indent = "";
 
 	List fit0(r_fit0);
 	dvec y = as<dvec>(fit0["y"]);
