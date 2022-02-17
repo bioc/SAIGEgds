@@ -163,7 +163,7 @@ head(res)
 
 ## Manhattan and QQ plots for p-values
 
-```{r fig.width=6, fig.height=3, fig.align='center'}
+```R
 library(ggmanh)
 
 g <- manhattan_plot(assoc, pval.colname="pval", chr.colname="chr", pos.colname="pos",
@@ -171,7 +171,7 @@ g <- manhattan_plot(assoc, pval.colname="pval", chr.colname="chr", pos.colname="
 g
 ```
 
-```{r fig.width=3, fig.height=3, fig.align='center'}
+```R
 # QQ plot
 qqunif(assoc$pval)
 ```
