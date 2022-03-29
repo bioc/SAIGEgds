@@ -987,7 +987,7 @@ BEGIN_RCPP
 	if (verbose && !no_iteration)
 	{
 		Rprintf("%sInitial variance component estimates, tau:\n", indent);
-		Rprintf("%s    Sigma_E: %g, Sigma_G: %g\n", tau[0], tau[1], indent);
+		Rprintf("%s    Sigma_E: %g, Sigma_G: %g\n", indent, tau[0], tau[1]);
 	}
 
 	dvec re_Y, re_mu, re_alpha, re_eta, re_W, re_Sigma_iY;

@@ -2,7 +2,7 @@ Package: SAIGEgds
 Type: Package
 Title: Scalable Implementation of Generalized mixed models using GDS files in
         Phenome-Wide Association Studies
-Version: 1.8.0
+Version: 1.8.1
 Date: 2021-09-17
 Depends: R (>= 3.5.0), gdsfmt (>= 1.20.0), SeqArray (>= 1.31.8), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel (>= 5.0.0)
