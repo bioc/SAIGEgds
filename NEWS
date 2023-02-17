@@ -1,3 +1,10 @@
+CHANGES IN VERSION 1.12.4
+-------------------------
+
+    o fix the compiling issue on ARM64
+      (see https://github.com/AbbVie-ComputationalGenomics/SAIGEgds/issues/8)
+
+
 CHANGES IN VERSION 1.12.1
 -------------------------
 
