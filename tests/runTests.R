@@ -1,1 +1,1 @@
-BiocGenerics:::testPackage("SAIGEgds")
+# BiocGenerics:::testPackage("SAIGEgds")

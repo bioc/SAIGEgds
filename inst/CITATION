@@ -4,12 +4,12 @@ citEntry(entry="Misc",
     title = "SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models",
     author = personList(person("Xiuwen", "Zheng"), person("J. Wade", "Davis")),
     journal = "Bioinformatics",
-    year = "2020",
+    year = "2021",
     doi = "10.1093/bioinformatics/btaa731",
     textVersion =
         paste("Zheng X, Davis J.Wade.",
             "SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models.",
-            "Bioinformatics 2020. doi: 10.1093/bioinformatics/btaa731")
+            "Bioinformatics 2021. doi: 10.1093/bioinformatics/btaa731")
 )
 
 citEntry(entry="Article",

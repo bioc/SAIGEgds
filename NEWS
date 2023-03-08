@@ -1,3 +1,27 @@
+CHANGES IN VERSION 1.99.0
+-------------------------
+
+NEW FEATURES
+
+    o New features to use sparse genetic relationship matrix in generalized
+      linear mixed models (GLMMs) according to the SAIGE-GENE paper
+      (Zhou et al., 2020)
+
+    o a new argument 'grm.mat' in `seqFitNullGLMM_SPA()`: the dense or sparse
+      genetic relationship matrix (GRM) can be specified via 'grm.mat'
+
+    o MAC categories for multiple variance ratios in `seqFitNullGLMM_SPA()`,
+      `seqAssocGLMM_SPA()`, designed for rare variants
+
+    o new function `seqAssocGLMM_SKAT()` for the SKAT aggregate method
+
+    o new feature `seqAssocGLMM_ACAT_O()` to include the SKAT aggregate method
+      for full ACAT-O tests
+
+    o faster `seqSAIGE_LoadPval()` when merging multiple input files
+
+
+
 CHANGES IN VERSION 1.12.4
 -------------------------
 

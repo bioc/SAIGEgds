@@ -16,10 +16,10 @@ Benchmarks using the UK Biobank White British genotype data (N=430K) with corona
 
 ## Bioconductor:
 
-Release Version: v1.12.1 ([http://www.bioconductor.org/packages/SAIGEgds](http://www.bioconductor.org/packages/SAIGEgds))
+Release Version: v1.8.0 ([http://www.bioconductor.org/packages/SAIGEgds](http://www.bioconductor.org/packages/SAIGEgds))
 
 * [Help Documents](https://rdrr.io/bioc/SAIGEgds/man)
-* [Tutorial](http://www.bioconductor.org/packages/release/bioc/vignettes/SAIGEgds/inst/doc/SAIGEgds.html)
+* [Tutorial](http://www.bioconductor.org/packages/devel/bioc/vignettes/SAIGEgds/inst/doc/SAIGEgds.html)
 * [News](http://www.bioconductor.org/packages/release/bioc/news/SAIGEgds/NEWS)
 
 
@@ -137,7 +137,9 @@ seqClose(geno_gds)
 
 ## Citations
 
-Zheng X, Davis J.Wade. SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2020). [DOI: 10.1093/bioinformatics/btaa731](http://dx.doi.org/10.1093/bioinformatics/btaa731).
+Zheng X, Davis J.Wade. SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2021). Mar;37(5):728-730. [DOI: 10.1093/bioinformatics/btaa731](http://dx.doi.org/10.1093/bioinformatics/btaa731).
+
+Zhou W, Zhao Z, Nielsen JB, Fritsche LG, LeFaive J, Taliun SAG, Bi W, Gabrielsen ME, Daly MJ, Neale BM, Hveem K, Abecasis GR, Willer CJ, Lee S. Scalable generalized linear mixed model for region-based association tests in large biobanks and cohorts. *Nat Genet* (2020). Jun;52(6):634-639. [DOI:10.1038/s41588-020-0621-6](http://dx.doi.org/10.1038/s41588-020-0621-6)
 
 Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J, VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K, Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control imbalance and sample relatedness in large-scale genetic association studies. *Nat Genet* (2018). Sep;50(9):1335-1341. [DOI: 10.1038/s41588-018-0184-y](https://www.nature.com/articles/s41588-018-0184-y).
 
@@ -149,4 +151,3 @@ Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D
 [SeqArray](https://www.bioconductor.org/packages/SeqArray): Data management of large-scale whole-genome sequence variant calls
 
 [gds2bgen](https://github.com/zhengxwen/gds2bgen): Format conversion from bgen to gds
-

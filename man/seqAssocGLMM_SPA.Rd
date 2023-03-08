@@ -7,8 +7,8 @@ Saddlepoint approximation in the mixed model framework.
 }
 
 \usage{
-seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, dsnode="",
-    spa.pval=0.05, var.ratio=NaN, res.savefn="", res.compress="LZMA",
+seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, spa=TRUE,
+    dsnode="", geno.ploidy=2L, res.savefn="", res.compress="LZMA",
     parallel=FALSE, verbose=TRUE)
 }
 
@@ -21,16 +21,17 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, dsnode="",
         for no filter}
     \item{missing}{missing threshold for variants (checking <= missing),
         \code{NaN} for no filter}
+    \item{spa}{\code{TRUE} for using the Saddlepoint approximation method for
+        adjusting case-control imbalance}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
-    \item{spa.pval}{the p-value threshold for SPA adjustment, 0.05 by default
-        (since normal approximation performs well when the test statistic is
-        close to the mean)}
-    \item{var.ratio}{\code{NaN} for using the estimated variance ratio in the
-        model fitting, or a user-defined variance ratio}
+    \item{geno.ploidy}{specify the ploidy (2 by default); 0 or NA used for
+        non-genotype data (e.g., CNV and \code{dsnode} should be specified
+        for CNVs meanwhile)}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
     \item{res.compress}{the compression method for the output file, it should
-        be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none}
+        be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none; see
+        \code{\link{compression.gdsn}} for more details}
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
         processing), a numeric value for the number of cores, or other value;
         \code{parallel} is passed to the argument \code{cl} in
@@ -40,11 +41,6 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, dsnode="",
 }
 
 \details{
-    The original SAIGE R package uses 0.05 as a threshold for unadjusted
-p-values (based on asymptotic normality) to further calculate adjusted
-p-values (Saddlepoint approximation, SPA). If \code{var.ratio=NaN},
-the average of variance ratios (\code{mean(modobj$var.ratio$ratio)}) is used
-instead.
     For more details of SAIGE algorithm, please refer to the SAIGE paper
 [Zhou et al. 2018] (see the reference section).
 }

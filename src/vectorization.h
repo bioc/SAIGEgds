@@ -2,7 +2,7 @@
 //
 // vectorization.h: optimization with vectorization
 //
-// Copyright (C) 2019-2020    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -56,18 +56,24 @@
 #include <stddef.h>
 
 
+#ifdef __cplusplus
 namespace vectorization
 {
 	/// get mean and sd
 	void f64_mean_sd(const double x[], size_t n, double &mean, double &sd);
+	/// get min
+	double f64_min(const double x[], size_t n);
 	/// get max and min
 	void f64_maxmin(const double x[], size_t n, double &max, double &min);
+	/// get mean, sd, max & min
+	void f64_mean_sd_maxmin(const double x[], size_t n,
+		double &mean, double &sd, double &max, double &min);
 	/// get max, min, median
-	void f64_medmaxmin(const double x[], size_t n, double &med, double &max, double &min);
+	void f64_medmaxmin(const double x[], size_t n, double &med, double &min, double &max);
 
 	/// return allele frequency and impute genotype using the mean
 	void f64_af_ac_impute(double *ds, size_t n, double &AF, double &AC,
-		int &Num, int buf_idx[]);
+		int &Num, int buf_idx[], int ploidy);
 	/// get the index of each nonzero value in x and return the number of nonzeros
 	size_t f64_nonzero_index(size_t n, const double *x, int *i);
 
@@ -108,3 +114,4 @@ namespace vectorization
 	/// t(vec(y)) * mat(x) * vec(y)
 	double f64_sum_mat_vec(size_t n, const double *x, const double *y);
 }
+#endif

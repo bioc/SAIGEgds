@@ -1,6 +1,6 @@
 ---
 title: "Scalable Generalized Mixed Models in PheWAS using SAIGEgds"
-author: "Xiuwen Zheng (Genomics Research Center, AbbVie, North Chicago)"
+author: "Xiuwen Zheng (Genomics Research Center, AbbVie, North Chicago, US)"
 date: "Mar, 2020"
 output:
     html_document:
@@ -11,7 +11,7 @@ output:
         toc: true
         toc_depth: 3
 vignette: >
-    %\VignetteIndexEntry{SAIGEgds Tutorial}
+    %\VignetteIndexEntry{SAIGEgds Tutorial (single variant tests)}
     %\VignetteDepends{SAIGEgds}
     %\VignetteKeywords{GWAS, PheWAS, mixed models}
     %\VignetteEngine{knitr::rmarkdown}
@@ -34,7 +34,8 @@ Here we develop a new high-performance statistical package (SAIGEgds) for large-
 
 # Installation
 
-* Bioconductor repository (available soon):
+* Bioconductor repository
+
 ```R
 if (!requireNamespace("BiocManager", quietly=TRUE))
     install.packages("BiocManager")
@@ -166,8 +167,8 @@ head(res)
 ```{r fig.width=6, fig.height=3, fig.align='center'}
 library(ggmanh)
 
-g <- manhattan_plot(assoc, pval.colname="pval", chr.colname="chr", pos.colname="pos",
-    x.label="Chromosome 22")
+g <- manhattan_plot(assoc, pval.colname="pval", chr.colname="chr",
+    pos.colname="pos", x.label="Chromosome 22")
 g
 ```
 
@@ -195,8 +196,8 @@ unlink(c("grm_geno.gds", "assoc.gds"), force=TRUE)
 
 # References
 
-1. Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J, VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K, Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control imbalance and sample relatedness in large-scale genetic association studies. *Nat Genet* (2018). Sep;50(9):1335-1341. [DOI: 10.1038/s41588-018-0184-y](https://doi.org/10.1038/s41588-018-0184-y)
-2. Zheng X, Davis J. SAIGEgds – an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2021) [DOI: 10.1093/bioinformatics/btaa731](http://dx.doi.org/10.1093/bioinformatics/btaa731).
+1. Zheng X, Davis J.Wade. SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2021). Mar;37(5):728-730. [DOI: 10.1093/bioinformatics/btaa731](http://dx.doi.org/10.1093/bioinformatics/btaa731).
+2. Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J, VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K, Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control imbalance and sample relatedness in large-scale genetic association studies. *Nat Genet* (2018). Sep;50(9):1335-1341. [DOI: 10.1038/s41588-018-0184-y](https://doi.org/10.1038/s41588-018-0184-y)
 3. Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D. SeqArray -- A storage-efficient high-performance data format for WGS variant calls. *Bioinformatics* (2017). [DOI: 10.1093/bioinformatics/btx145](http://dx.doi.org/10.1093/bioinformatics/btx145).
 
 .

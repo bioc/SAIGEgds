@@ -39,6 +39,11 @@ Lin M, Hveem K, Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling
 for case-control imbalance and sample relatedness in large-scale genetic
 association studies. *Nat Genet* (2018). Sep;50(9):1335-1341.
 
+    Zhou W, Zhao Z, Nielsen JB, Fritsche LG, LeFaive J, Taliun SAG, Bi W,
+Gabrielsen ME, Daly MJ, Neale BM, Hveem K, Abecasis GR, Willer CJ, et al.
+Scalable generalized linear mixed model for region-based association tests
+in large biobanks and cohorts. Nat Genet. 2020; 52: 634-9.
+
     Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C,
 Levine D. SeqArray -- A storage-efficient high-performance data format for WGS
 variant calls. *Bioinformatics* (2017). DOI: 10.1093/bioinformatics/btx145.

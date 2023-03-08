@@ -1,16 +1,15 @@
-\name{seqAssocGLMM_spaACAT_O}
-\alias{seqAssocGLMM_spaACAT_O}
+\name{seqAssocGLMM_ACAT_V}
+\alias{seqAssocGLMM_ACAT_V}
 \title{ACAT-V tests}
 \description{
-    ACAT-O combined p-value calculations using mixed models and the Saddlepoint
+    ACAT-V p-value calculations using mixed models and the Saddlepoint
 approximation method for case-control imbalance.
 }
 
 \usage{
-seqAssocGLMM_spaACAT_O(gdsfile, modobj, units, wbeta=AggrParamBeta,
-    burden.mac=10, burden.summac=3, dsnode="", spa.pval=0.05, var.ratio=NaN,
-    res.savefn="", res.compress="LZMA", parallel=FALSE,
-    verbose=TRUE, verbose.maf=TRUE)
+seqAssocGLMM_ACAT_V(gdsfile, modobj, units, wbeta=AggrParamBeta,
+    ccimb.adj=TRUE, collapse.mac=10, burden.summac=3, dsnode="", res.savefn="",
+    res.compress="LZMA", parallel=FALSE, verbose=TRUE, verbose.maf=FALSE)
 }
 
 \arguments{
@@ -22,15 +21,16 @@ seqAssocGLMM_spaACAT_O(gdsfile, modobj, units, wbeta=AggrParamBeta,
         \code{dbeta()} according to variant's MAF; a length-two vector, or a
         matrix with two rows for multiple beta parameters; by default, using
         beta(1,1) and beta(1,25) both}
-    \item{burden.mac}{a threshold of minor allele count for using burden test
-        instead of single variant test if \code{mac < burden.mac}}
-    \item{burden.summac}{a threshold for the weighted sum of minor allele
-        counts in burden test (checking \code{>= burden.summac})}
+    \item{ccimb.adj}{whether adjusting for case-control imbalance or not}
+    \item{collapse.mac}{a threshold of minor allele count for collapsing ultra
+        rare variants used in burden tests if \code{mac <= collapse.mac},
+        10 by default}
+    \item{burden.summac}{a threshold for the sum of minor allele counts (MAC)
+        in the burden test for collapsing ultra rare variants (checking
+        \code{>= burden.summac}); no calculation if the sum of MAC
+        \code{< burden.summac}}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
-    \item{spa.pval}{the p-value threshold for SPA adjustment, 0.05 by default}
-    \item{var.ratio}{\code{NaN} for using the estimated variance ratio in the
-        model fitting, or a user-defined variance ratio}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
     \item{res.compress}{the compression method for the output file, it should
         be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none}
@@ -44,28 +44,34 @@ seqAssocGLMM_spaACAT_O(gdsfile, modobj, units, wbeta=AggrParamBeta,
 }
 
 \details{
-    The original SAIGE R package uses 0.05 as a threshold for unadjusted
-p-values to further calculate SPA-adjusted p-values. If \code{var.ratio=NaN},
-the average of variance ratios (\code{mean(modobj$var.ratio$ratio)}) is used
-instead.
-    For more details of SAIGE algorithm, please refer to the SAIGE paper
-[Zhou et al. 2018] (see the reference section). No SKAT implementation.
+    \code{seqUnitFilterCond()} in the SeqArray package can be used to restrict
+the variant sets \code{units} to a range of MAC and/or MAF.
+
+    For more details of the ACAT-V method, please refer to the ACAT paper
+[Liu et al. 2019] (see the reference section).
 }
 
 \value{
     Return a \code{data.frame} with the following components if not saving to
 a file:
     \code{chr}, chromosome;
-    \code{start}, a starting position;
-    \code{end}, an ending position;
-    \code{numvar}, the number of variants in a window;
-    \code{summac}, the weighted sum of minor allele counts;
-    \code{beta}, beta coefficient, odds ratio if binary outcomes);
-    \code{SE}, standard error for beta coefficient;
-    \code{pval}, adjusted p-value with Saddlepoint approximation;
-    \item{p.norm}{p-values based on asymptotic normality (could be 0 if it
-        is too small, e.g., \code{pnorm(-50) = 0} in R; used for checking only}
-    \code{cvg}, whether the SPA algorithm converges or not for adjusted p-value.
+    \code{start}, the starting position;
+    \code{end}, the ending position;
+    \code{numvar}, the number of variants in the window;
+    \code{maf.avg}, the average of MAFs in the window;
+    \code{maf.sd}, the standard deviation of MAFs in the window;
+    \code{maf.min}, the minimum of MAFs in the window;
+    \code{maf.max}, the maximum of MAFs in the window;
+    \code{mac.avg}, the average of MACs in the window;
+    \code{mac.sd}, the standard deviation of MACs in the window;
+    \code{mac.min}, the minimum of MACs in the window;
+    \code{mac.max}, the maximum of MACs in the window;
+    \code{n.single}, the number of single variant tests;
+    \code{n.burden}, the number of ultra rare variants in the burden test;
+    \code{pval}, ACAT-V p-value;
+    \code{p.med}, the median of the list of p-value;
+    \code{p.min}, the minimum of the list of p-values;
+    \code{p.max}, the maximum of the list of p-values.
 }
 
 \references{
@@ -75,7 +81,10 @@ Analysis in Sequencing Studies. Am J Hum Genetics 104, 410-421 (2019).
 }
 \author{Xiuwen Zheng}
 \seealso{
-    \code{\link{seqAssocGLMM_spaBurden}}, \code{\link{seqAssocGLMM_spaACAT_V}}
+    \code{\link{seqAssocGLMM_ACAT_O}},
+    \code{\link{seqAssocGLMM_Burden}},
+    \code{\link{seqAssocGLMM_SKAT}},
+    \code{\link{seqUnitFilterCond}}
 }
 
 \examples{
@@ -94,7 +103,7 @@ glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary")
 # get a list of variant units for burden tests
 units <- seqUnitSlidingWindows(gdsfile, win.size=500, win.shift=250)
 
-assoc <- seqAssocGLMM_spaACAT_O(gdsfile, glmm, units)
+assoc <- seqAssocGLMM_ACAT_V(gdsfile, glmm, units)
 head(assoc)
 
 # close the GDS file

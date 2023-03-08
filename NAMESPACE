@@ -1,14 +1,20 @@
 # Export the following names
 useDynLib(SAIGEgds,
-    saige_score_test_init, saige_simd_version,
-    saige_store_2b_geno, saige_store_sp_geno,
-    saige_fit_AI_PCG_binary, saige_fit_AI_PCG_quant,
-    saige_calc_var_ratio_binary, saige_calc_var_ratio_quant,
-    saige_burden_test_bin, saige_burden_test_quant,
-    saige_acatv_test_bin, saige_acatv_test_quant,
-    saige_acato_test_bin, saige_acato_test_quant,
+    saige_simd_version, saige_simd_sp_grm, saige_grm_ds_calc,
+    saige_set_numthread,
+    saige_init_sparse, saige_get_sparse_info,
+    saige_init_fit_grm, saige_store_2b_geno, saige_store_sp_geno,
+    saige_store_dense_grm, saige_store_sparse_grm, saige_get_grm_diag,
+    saige_score_test_init,
+    saige_fit_AI_PCG, saige_calc_var_ratio, saige_set_geno2b_raw,
+    saige_score_test_pval,
+    saige_burden_test_pval, saige_acatv_test_pval,
+    saige_skat_test_init, saige_skat_test_reset, saige_skat_test_done,
+    saige_skat_test_pval,
+    saige_acato_test_pval,
     saige_acat_p,
-    saige_GxG_snp_bin
+    saige_grm_sp_calc, saige_grm_sp_calc_ijx, saige_grm_sp_reraw,
+    saige_set_option
 )
 
 # Export all names
@@ -18,15 +24,17 @@ export(pACAT, pACAT2, glmmHeritability)
 # Import all packages listed as Imports or Depends
 import(methods)
 import(Rcpp)
+import(Matrix)
 importFrom(stats, as.formula, binomial, gaussian, glm, lm, model.frame,
     model.matrix, model.response, na.omit, sd, var, qnorm, dbeta)
 importFrom(utils, object.size, packageVersion, str, write.csv, write.table)
 importFrom(gdsfmt, createfn.gds, openfn.gds, closefn.gds, index.gdsn, ls.gdsn,
     add.gdsn, read.gdsn, readex.gdsn, readmode.gdsn, put.attr.gdsn,
-    get.attr.gdsn)
+    get.attr.gdsn, exist.gdsn)
 importFrom(SeqArray, seqOpen, seqClose, seqGetData, seqApply, seqSummary,
     seqParallel, seqResetFilter, seqSetFilter, seqGetFilter, seqSetFilterCond,
-    seqAlleleFreq, seqUnitApply)
+    seqAlleleFreq, seqBlockApply, seqUnitApply, seqGet2bGeno,
+    seqGetAF_AC_Missing, seqExport, seqFilterPush, seqFilterPop)
 importFrom(RcppParallel, setThreadOptions, RcppParallelLibs)
 
 # Registering S3 methods

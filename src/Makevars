@@ -5,6 +5,9 @@
 # use C++11
 CXX_STD = CXX11
 
+# enable ARMA_64BIT_WORD for large matrices
+PKG_CPPFLAGS = -DARMA_64BIT_WORD=1
+
 # check GNU GCC for function multi-versioning
 GCC_FLAG=$(shell $(CC) -dM -E - < /dev/null |grep -Eo '__GNUC__|__clang__|ICC' \
 	|tr '\n' ' ' |grep GNUC |grep -v -e clang -e ICC)
