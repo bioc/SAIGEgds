@@ -77,6 +77,8 @@
 		arena.execute([&]{
 #define PARALLEL_THREAD_BLOCK_END    });
 
+#define PARALLEL_VECTOR    tbb::concurrent_vector
+
 #else
 
 #define PARALLEL_FOR(i, SIZE, balancing)    \
@@ -91,6 +93,7 @@
 
 #define PARALLEL_THREAD_BLOCK
 #define PARALLEL_THREAD_BLOCK_END
+#define PARALLEL_VECTOR    std::vector
 
 #endif
 

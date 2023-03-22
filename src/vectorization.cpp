@@ -40,7 +40,7 @@ extern "C" SEXP saige_simd_version()
 	// since __builtin_cpu_supports("avx512bw") in ICC always return 0
 	const bool has_avx512bw = _may_i_use_cpu_feature(
 		_FEATURE_AVX512F | _FEATURE_AVX512BW);
-#else
+#elif defined(COREARRAY_HAVE_TARGET_CLONES)
 	const bool has_avx512bw = __builtin_cpu_supports("avx512f") &&
 		__builtin_cpu_supports("avx512bw");
 #endif

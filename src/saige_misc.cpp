@@ -2,7 +2,7 @@
 //
 // saige_misc.cpp: Miscellaneous functions
 //
-// Copyright (C) 2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2022-2023    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -515,7 +515,7 @@ inline static void grm_sp_init_lookup(SEXP g_pack, SEXP g_lookup, bool use_f64)
 static void grm_sp_calc_block(const double rel,
 	const int i_st, const int i_n, const int j_st, const int j_n,
 	const size_t n_byte, const RawMatrix &G_Pack, const NumericMatrix &G_Lookup,
-	tbb::concurrent_vector<t_sp_i_j> &sp)
+	PARALLEL_VECTOR<t_sp_i_j> &sp)
 {
 	// for each block (i_n, j_n)
 	PARALLEL_FOR(i_b, i_n, true)
@@ -565,7 +565,7 @@ BEGIN_RCPP
 
 	// fill g_lookup using float or double
 	grm_sp_init_lookup(g_pack, g_lookup, USE_FLOAT_BOOL);
-	tbb::concurrent_vector<t_sp_i_j> sp;
+	PARALLEL_VECTOR<t_sp_i_j> sp;
 	sp.reserve(nSamp*4);
 
 	PARALLEL_THREAD_BLOCK
