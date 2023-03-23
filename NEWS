@@ -1,3 +1,9 @@
+CHANGES IN VERSION 1.12.5
+-------------------------
+
+    o enable RCPP_PARALLEL_USE_TBB=1 on Windows
+
+
 CHANGES IN VERSION 1.12.4
 -------------------------
 
