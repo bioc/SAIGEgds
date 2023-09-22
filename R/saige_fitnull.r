@@ -87,7 +87,8 @@
     if (inherits(m, "TsparseMatrix") && !inherits(m, "dgTMatrix"))
         m <- as(m, "dgTMatrix")
     if (!inherits(m, "dgCMatrix"))
-        m <- as(m, "dgCMatrix")
+        m <- as(m, "generalMatrix")
+    stopifnot(is(m, "dgCMatrix"))
     m
 }
 

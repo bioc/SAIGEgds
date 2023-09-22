@@ -449,7 +449,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
         # forking, no need to distribute model parameters
         .Call(saige_score_test_init, mobj)
         # initialize SKAT
-        mobj$Sigma_inv_cg <- as(mobj$Sigma_inv, "dgCMatrix")
+        mobj$Sigma_inv_cg <- .sp_to_dgCMatrix(mobj$Sigma_inv)
         .Call(saige_skat_test_init, mobj$Sigma_inv_cg, mobj$t_XVX_inv_XV,
             mobj$Si_X, mobj$XVX_inv_XV_X_Si_X, mobj$collapse.method)
         # finalize
@@ -462,7 +462,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
         seqParallel(parallel, NULL, split="none", .combine="none",
             FUN = function(mobj) {
                 eval(.load_lib)
-                mobj$Sigma_inv_cg <- as(mobj$Sigma_inv, "dgCMatrix")
+                mobj$Sigma_inv_cg <- .sp_to_dgCMatrix(mobj$Sigma_inv)
                 .packageEnv$mobj <- mobj
                 # initialize SKAT
                 .Call(saige_score_test_init, mobj)
@@ -826,7 +826,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
         if (has_skat)
         {
             # initialize SKAT
-            mobj$Sigma_inv_cg <- as(mobj$Sigma_inv, "dgCMatrix")
+            mobj$Sigma_inv_cg <- .sp_to_dgCMatrix(mobj$Sigma_inv)
             .Call(saige_skat_test_init, mobj$Sigma_inv_cg, mobj$t_XVX_inv_XV,
                 mobj$Si_X, mobj$XVX_inv_XV_X_Si_X, mobj$collapse.method)
             # finalize
@@ -842,7 +842,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
         seqParallel(parallel, NULL, split="none", .combine="none",
             FUN = function(mobj) {
                 eval(.load_lib)
-                mobj$Sigma_inv_cg <- as(mobj$Sigma_inv, "dgCMatrix")
+                mobj$Sigma_inv_cg <- .sp_to_dgCMatrix(mobj$Sigma_inv)
                 .packageEnv$mobj <- mobj
                 .Call(saige_score_test_init, mobj)
                 if (!is.null(mobj$Sigma_inv))
