@@ -109,7 +109,7 @@ int SummaryStat_Mat(SEXP mat, double out_af[], double out_mac[])
 	if (!Rf_isMatrix(mat))
 		Rf_error("The input matrix should be a dense matrix.");
 	IntegerVector Dim = Rf_getAttrib(mat, R_DimSymbol);
-	if (Dim.size() != 2) Rf_error(ERR_INVALID_MAT);
+	if (Dim.size() != 2) Rf_error("%s", ERR_INVALID_MAT);
 	// calculate AF & MAC for each SNV
 	const int nrow = Dim[0];
 	const int ncol = Dim[1];
@@ -148,7 +148,7 @@ int SummaryStat_Mat(SEXP mat, double out_af[], double out_mac[])
 		}
 		break;
 	default:
-		Rf_error(ERR_INVALID_MAT);
+		Rf_error("%s", ERR_INVALID_MAT);
 	}
 	// output
 	return ncol;
@@ -167,9 +167,9 @@ int SummaryStat_SpMat(SEXP mat, double out_af[], double out_mac[])
 	NumericVector X = ObjM.slot("x");
 	IntegerVector Dim = ObjM.slot("Dim");
 	if (Dim.size() != 2)
-		Rf_error(ERR_INVALID_SP_MAT);
+		Rf_error("%s", ERR_INVALID_SP_MAT);
 	if ((P.size() != Dim[1]+1) || (I.size() != X.size()))
-		Rf_error(ERR_INVALID_SP_MAT);
+		Rf_error("%s", ERR_INVALID_SP_MAT);
 	// calculate AF & MAC for each SNV
 	const int nrow = Dim[0];
 	const int ncol = Dim[1];

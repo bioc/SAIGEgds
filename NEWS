@@ -1,7 +1,14 @@
+CHANGES IN VERSION 2.2.1
+-------------------------
+
+    o fix the compiler warning: -Wformat-security
+
+
 CHANGES IN VERSION 2.2.0
 -------------------------
 
-    o fix "Matrix-deprecated" when calling `as(<dsCMatrix>, "dgCMatrix")`
+    o fix the "Matrix-deprecated" warning from the Matrix package when calling
+      `as(<dsCMatrix>, "dgCMatrix")`
 
 
 CHANGES IN VERSION 2.0.0
