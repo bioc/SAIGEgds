@@ -470,7 +470,7 @@ static double *get_ds(SEXP ds, R_xlen_t n, R_xlen_t start, double *ds_buf=NULL)
 			ds_buf[i] = (p[i] != Rbyte(0xFF)) ? p[i] : R_NaN;
 		return ds_buf;
 	}
-	Rf_error(ERR_DS_TYPE);
+	Rf_error("%s", ERR_DS_TYPE);
 	return NULL;
 }
 

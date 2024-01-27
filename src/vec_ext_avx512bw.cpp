@@ -17,8 +17,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include "vec_ext.h"
 #include "vectorization.h"
+#include "vec_ext.h"
 
 #ifdef VEC_CPU_ARCH_X86_AVX512BW
 extern const bool VEC_ALGORITHM_AVX512BW = true;
@@ -52,7 +52,7 @@ extern const bool VEC_ALGORITHM_AVX512BW = false;
 
 
 #undef SIMD_NAME
-#define SIMD_NAME(NAME)    MATH_OFAST TARGET_AVX512 NAME ## _avx512bw
+#define SIMD_NAME(NAME)    MATH_O3 TARGET_AVX512 NAME ## _avx512bw
 
 
 extern "C" void SIMD_NAME(grm_calc_update_f32)(

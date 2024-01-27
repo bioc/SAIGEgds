@@ -352,6 +352,8 @@
             stop("'use.cateMAC' should be strictly increasing.")
         if (use.cateMAC[1L] <= 0)
             stop("'use.cateMAC[1]' should be > 0.")
+        if (!all(is.finite(use.cateMAC)))
+            stop("The numeric values in 'use.cateMAC' should be finite.")
     }
     use.cateMAC
 }
@@ -630,13 +632,14 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             stopifnot(is.numeric(use.cateMAC), is.vector(use.cateMAC))
             if (verbose)
                 cat("MAC categories for estimating variance ratios:\n")
-            if (isTRUE(cateMAC.inc.maf)) cateMAC.inc.maf <- maf
+            if (isTRUE(cateMAC.inc.maf))
+                cateMAC.inc.maf <- ifelse(is.finite(maf), maf, numeric())
             if (is.numeric(cateMAC.inc.maf))
             {
                 for (m in sort(cateMAC.inc.maf))
                 {
                     a <- 2L * length(sid) * m
-                    if (all(abs(a - use.cateMAC) > 1L))
+                    if (all(abs(a-use.cateMAC) > 1L) && (a > max(use.cateMAC)))
                     {
                         use.cateMAC <- sort(c(use.cateMAC, a))
                         if (verbose)
@@ -661,16 +664,18 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             {
                 if (!isFALSE(use.cateMAC) && isTRUE(cateMAC.simu))
                 {
+                    if (verbose)
+                    {
+                        cat(sprintf("    MAC%s, %g):\t",
+                            if (last > .Machine$double.eps) paste0("[", last) else "(0",
+                            mac))
+                    }
                     n <- 5L * num.marker
                     rand.packed.geno[[k]] <- .simu_geno(length(sid), n, last, mac)
                     rand.packed.geno.vid <- c(rand.packed.geno.vid,
                         paste0("simu", k, "_g", seq_len(n)))
                     if (verbose)
-                    {
-                        .cat(sprintf("    MAC%s, %g):\t%d+ simulated variants",
-                            if (last > .Machine$double.eps) paste0("[", last) else "(0",
-                            mac, num.marker))
-                    }
+                        cat(sprintf("%d+ simulated variants\n", num.marker))
                 } else {
                     stop(sprintf("Less variants (n=%d) than %d in MAC[%g, %g)",
                         length(ii), num.marker, last, mac),
