@@ -17,8 +17,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include "vec_ext.h"
 #include "vectorization.h"
+#include "vec_ext.h"
 
 // need a patch for gcc_v4.8
 #if defined(VEC_CPU_ARCH_X86) && defined(__GNUC__) && (__GNUC__==4) && (__GNUC_MINOR__==8)
@@ -65,7 +65,7 @@ extern const bool VEC_ALGORITHM_AVX2 = false;
 #endif
 
 #undef SIMD_NAME
-#define SIMD_NAME(NAME)    MATH_OFAST TARGET_AVX2 NAME ## _avx2
+#define SIMD_NAME(NAME)    MATH_O3 TARGET_AVX2 NAME ## _avx2
 
 
 extern "C" void SIMD_NAME(grm_calc_update_f32)(
@@ -396,7 +396,7 @@ extern "C" double SIMD_NAME(get_dot_sp_b)(const double p_std_geno_d[],
 }
 
 
-extern "C" MATH_OFAST void SIMD_NAME(set_dot_sp_b)(double p_add[], double dot,
+extern "C" void SIMD_NAME(set_dot_sp_b)(double p_add[], double dot,
 	const double p_std_geno_d[], const uint8_t p_sp_g[])
 {
 	const int *s256 = (const int *)p_sp_g;  // no worry about the unalign
