@@ -732,7 +732,7 @@ static sp_mat get_G0_flipped_impute(SEXP dosage, double maf[],
 	{
 		// it could be a RAW, integer or numeric matrix
 		Misc::SummaryStat_Mat(dosage, maf, mac);
-		Rf_error("not support!");
+		Rf_error("get_G0_flipped_impute: not support! contact the author");
 		return sp_mat();
 	} else {
 		// it should be a sparse matrix (dgCMatrix)

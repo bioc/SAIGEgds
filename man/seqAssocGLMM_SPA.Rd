@@ -8,7 +8,7 @@ Saddlepoint approximation in the mixed model framework.
 
 \usage{
 seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, spa=TRUE,
-    dsnode="", geno.ploidy=2L, res.savefn="", res.compress="LZMA",
+    dsnode="", geno.ploidy=2L, res.savefn="", res.compress="ZIP",
     parallel=FALSE, verbose=TRUE)
 }
 
@@ -30,7 +30,7 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, spa=TRUE,
         for CNVs meanwhile)}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
     \item{res.compress}{the compression method for the output file, it should
-        be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none; see
+        be one of ZIP, ZIP_RA, LZMA, LZMA_RA and none; see
         \code{\link{compression.gdsn}} for more details}
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
         processing), a numeric value for the number of cores, or other value;

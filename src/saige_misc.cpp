@@ -623,7 +623,7 @@ BEGIN_RCPP
 	// number of blocks
 	const size_t n_block = (nnzero / bs) + ((nnzero % bs) ? 1 : 0);
 	// number of threading
-	if (SAIGE_NumThread > n_block) SAIGE_NumThread = n_block;
+	if ((size_t)SAIGE_NumThread > n_block) SAIGE_NumThread = n_block;
 	// fill g_lookup
 	grm_sp_init_lookup(g_pack, g_lookup, true);
 	// resulting numeric vector

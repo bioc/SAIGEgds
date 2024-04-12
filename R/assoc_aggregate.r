@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -317,10 +317,10 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
 
 # get p-value from mixed Chi square distribution
 #   (try CompQuadForm first, then saddle point method, suggested by UW DCC)
+# used in saige_main.cpp
 .skat_eig_chiq <- function(Q, eigval)
 {
     # try integration method
-    # print(head(eigval)); print(summary(eigval))
     v <- suppressWarnings(CompQuadForm::davies(Q, eigval, acc=1e-9))
     if ((v$ifault > 0L) || (v$Qq < 1e3*.Machine$double.eps) || (v$Qq > 1))
     {
@@ -669,8 +669,8 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
         outf <- createfn.gds(res.savefn)
         on.exit(closefn.gds(outf), add=TRUE)
         .aggr_ret_gds(outf, gdsfile, units, rv, Add)
-        Add("n_single", as.integer(sapply(rv, `[`, i=9L)))
-        Add("n_collapse", as.integer(sapply(rv, `[`, i=10L)))
+        Add("n_single", as.integer(vapply(rv, `[`, 0, i=9L)))
+        Add("n_collapse", as.integer(vapply(rv, `[`, 0, i=10L)))
         # write p-values
         st <- 10L
         for (i in seq_len(ncol(wbeta)))
@@ -678,10 +678,10 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
             s <- ""
             if (length(wb_colnm) > 1L)
                 s <- paste0(".", wb_colnm[i])
-            Add(paste0("pval", s),  sapply(rv, `[`, i=st+1L))
-            Add(paste0("p.med", s), sapply(rv, `[`, i=st+2L))
-            Add(paste0("p.min", s), sapply(rv, `[`, i=st+3L))
-            Add(paste0("p.max", s), sapply(rv, `[`, i=st+4L))
+            Add(paste0("pval", s),  vapply(rv, `[`, 0, i=st+1L))
+            Add(paste0("p.med", s), vapply(rv, `[`, 0, i=st+2L))
+            Add(paste0("p.min", s), vapply(rv, `[`, 0, i=st+3L))
+            Add(paste0("p.max", s), vapply(rv, `[`, 0, i=st+4L))
             st <- st + 4L
         }
         if (verbose) cat(.crayon_inverse("Done.\n"))
@@ -691,18 +691,18 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, wbeta=AggrParamBeta,
     } else {
         # output
         ans <- .aggr_ret_obj(units, rv)
-        ans$n.single <- as.integer(sapply(rv, `[`, i=10L))
-        ans$n.burden <- as.integer(sapply(rv, `[`, i=11L))
+        ans$n.single <- as.integer(vapply(rv, `[`, 0, i=10L))
+        ans$n.burden <- as.integer(vapply(rv, `[`, 0, i=11L))
         st <- 11L
         for (i in seq_len(ncol(wbeta)))
         {
             s <- ""
             if (length(wb_colnm) > 1L)
                 s <- paste0(".", wb_colnm[i])
-            ans[[paste0("pval", s)]]  <- sapply(rv, `[`, i=st+1L)
-            ans[[paste0("p.med", s)]] <- sapply(rv, `[`, i=st+2L)
-            ans[[paste0("p.min", s)]] <- sapply(rv, `[`, i=st+3L)
-            ans[[paste0("p.max", s)]] <- sapply(rv, `[`, i=st+4L)
+            ans[[paste0("pval", s)]]  <- vapply(rv, `[`, 0, i=st+1L)
+            ans[[paste0("p.med", s)]] <- vapply(rv, `[`, 0, i=st+2L)
+            ans[[paste0("p.min", s)]] <- vapply(rv, `[`, 0, i=st+3L)
+            ans[[paste0("p.max", s)]] <- vapply(rv, `[`, 0, i=st+4L)
             st <- st + 4L
         }
         # save file?

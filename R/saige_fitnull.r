@@ -363,18 +363,18 @@
 {
     if (verbose)
     {
-        cat("MAC categories: ")
+        cat("MAC categories:")
         if (is.logical(use.cateMAC))
         {
             if (isFALSE(use.cateMAC))
-                cat("none\n")
+                cat(" none\n")
             else
-                .cat(use.cateMAC)
+                .cat(" ", use.cateMAC)
         } else {
             x1 <- c(0, use.cateMAC)
             x2 <- c(use.cateMAC, Inf)
             s <- paste0("[", x1, ",", x2, ")")
-            .cat(paste(s, collapse=", "))
+            .cat("\n    ", paste(s, collapse=", "))
         }
     }
     invisible()

@@ -1,22 +1,22 @@
 \name{seqFitSparseGRM}
 \alias{seqFitSparseGRM}
 \alias{seqFitDenseGRM}
-\title{Sparse Genetic relationship matrix}
+\title{Sparse & dense genetic relationship matrix}
 \description{
-    Construct sparse genetic relationship matrix (GRM) from the full GRM.
+    Construct sparse and dense genetic relationship matrix (GRM).
 }
 
 \usage{
 seqFitSparseGRM(gdsfile, sample.id=NULL, variant.id=NULL, nsnp.sub.random=2000L,
-    rel.cutoff=0.125, maf=0.01, missing.rate=0.01, num.thread=1L,
+    rel.cutoff=0.125, maf=0.01, missing.rate=0.005, num.thread=1L,
     return.ID=FALSE, verbose=TRUE)
 seqFitDenseGRM(gdsfile, sample.id=NULL, variant.id=NULL, maf=0.01,
-    missing.rate=0.01, num.thread=1L, use.double=TRUE, return.ID=FALSE,
+    missing.rate=0.005, num.thread=1L, use.double=TRUE, return.ID=FALSE,
     verbose=TRUE)
 }
 
 \arguments{
-    \item{gdsfile}{a SeqArray GDS filename or a GDS object for genotypes used
+    \item{gdsfile}{a SeqArray GDS file name or a GDS object for genotypes used
         in the GRM calculation; see details}
     \item{sample.id}{NULL for all samples, or sample IDs in GRM}
     \item{variant.id}{candidate variant IDs used for constructing GRM; or
@@ -51,13 +51,13 @@ calculation.
     If \code{return.ID=TRUE}, returns a list with \code{sample.id} for
 sample IDs, \code{variant.id} for the full set of variants,
 \code{variant.sub.id} for the subset of variants, and the GRM matrix.
-    Otherwise, it returns a sparse symmetric matrix for GRM, with sample IDs in
-\code{colnames()} and \code{rownames()}.
+    Otherwise, it returns a sparse or dense symmetric matrix for GRM, with
+sample IDs in \code{colnames()} and \code{rownames()}.
 }
 
 \author{Xiuwen Zheng}
 \seealso{
-    \code{\link{seqFitNullGLMM_SPA}}
+    \code{\link{seqFitNullGLMM_SPA}}, \code{\link{seqFitLDpruning}}
 }
 
 \examples{
@@ -69,10 +69,12 @@ gdsfile <- seqOpen(gds_fn)
 
 seqSetFilter(gdsfile, variant.sel=1:100)
 m <- seqFitSparseGRM(gdsfile, rel.cutoff=0.125)
-
 is(m)
 nnzero(m)                 # num of non-zero
 nnzero(m) / prod(dim(m))  # percentage of non-zero
+
+m <- seqFitDenseGRM(gdsfile)
+str(m)
 
 # close the GDS file
 seqClose(gdsfile)

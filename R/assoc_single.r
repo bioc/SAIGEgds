@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -180,7 +180,8 @@
             x <- modobj$var.ratio$ratio
             d <- cut(modobj$var.ratio$mac, c(0, cateMAC, Inf),
                 right=FALSE, dig.lab=15L)
-            vr <- suppressWarnings(sapply(levels(d), function(s) mean(x[d==s])))
+            vr <- suppressWarnings(
+                vapply(levels(d), function(s) mean(x[d==s]), 0))
             if (length(vr) != length(cateMAC)+1L)
             {
                 stop("'use.cateMAC' should be a ", length(vr)-1L,
@@ -235,7 +236,7 @@
 #
 
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
-    spa=TRUE, dsnode="", geno.ploidy=2L, res.savefn="", res.compress="LZMA",
+    spa=TRUE, dsnode="", geno.ploidy=2L, res.savefn="", res.compress="ZIP",
     parallel=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
@@ -362,85 +363,120 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         }
     }
 
-    # scan all (selected) variants
-    rv <- seqParallel(parallel, gdsfile, split="by.variant",
-        .initialize=initfun, .finalize=finalfun, .initparam=mobj,
-        .balancing=TRUE, .bl_size=50000L, .bl_progress=verbose,
-        FUN = function(f, dsnode, pverbose)
+    # reset memory GC to reduce memory usage (especially in forked processes)
+    gc(verbose=FALSE, reset=TRUE, full=TRUE)
+
+    # defined functions
+    isfn <- !is.na(res.savefn) && res.savefn!=""
+    isfn_gds <- isfn && grepl("\\.gds$", res.savefn, ignore.case=TRUE)
+    if (!isfn_gds)
+    {
+        combine_fun <- "unlist"
+        scan_fun <- function(f, dsnode, pverbose)
         {
             seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
                 as.is="list", parallel=FALSE, .progress=pverbose,
                 .list_dup=FALSE, .useraw=NA)
-        }, dsnode=dsnode, pverbose=verbose & (njobs==1L))
+        }
+    } else {
+        # output to a GDS file
+        Append <- function(nm, val)
+            append.gdsn(index.gdsn(outf, nm), val)
+        combine_fun <- function(v)
+        {
+            Append("id", v$id)
+            if (!is.na(geno.ploidy) && (geno.ploidy>0L))
+            {
+                Append("AF.alt", vapply(v$rv, `[`, 0, i=1L))
+                Append("mac", vapply(v$rv, `[`, 0, i=2L))
+            } else {
+                Append("mean", vapply(v$rv, `[`, 0, i=1L))
+                Append("nnzero", vapply(v$rv, `[`, 0, i=2L))
+            }
+            Append("num", vapply(v$rv, `[`, 0, i=3L))
+            Append("beta", vapply(v$rv, `[`, 0, i=4L))
+            Append("SE", vapply(v$rv, `[`, 0, i=5L))
+            Append("pval", vapply(v$rv, `[`, 0, i=6L))
+            if (modobj$trait.type == "binary")
+            {
+                Append("p.norm", vapply(v$rv, `[`, 0, i=7L))
+                Append("converged", vapply(v$rv, `[`, 0, i=8L)==1)
+            }
+            NULL
+        }
+        scan_fun <- function(f, dsnode, pverbose)
+        {
+            v<- seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
+                as.is="list", parallel=FALSE, .progress=pverbose,
+                .list_dup=FALSE, .useraw=NA)
+            i <- seqGetData(f, "$variant_index")
+            x <- !vapply(v, is.null, FALSE)
+            list(id=i[x], rv=v[x])
+        }
 
-    # if any maf/mac filter
-    if (length(rv) != nVariant)
-        stop("Internal error: seqParallel() returns a vector of wrong length.")
-    x <- sapply(rv, is.null)
-    if (any(x))
-    {
-        x <- !x
-        seqSetFilter(gdsfile, variant.sel=x, action="intersect", verbose=FALSE)
-        rv <- rv[x]
-    }
-    if (verbose)
-    {
-        cat("# of variants after filtering by ")
-        if (!is.na(geno.ploidy) && (geno.ploidy>0L))
-            cat("MAF, MAC and ")
-        .cat("missing thresholds: ", .pretty(length(rv)))
-    }
-
-    # output to a GDS file?
-    isfn <- !is.na(res.savefn) && res.savefn!=""
-    if (isfn && grepl("\\.gds$", res.savefn, ignore.case=TRUE))
-    {
         if (verbose)
             .cat("Save to ", sQuote(res.savefn), " ...")
-        cm <- res.compress[1L]
         # create a GDS file
+        cm <- res.compress[1L]
         outf <- createfn.gds(res.savefn)
-        on.exit(closefn.gds(outf), add=TRUE)
+        on.exit({ if (!is.null(outf)) closefn.gds(outf) }, add=TRUE)
         put.attr.gdsn(outf$root, "FileFormat", "SAIGE_OUTPUT")
         put.attr.gdsn(outf$root, "Version",
             paste0("SAIGEgds_", packageVersion("SAIGEgds")))
+
         # add function
         Add <- function(varnm, val)
-            add.gdsn(outf, varnm, val, compress=cm, closezip=TRUE)
+            add.gdsn(outf, varnm, val, compress=cm, closezip=TRUE, replace=TRUE)
         # add sample IDs
         Add("sample.id", seqGetData(gdsfile, "sample.id"))
-        # write data
-        .write_gds(outf, "id", gdsfile, "variant.id", cm)
-        .write_gds(outf, "chr", gdsfile, "chromosome", cm)
-        .write_gds(outf, "pos", gdsfile, "position", cm)
-        # rs.id
-        if (!is.null(index.gdsn(gdsfile, "annotation/id", silent=TRUE)))
-            .write_gds(outf, "rs.id", gdsfile, "annotation/id", cm)
-        # ref and alt alleles
-        Add("ref", seqGetData(gdsfile, "$ref"))
-        Add("alt", seqGetData(gdsfile, "$alt"))
-        # other data
+        add.gdsn(outf, "id", integer())
         if (!is.na(geno.ploidy) && (geno.ploidy>0L))
         {
-            Add("AF.alt", sapply(rv, `[`, i=1L))
-            Add("mac", sapply(rv, `[`, i=2L))
+            add.gdsn(outf, "AF.alt", double())
+            add.gdsn(outf, "mac", double())
         } else {
-            Add("mean", sapply(rv, `[`, i=1L))
-            Add("nnzero", sapply(rv, `[`, i=2L))
+            add.gdsn(outf, "mean", double())
+            add.gdsn(outf, "nnzero", integer())
         }
-        Add("num", as.integer(sapply(rv, `[`, i=3L)))
-        Add("beta", sapply(rv, `[`, i=4L))
-        Add("SE", sapply(rv, `[`, i=5L))
-        Add("pval", sapply(rv, `[`, i=6L))
+        add.gdsn(outf, "num", integer())
+        add.gdsn(outf, "beta", double())
+        add.gdsn(outf, "SE", double())
+        add.gdsn(outf, "pval", double())
         if (modobj$trait.type == "binary")
         {
-            Add("p.norm", sapply(rv, `[`, i=7L))
-            Add("converged", sapply(rv, `[`, i=8L)==1)
+            add.gdsn(outf, "p.norm", double())
+            add.gdsn(outf, "converged", logical())
         }
-        if (verbose) .cat(.crayon_inverse("Done."))
-        # output
-        invisible()
-    } else {
+    }
+
+    # scan variants
+    rv <- seqParallel(parallel, gdsfile, split="by.variant",
+        .initialize=initfun, .finalize=finalfun, .initparam=mobj,
+        .balancing=TRUE, .bl_size=50000L, .bl_progress=verbose,
+        .combine=combine_fun, FUN = scan_fun,
+        dsnode=dsnode, pverbose=verbose & (njobs==1L))
+
+    # output to a GDS file?
+    if (!isfn_gds)
+    {
+        # if any maf/mac filter
+        if (length(rv) != nVariant)
+            stop("seqParallel() returns a vector of wrong length.")
+        x <- vapply(rv, is.null, FALSE)
+        if (any(x))
+        {
+            x <- !x
+            seqSetFilter(gdsfile, variant.sel=x, action="intersect", verbose=FALSE)
+            rv <- rv[x]
+        }
+        if (verbose)
+        {
+            cat("# of variants after filtering by ")
+            if (!is.na(geno.ploidy) && (geno.ploidy>0L))
+                cat("MAF, MAC and ")
+            .cat("missing thresholds: ", .pretty(length(rv)))
+        }
+
         # output
         ans <- data.frame(
             id  = seqGetData(gdsfile, "variant.id"),
@@ -455,23 +491,60 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         ans$alt <- seqGetData(gdsfile, "$alt")
         if (!is.na(geno.ploidy) && (geno.ploidy>0L))
         {
-            ans$AF.alt <- sapply(rv, `[`, i=1L)
-            ans$mac <- sapply(rv, `[`, i=2L)
+            ans$AF.alt <- vapply(rv, `[`, 0, i=1L)
+            ans$mac <- vapply(rv, `[`, 0, i=2L)
         } else {
-            ans$mean <- sapply(rv, `[`, i=1L)
-            ans$nnzero <- sapply(rv, `[`, i=2L)
+            ans$mean <- vapply(rv, `[`, 0, i=1L)
+            ans$nnzero <- vapply(rv, `[`, 0, i=2L)
         }
-        ans$num  <- as.integer(sapply(rv, `[`, i=3L))
-        ans$beta <- sapply(rv, `[`, i=4L)
-        ans$SE   <- sapply(rv, `[`, i=5L)
-        ans$pval <- sapply(rv, `[`, i=6L)
+        ans$num  <- as.integer(vapply(rv, `[`, 0, i=3L))
+        ans$beta <- vapply(rv, `[`, 0, i=4L)
+        ans$SE   <- vapply(rv, `[`, 0, i=5L)
+        ans$pval <- vapply(rv, `[`, 0, i=6L)
         if (modobj$trait.type == "binary")
         {
-            ans$p.norm <- sapply(rv, `[`, i=7L)
-            ans$converged <- as.logical(sapply(rv, `[`, i=8L))
+            ans$p.norm <- vapply(rv, `[`, 0, i=7L)
+            ans$converged <- vapply(rv, `[`, 0, i=8L)==1
         }
 
         # save file?
         .save_R_obj(ans, res.compress, res.savefn, verbose)
+
+    } else {
+        # output to a GDS file
+        # write data
+        i <- read.gdsn(index.gdsn(outf, "id"))
+        seqSetFilter(gdsfile, variant.sel=i, warn=FALSE, verbose=FALSE)
+        nd_id <- .write_gds(outf, "id", gdsfile, "variant.id", cm)
+        nd_chr <- .write_gds(outf, "chr", gdsfile, "chromosome", cm)
+        moveto.gdsn(nd_chr, nd_id)
+        nd_pos <- .write_gds(outf, "pos", gdsfile, "position", cm)
+        moveto.gdsn(nd_pos, nd_chr)
+        nd <- nd_pos
+        # rs.id
+        if (!is.null(index.gdsn(gdsfile, "annotation/id", silent=TRUE)))
+        {
+            nd <- .write_gds(outf, "rs.id", gdsfile, "annotation/id", cm)
+            moveto.gdsn(nd, nd_pos)
+        }
+        # ref and alt alleles
+        nd_ref <- Add("ref", seqGetData(gdsfile, "$ref"))
+        moveto.gdsn(nd_ref, nd)
+        nd_alt <- Add("alt", seqGetData(gdsfile, "$alt"))
+        moveto.gdsn(nd_alt, nd_ref)
+        # sub variables
+        i <- order(i)
+        for (nm in c("AF.alt", "mac", "mean", "nnzero", "num", "beta", "SE",
+            "pval", "p.norm", "converged"))
+        {
+            nd <- index.gdsn(outf, nm, silent=TRUE)
+            if (!is.null(nd)) Add(nm, read.gdsn(nd)[i])
+        }
+
+        # close the GDS file
+        closefn.gds(outf); outf <- NULL
+        cleanup.gds(res.savefn, verbose=FALSE)
+        if (verbose) .cat(.crayon_inverse("Done."))
+        invisible()
     }
 }

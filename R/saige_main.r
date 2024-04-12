@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -114,10 +114,10 @@ SIMD <- function()
 .write_gds <- function(out.gds, out.nm, in.gds, in.nm, cm)
 {
     i <- index.gdsn(in.gds, in.nm)
-    n <- add.gdsn(out.gds, out.nm, storage=i, compress=cm)
+    n <- add.gdsn(out.gds, out.nm, storage=i, compress=cm, replace=TRUE)
     seqApply(in.gds, in.nm, `c`, as.is=n)
     readmode.gdsn(n)
-    invisible()
+    n
 }
 
 # Check null model

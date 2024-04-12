@@ -6,34 +6,109 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2022-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
 
-# create a sparse genetic relationship matrix
+# Select LD-pruned variants for genetic relationship matrix
 seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
-    ld.threshold=0.2, maf=0.005, missing.rate=0.005, use.cateMAC=FALSE,
-    num.marker=30L, outfn=NULL, parallel=FALSE, verbose=TRUE)
+    ld.threshold=0.1, maf=0.01, missing.rate=0.005, autosome.only=TRUE,
+    use.cateMAC=TRUE, num.marker=100L, num.total=100000L, save.gdsfn=NULL,
+    parallel=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(ld.threshold), length(ld.threshold)==1L)
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
+    stopifnot(is.logical(autosome.only), length(autosome.only)==1L)
     use.cateMAC <- .check_use_cateMAC(use.cateMAC)
     stopifnot(is.numeric(num.marker), length(num.marker)==1L, num.marker>0L)
-    stopifnot(is.null(outfn) | is.character(outfn))
+    stopifnot(is.numeric(num.total), length(num.total)==1L, num.total>0L)
+    if (is.na(num.total)) num.total <- Inf
+    stopifnot(is.null(save.gdsfn) | is.character(save.gdsfn))
+    if (is.character(save.gdsfn))
+        stopifnot(!anyNA(save.gdsfn), length(save.gdsfn)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     # check packages
     if (!suppressPackageStartupMessages(requireNamespace("SNPRelate")))
         stop("The package 'SNPRelate' should be installed.")
 
-    if (verbose)
-        cat(.crayon_inverse("LD-pruned SNP set:\n"))
+    is_multi_fn <- is.character(gdsfile) && length(gdsfile)>1L
+    if (verbose && !is_multi_fn)
+        cat(.crayon_inverse("Perform linkage disequilibrium (LD) pruning:\n"))
 
-    # GDS file
-    if (is.character(gdsfile))
+    # GDS file(s)
+    if (is_multi_fn)
+    {
+        if (anyDuplicated(gdsfile))
+            stop("'gdsfile' has duplicated file name(s).")
+        if (anyNA(gdsfile))
+            stop("'gdsfile' has NA.")
+        num.marker.each <- ceiling(num.marker / length(gdsfile))
+        # for-each file name
+        ans <- lapply(seq_along(gdsfile), function(i)
+        {
+            if (verbose && i>1L)
+                .cat(paste(rep("=", 72L), collapse=""))
+            v <- seqFitLDpruning(gdsfile[i], sample.id=sample.id,
+                ld.threshold=ld.threshold, maf=maf, missing.rate=missing.rate,
+                autosome.only=autosome.only, use.cateMAC=use.cateMAC,
+                num.marker=num.marker.each, num.total=Inf,
+                parallel=parallel, verbose=verbose)
+            if (is.null(names(v))) names(v) <- rep("", length(v))
+            v
+        })
+        # check num.total
+        ns <- vapply(ans, function(v) sum(names(v)==""), 0L)
+        if (sum(ns) > num.total)
+        {
+            d <- data.frame(
+                g = rep(1:length(ns), times=ns),
+                i = unlist(lapply(ans, function(v) which(names(v)==""))))
+            if (verbose)
+            {
+                .cat("Randomly select ", num.total, " from ", nrow(d),
+                    " variants.")
+            }
+            d <- d[sort(sample.int(nrow(d), num.total)), ]
+            ans <- lapply(seq_along(ns), function(j)
+            {
+                ii <- ans[[j]]
+                jj <- d$i[d$g==j]
+                c(ii[names(ii)!=""], ii[jj])
+            })
+        }
+        names(ans) <- gdsfile
+        # merging process
+        if (!is.null(save.gdsfn))
+        {
+            if (verbose)
+                .cat(.crayon_inverse(paste(c("\n", rep("=",72L)), collapse="")))
+            save.gdsfn.part <- paste0(save.gdsfn, "_part", seq_along(gdsfile))
+            on.exit(unlink(save.gdsfn.part, force=TRUE))
+            for (i in seq_along(gdsfile))
+            {
+                if (verbose)
+                    cat("Export to", sQuote(save.gdsfn.part[i]), "...")
+                f <- seqOpen(gdsfile[i])
+                seqSetFilter(f, sample.id=sample.id, variant.id=ans[[i]],
+                    warn=FALSE, verbose=FALSE)
+                seqExport(f, save.gdsfn.part[i], info.var=character(),
+                    fmt.var=character(), samp.var=character(), verbose=FALSE)
+                seqClose(f)
+                if (verbose) .cat(" (", date(), ")")
+            }
+            # merge files
+            if (verbose)
+                .cat(.crayon_inverse(paste(rep("=",72L), collapse="")))
+            seqMerge(save.gdsfn.part, save.gdsfn, verbose=verbose)
+        }
+        # output
+        return(invisible(ans))
+
+    } else if (is.character(gdsfile))
     {
         if (verbose)
             .cat("    open ", sQuote(gdsfile))
@@ -50,13 +125,25 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 
     # run LD pruning using SNPRelate
     snpset <- SNPRelate::snpgdsLDpruning(gdsfile, sample.id, variant.id,
-        maf=maf, missing.rate=missing.rate, ld.threshold=ld.threshold,
-        num.thread=nthread, verbose=verbose)
+        autosome.only=autosome.only, maf=maf, missing.rate=missing.rate,
+        ld.threshold=ld.threshold, num.thread=nthread, verbose=verbose)
+    nchrom <- length(snpset)
     snpset <- unlist(snpset, use.names=FALSE)
+    if (length(snpset) > num.total)
+    {
+        if (verbose)
+        {
+            .cat("Randomly select ", num.total, " from ",
+                length(snpset), " variants.")
+        }
+        snpset <- snpset[sort(sample.int(length(snpset), num.total))]
+    }
 
     # need variants for MAC categories
     if (!isFALSE(use.cateMAC))
     {
+        if (verbose)
+            cat("Select ultra rare variants ...\n")
         .show_use_cateMAC(use.cateMAC, verbose)
         seqSetFilter(gdsfile, sample.id=sample.id, verbose=FALSE)
         seqSetFilter(gdsfile, variant.id=variant.id, verbose=FALSE)
@@ -78,33 +165,43 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         }
         remove(v)  # remove unused v
         # MAC categories
-        var_ii <- NULL
+        var_ii <- NULL; nm <- NULL
         low <- 0
         for (u in use.cateMAC)
         {
+            s <- paste0("[", low, ",", u, ")")
             x <- mac < u
             x[is.na(x)] <- FALSE
-            var_ii <- c(var_ii, sample(ii[x], num.marker))
-            ii <- ii[!x]; mac <- mac[!x]
+            if (any(x))
+            {
+                iix <- ii[x]
+                n <- min(num.marker, length(iix))
+                var_ii <- c(var_ii, sort(sample(iix, n)))
+                nm <- c(nm, rep(s, n))
+                ii <- ii[!x]; mac <- mac[!x]
+            }
             if (verbose)
             {
-                .cat("    [", low, ",", u, ")\trandom ", num.marker, " from ",
-                    sum(x), " variants")
+                .cat("    ", s, "\trandom ", num.marker, " from ", sum(x),
+                    " variants")
             }
             low <- u
         }
         # finally
         seqSetFilter(gdsfile, variant.sel=var_ii, warn=FALSE, verbose=FALSE)
-        snpset <- c(snpset, seqGetData(gdsfile, "variant.id"))
-        snpset <- unique(snpset)
+        snpset <- unique(c(seqGetData(gdsfile, "variant.id"), snpset))
+        names(snpset) <- c(nm, rep("", length(snpset)-length(nm)))
     }
 
     # output to a GDS file?
-    if (is.character(outfn))
+    if (is.character(save.gdsfn))
     {
         seqSetFilter(gdsfile, variant.id=snpset, warn=FALSE, verbose=FALSE)
-        seqExport(gdsfile, outfn, info.var=character(), fmt.var=character(),
-            samp.var=character(), verbose=verbose)
+        seqExport(gdsfile, save.gdsfn, info.var=character(),
+            fmt.var=character(), samp.var=character(), verbose=verbose)
+    } else {
+        if (verbose && nchrom>1L)
+            .cat("Done (", length(snpset), " variants in total).")
     }
 
     invisible(snpset)
@@ -252,7 +349,7 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 
 # create a sparse genetic relationship matrix
 seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
-    nsnp.sub.random=2000L, rel.cutoff=0.125, maf=0.01, missing.rate=0.01,
+    nsnp.sub.random=2000L, rel.cutoff=0.125, maf=0.01, missing.rate=0.005,
     num.thread=1L, return.ID=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
@@ -267,7 +364,7 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (verbose)
-        .cat(.crayon_inverse("Genetic Relationship Matrix:"))
+        .cat(.crayon_inverse("Genetic Relationship Matrix (GRM):"))
     if (nsnp.sub.random > 0L)
     {
         nsnp.sub.random <- as.integer(floor(nsnp.sub.random/4) * 4L)
@@ -311,9 +408,9 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 }
 
 
-# create a sparse genetic relationship matrix
+# create a dense genetic relationship matrix
 seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
-    maf=0.01, missing.rate=0.01, num.thread=1L, use.double=TRUE,
+    maf=0.01, missing.rate=0.005, num.thread=1L, use.double=TRUE,
     return.ID=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
@@ -324,7 +421,7 @@ seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     stopifnot(is.logical(use.double), length(use.double)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
     if (verbose)
-        .cat(.crayon_inverse("Genetic Relationship Matrix:"))
+        .cat(.crayon_inverse("Genetic Relationship Matrix (GRM):"))
 
     # GDS file
     if (is.character(gdsfile))
@@ -390,7 +487,7 @@ seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 
     # calculation
     if (verbose)
-        cat("Calculating GRM:\n")
+        cat("Calculating dense GRM:\n")
     prog_func <- SeqArray:::.seqProgForward
     prog <- if (verbose) SeqArray:::.seqProgress(n, 1L) else NULL
     m <- .Call(saige_grm_ds_calc, nvar, g_pack, g_lookup, use.double, bl_size,

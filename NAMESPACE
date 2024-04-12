@@ -30,12 +30,13 @@ importFrom(stats, as.formula, binomial, gaussian, glm, lm, model.frame,
 importFrom(utils, object.size, packageVersion, str, write.csv, write.table)
 importFrom(gdsfmt, createfn.gds, openfn.gds, closefn.gds, index.gdsn, ls.gdsn,
     add.gdsn, read.gdsn, readex.gdsn, readmode.gdsn, put.attr.gdsn,
-    get.attr.gdsn, exist.gdsn)
+    get.attr.gdsn, exist.gdsn, append.gdsn, moveto.gdsn, cleanup.gds)
 importFrom(SeqArray, seqOpen, seqClose, seqGetData, seqApply, seqSummary,
     seqParallel, seqResetFilter, seqSetFilter, seqGetFilter, seqSetFilterCond,
-    seqAlleleFreq, seqBlockApply, seqUnitApply, seqGet2bGeno,
+    seqAlleleFreq, seqBlockApply, seqUnitApply, seqGet2bGeno, seqMerge,
     seqGetAF_AC_Missing, seqExport, seqFilterPush, seqFilterPop)
 importFrom(RcppParallel, setThreadOptions, RcppParallelLibs)
+importFrom(CompQuadForm, davies)
 
 # Registering S3 methods
 S3method(print, ClassSAIGE_NullModel)
