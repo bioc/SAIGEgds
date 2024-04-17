@@ -69,8 +69,9 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
                 i = unlist(lapply(ans, function(v) which(names(v)==""))))
             if (verbose)
             {
+                .cat(paste(rep("=", 72L), collapse=""))
                 .cat("Randomly select ", num.total, " from ", nrow(d),
-                    " variants.")
+                    " LD-pruned variants.")
             }
             d <- d[sort(sample.int(nrow(d), num.total)), ]
             ans <- lapply(seq_along(ns), function(j)
@@ -86,20 +87,31 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         {
             if (verbose)
                 .cat(.crayon_inverse(paste(c("\n", rep("=",72L)), collapse="")))
+            # reset memory GC to reduce memory usage
+            gc(verbose=FALSE, reset=TRUE, full=TRUE)
             save.gdsfn.part <- paste0(save.gdsfn, "_part", seq_along(gdsfile))
             on.exit(unlink(save.gdsfn.part, force=TRUE))
-            for (i in seq_along(gdsfile))
+
+            # in parallel if possible
+            seqParApply(parallel, seq_along(gdsfile),
+                FUN = function(i, snplst, gdsfn, sampid, verbose)
             {
+                outfn <- paste0(gdsfn, "_part", i)
                 if (verbose)
-                    cat("Export to", sQuote(save.gdsfn.part[i]), "...")
-                f <- seqOpen(gdsfile[i])
-                seqSetFilter(f, sample.id=sample.id, variant.id=ans[[i]],
+                {
+                    if (sink.number() > 0) sink()  # TODO
+                    cat(paste0("Export to ", sQuote(basename(outfn)),
+                        " [start at ", date(), "]\n"))
+                }
+                f <- seqOpen(names(snplst)[i])
+                on.exit(seqClose(f))
+                seqSetFilter(f, sample.id=sampid, variant.id=snplst[[i]],
                     warn=FALSE, verbose=FALSE)
-                seqExport(f, save.gdsfn.part[i], info.var=character(),
-                    fmt.var=character(), samp.var=character(), verbose=FALSE)
-                seqClose(f)
-                if (verbose) .cat(" (", date(), ")")
-            }
+                seqExport(f, outfn, info.var=character(), fmt.var=character(),
+                    samp.var=character(), verbose=FALSE)
+                NULL  # no output
+            }, snplst=ans, gdsfn=save.gdsfn, sampid=sample.id, verbose=verbose)
+
             # merge files
             if (verbose)
                 .cat(.crayon_inverse(paste(rep("=",72L), collapse="")))
