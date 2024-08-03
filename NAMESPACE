@@ -34,7 +34,7 @@ importFrom(gdsfmt, createfn.gds, openfn.gds, closefn.gds, index.gdsn, ls.gdsn,
 importFrom(SeqArray, seqOpen, seqClose, seqGetData, seqApply, seqSummary,
     seqParallel, seqResetFilter, seqSetFilter, seqGetFilter, seqSetFilterCond,
     seqAlleleFreq, seqBlockApply, seqUnitApply, seqGet2bGeno, seqMerge,
-    seqGetAF_AC_Missing, seqExport, seqFilterPush, seqFilterPop)
+    seqGetAF_AC_Missing, seqExport, seqFilterPush, seqFilterPop, seqParApply)
 importFrom(RcppParallel, setThreadOptions, RcppParallelLibs)
 importFrom(CompQuadForm, davies)
 

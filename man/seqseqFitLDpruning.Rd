@@ -9,12 +9,12 @@
 seqFitLDpruning(gdsfile, sample.id=NULL, variant.id=NULL,
     ld.threshold=0.1, maf=0.01, missing.rate=0.005, autosome.only=TRUE,
     use.cateMAC=TRUE, num.marker=100L, num.total=100000L, save.gdsfn=NULL,
-    parallel=FALSE, verbose=TRUE)
+    seed=200L, parallel=FALSE, parallel.multi=NULL, verbose=TRUE)
 }
 
 \arguments{
     \item{gdsfile}{a SeqArray GDS file name, a GDS object for genotypes, or
-        a character vector for a list of GDS file names when genotypes are
+        a character vector for a list of GDS file names when genotyeps are
         split by chromosomes}
     \item{sample.id}{NULL for all samples, or sample IDs in GRM}
     \item{variant.id}{a list of variant IDs, used to construct GRM}
@@ -41,6 +41,14 @@ seqFitLDpruning(gdsfile, sample.id=NULL, variant.id=NULL,
         \code{parallel} is passed to the argument \code{cl} in
         \code{\link{seqParallel}}, see \code{\link{seqParallel}} for more
         details}
+    \item{parallel.multi}{only applicable when there are multiple input files
+        in \code{gdsfile} and \code{save.gdsfn} is used; multiple GDS files can
+        be extracted to create a sub GDS file in parallel via
+        \code{parallel.multi}; if \code{NULL}, use \code{parallel} instead;
+        \code{parallel.multi} could have less CPU cores than \code{parallel}
+        to reduce memory usage}
+    \item{seed}{an integer passed to \code{set.seed()} as a seed for random
+        numbers, or \code{NULL} for no action}
     \item{verbose}{if \code{TRUE}, show information}
 }
 

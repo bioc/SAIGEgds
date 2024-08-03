@@ -7,9 +7,9 @@ Saddlepoint approximation in the mixed model framework.
 }
 
 \usage{
-seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, spa=TRUE,
+seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.05, spa=TRUE,
     dsnode="", geno.ploidy=2L, res.savefn="", res.compress="ZIP",
-    parallel=FALSE, verbose=TRUE)
+    parallel=FALSE, load.balancing=TRUE, verbose=TRUE)
 }
 
 \arguments{
@@ -37,6 +37,8 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.1, spa=TRUE,
         \code{parallel} is passed to the argument \code{cl} in
         \code{\link{seqParallel}}, see \code{\link{seqParallel}} for more
         details}
+    \item{load.balancing}{load balancing for the calculation in parallel
+        if \code{TRUE}}
     \item{verbose}{if \code{TRUE}, show information}
 }
 

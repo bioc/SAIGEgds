@@ -81,13 +81,15 @@
 .sp_to_dgCMatrix <- function(m)
 {
     stopifnot(inherits(m, "sparseMatrix"))
-    # if RsparseMatrix ==> TsparseMatrix first
+    # if RsparseMatrix, convert to TsparseMatrix
     if (inherits(m, "RsparseMatrix"))
         m <- as(m, "TsparseMatrix")
-    if (inherits(m, "TsparseMatrix") && !inherits(m, "dgTMatrix"))
-        m <- as(m, "dgTMatrix")
-    if (!inherits(m, "dgCMatrix"))
+    if (inherits(m, "TsparseMatrix"))
+        m <- as(m, "CsparseMatrix")
+    if (inherits(m, "dsCMatrix"))
         m <- as(m, "generalMatrix")
+    if (!inherits(m, "dgCMatrix"))
+        m <- as(m, "dgCMatrix")
     stopifnot(is(m, "dgCMatrix"))
     m
 }
@@ -531,7 +533,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     # show warnings immediately
     saveopt <- options(warn=1L)
     on.exit(options(warn=saveopt$warn), add=TRUE)
-    set.seed(seed)
+    if (!is.null(seed)) set.seed(seed)
 
     # variables in the formula
     s <- as.character(formula)

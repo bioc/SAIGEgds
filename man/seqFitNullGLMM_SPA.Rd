@@ -90,12 +90,14 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     \item{ratioCVcutoff}{the threshold for coefficient of variation (CV) for
         estimating the variance ratio, and the number of randomly selected
         markers will be increased until the CV is below the threshold}
-    \item{geno.sparse}{if \code{TRUE}, store the sparse structure for genotypes;
-        otherwise, save genotypes in a 2-bit dense matrix; see details}
+    \item{geno.sparse}{if \code{TRUE} (by default), store the sparse structure
+        for genotypes; otherwise, save genotypes in a 2-bit dense matrix;
+        see details}
     \item{num.thread}{the number of threads, 1 by default}
     \item{model.savefn}{the filename of model output, R data file '.rda',
         '.RData', or '.rds'}
-    \item{seed}{an integer as a seed for random numbers}
+    \item{seed}{an integer passed to \code{set.seed()} as a seed for random
+        numbers, or \code{NULL} for no action}
     \item{fork.loading}{load genotypes via parallel or not; multiple
         processes can reduce loading time of genotypes, but may double the
         memory usage}
