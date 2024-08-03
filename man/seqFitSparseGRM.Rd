@@ -9,7 +9,7 @@
 \usage{
 seqFitSparseGRM(gdsfile, sample.id=NULL, variant.id=NULL, nsnp.sub.random=2000L,
     rel.cutoff=0.125, maf=0.01, missing.rate=0.005, num.thread=1L,
-    return.ID=FALSE, verbose=TRUE)
+    return.ID=FALSE, seed=200L, verbose=TRUE)
 seqFitDenseGRM(gdsfile, sample.id=NULL, variant.id=NULL, maf=0.01,
     missing.rate=0.005, num.thread=1L, use.double=TRUE, return.ID=FALSE,
     verbose=TRUE)
@@ -36,6 +36,8 @@ seqFitDenseGRM(gdsfile, sample.id=NULL, variant.id=NULL, maf=0.01,
         calculate GRM; otherwise, to use 32-bit single precision}
     \item{return.ID}{if \code{TRUE}, return the IDs for samples, the full
         variant set and the subset of variants}
+    \item{seed}{an integer passed to \code{set.seed()} as a seed for random
+        numbers, or \code{NULL} for no action}
     \item{verbose}{if \code{TRUE}, show information}
 }
 

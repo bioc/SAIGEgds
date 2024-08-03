@@ -126,7 +126,7 @@
             n <- index.gdsn(gdsfile, "genotype/data", silent=TRUE)
             if (!is.null(n))
             {
-                nm <- "$dosage_alt"
+                nm <- "$dosage_alt2"
             } else {
                 nm <- getOption("seqarray.node_ds", "annotation/format/DS")
                 n <- index.gdsn(gdsfile, nm, silent=TRUE)
@@ -134,7 +134,7 @@
                     stop("Dosages should be stored in genotype or annotation/format/DS.")
             }
         } else {
-            nm <- "$dosage_sp"
+            nm <- "$dosage_sp2"
         }
     }
     nm
@@ -235,9 +235,9 @@
 # SAIGE single variant analysis
 #
 
-seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
+seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
     spa=TRUE, dsnode="", geno.ploidy=2L, res.savefn="", res.compress="ZIP",
-    parallel=FALSE, verbose=TRUE)
+    parallel=FALSE, load.balancing=TRUE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(maf), length(maf)==1L)
@@ -251,6 +251,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         stopifnot(geno.ploidy >= 0L)
     stopifnot(is.character(res.savefn), length(res.savefn)==1L)
     .check_compress(res.compress)
+    stopifnot(is.logical(load.balancing), length(load.balancing)==1L,
+        !is.na(load.balancing))
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (verbose)
@@ -375,7 +377,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         scan_fun <- function(f, dsnode, pverbose)
         {
             seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
-                as.is="list", parallel=FALSE, .progress=pverbose,
+                as.is="list", parallel=FALSE,
+                .progress=pverbose && SeqArray:::process_index==1L,
                 .list_dup=FALSE, .useraw=NA)
         }
     } else {
@@ -407,7 +410,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         scan_fun <- function(f, dsnode, pverbose)
         {
             v<- seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
-                as.is="list", parallel=FALSE, .progress=pverbose,
+                as.is="list", parallel=FALSE,
+                .progress=pverbose && SeqArray:::process_index==1L,
                 .list_dup=FALSE, .useraw=NA)
             i <- seqGetData(f, "$variant_index")
             x <- !vapply(v, is.null, FALSE)
@@ -452,9 +456,10 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
     # scan variants
     rv <- seqParallel(parallel, gdsfile, split="by.variant",
         .initialize=initfun, .finalize=finalfun, .initparam=mobj,
-        .balancing=TRUE, .bl_size=50000L, .bl_progress=verbose,
-        .combine=combine_fun, FUN = scan_fun,
-        dsnode=dsnode, pverbose=verbose & (njobs==1L))
+        .combine=combine_fun, FUN=scan_fun,
+        .balancing=load.balancing, .bl_size=50000L, .bl_progress=verbose,
+        dsnode=dsnode,
+        pverbose=verbose && ((njobs==1L) || !load.balancing))
 
     # output to a GDS file?
     if (!isfn_gds)
@@ -514,6 +519,13 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.1,
         # output to a GDS file
         # write data
         i <- read.gdsn(index.gdsn(outf, "id"))
+        if (verbose)
+        {
+            cat("# of variants after filtering by ")
+            if (!is.na(geno.ploidy) && (geno.ploidy>0L))
+                cat("MAF, MAC and ")
+            .cat("missing thresholds: ", .pretty(length(i)))
+        }
         seqSetFilter(gdsfile, variant.sel=i, warn=FALSE, verbose=FALSE)
         nd_id <- .write_gds(outf, "id", gdsfile, "variant.id", cm)
         nd_chr <- .write_gds(outf, "chr", gdsfile, "chromosome", cm)

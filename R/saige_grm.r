@@ -15,7 +15,7 @@
 seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     ld.threshold=0.1, maf=0.01, missing.rate=0.005, autosome.only=TRUE,
     use.cateMAC=TRUE, num.marker=100L, num.total=100000L, save.gdsfn=NULL,
-    parallel=FALSE, verbose=TRUE)
+    seed=200L, parallel=FALSE, parallel.multi=NULL, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(ld.threshold), length(ld.threshold)==1L)
@@ -35,6 +35,10 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     if (!suppressPackageStartupMessages(requireNamespace("SNPRelate")))
         stop("The package 'SNPRelate' should be installed.")
 
+    stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
+    if (!is.null(seed)) set.seed(seed)
+    if (is.null(parallel.multi)) parallel.multi <- parallel
+
     is_multi_fn <- is.character(gdsfile) && length(gdsfile)>1L
     if (verbose && !is_multi_fn)
         cat(.crayon_inverse("Perform linkage disequilibrium (LD) pruning:\n"))
@@ -52,6 +56,9 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         {
             if (verbose && i>1L)
                 .cat(paste(rep("=", 72L), collapse=""))
+            # reset memory GC to reduce memory usage
+            gc(verbose=FALSE, reset=TRUE, full=TRUE)
+            # run LD pruning
             v <- seqFitLDpruning(gdsfile[i], sample.id=sample.id,
                 ld.threshold=ld.threshold, maf=maf, missing.rate=missing.rate,
                 autosome.only=autosome.only, use.cateMAC=use.cateMAC,
@@ -93,7 +100,7 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
             on.exit(unlink(save.gdsfn.part, force=TRUE))
 
             # in parallel if possible
-            seqParApply(parallel, seq_along(gdsfile),
+            seqParApply(parallel.multi, seq_along(gdsfile),
                 FUN = function(i, snplst, gdsfn, sampid, verbose)
             {
                 outfn <- paste0(gdsfn, "_part", i)
@@ -362,7 +369,7 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 # create a sparse genetic relationship matrix
 seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     nsnp.sub.random=2000L, rel.cutoff=0.125, maf=0.01, missing.rate=0.005,
-    num.thread=1L, return.ID=FALSE, verbose=TRUE)
+    num.thread=1L, return.ID=FALSE, seed=200L, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(nsnp.sub.random), length(nsnp.sub.random)==1L,
@@ -382,6 +389,7 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         nsnp.sub.random <- as.integer(floor(nsnp.sub.random/4) * 4L)
         if (nsnp.sub.random < 1L) nsnp.sub.random <- 4L
     }
+    if (!is.null(seed)) set.seed(seed)
 
     # GDS file
     if (is.character(gdsfile))
