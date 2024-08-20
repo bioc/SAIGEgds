@@ -1,3 +1,9 @@
+CHANGES IN VERSION 2.4.1
+-------------------------
+
+    o add an option `load.balancing` to `seqAssocGLMM_SPA()`
+
+
 CHANGES IN VERSION 2.4.0
 -------------------------
 
@@ -44,6 +50,11 @@ NEW FEATURES
 
     o faster `seqSAIGE_LoadPval()` when merging multiple input files
 
+
+CHANGES IN VERSION 1.12.5
+-------------------------
+
+    o enable RCPP_PARALLEL_USE_TBB=1 on Windows
 
 
 CHANGES IN VERSION 1.12.4

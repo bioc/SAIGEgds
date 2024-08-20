@@ -43,8 +43,8 @@ seqFitDenseGRM(gdsfile, sample.id=NULL, variant.id=NULL, maf=0.01,
 
 \details{
     The genetic relationship matrix (GRM) is defined as
-$grm_{ij} = avg_l [(g_{il} - 2*p_l)*(g_{jl} - 2*p_l) / 2*p_l*(1 - p_l)]$ for
-individuals i,j and locus l, where $g_{il}$ is 0, 1 or 2, and $p_l$ is the
+$grm_ij = avg_l [(g_il - 2*p_l)*(g_jl - 2*p_l) / 2*p_l*(1 - p_l)]$ for
+individuals i,j and locus l, where $g_il$ is 0, 1 or 2, and $p_l$ is the
 allele frequency at locus l. The missing genotypes are dropped from the
 calculation.
 }

@@ -134,9 +134,14 @@
         v <- data.frame(v, as.numeric(prop.table(v)))
         v[, 1L] <- paste0("      ", v[, 1L])
         colnames(v) <- c(phenovar, "Number", "Proportion")
+        rowmore <- nrow(v) > 10L
+        if (rowmore) v <- v[1:10, ]
         print(v, row.names=FALSE)
-        if (n != 2L)
+        if (rowmore) cat("        ...\n")
+        if (n > 2L)
             stop("The outcome variable has more than 2 categories!")
+        else if (n <= 1L)
+            stop("The outcome variable has only a unique value!")
     }
 
     # fit the null model
