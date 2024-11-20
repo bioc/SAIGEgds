@@ -115,7 +115,7 @@ extern "C" SEXP saige_simd_version()
 	{
 		strcpy(p, " (FMV)"); p += strlen(p);
 	}
-	return mkString(buffer);
+	return Rf_mkString(buffer);
 }
 
 
@@ -126,7 +126,7 @@ extern "C" SEXP saige_simd_sp_grm()
 		s = "AVX512F";
 	else if (fc_grm_calc_update_f64 == &grm_calc_update_f64_avx2)
 		s = "AVX2";
-	return mkString(s);
+	return Rf_mkString(s);
 }
 
 
