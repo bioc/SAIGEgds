@@ -12,9 +12,9 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
     variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
     inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
-    cateMAC.inc.maf=TRUE, cateMAC.simu=FALSE, X.transform=TRUE, tol=0.02,
-    maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L, num.marker=30L,
-    tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
+    cateMAC.inc.maf=TRUE, cateMAC.simu=TRUE, use.offset=FALSE, X.transform=TRUE,
+    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
+    num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
     geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L,
     fork.loading=FALSE, verbose=TRUE)
 }
@@ -72,10 +72,13 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
         If \code{inv.norm=TRUE}, perform \code{inv.norm="residuals"};
         if \code{inv.norm=FALSE}, it is as the same as \code{inv.norm="none"};
         See the reference for more discussion [Sofer et al., 2019]}
+    \item{use.offset}{if \code{TRUE}, use the estimated residual offset to
+        avoid calculating each fixed effect coefficient}
     \item{X.transform}{if \code{TRUE}, perform QR decomposition on the design
         matrix}
     \item{tol}{overall tolerance for model fitting}
-    \item{maxiter}{the maximum number of iterations for model fitting}
+    \item{maxiter}{the maximum number of iterations for model fitting;
+        \code{maxiter=0} for using a fixed tau parameter in \code{tau.init}}
     \item{nrun}{the number of random vectors in the trace estimation}
     \item{tolPCG}{tolerance of PCG iterations}
     \item{maxiterPCG}{the maximum number of PCG iterations}

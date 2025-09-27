@@ -2,7 +2,7 @@
 //
 // saige_misc.cpp: Miscellaneous functions
 //
-// Copyright (C) 2022-2023    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2022-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -111,8 +111,7 @@ int SummaryStat_Mat(SEXP mat, double out_af[], double out_mac[])
 	IntegerVector Dim = Rf_getAttrib(mat, R_DimSymbol);
 	if (Dim.size() != 2) Rf_error("%s", ERR_INVALID_MAT);
 	// calculate AF & MAC for each SNV
-	const int nrow = Dim[0];
-	const int ncol = Dim[1];
+	const int nrow = Dim[0], ncol = Dim[1];
 	int i = 0;
 	switch (TYPEOF(mat))
 	{
@@ -156,7 +155,7 @@ int SummaryStat_Mat(SEXP mat, double out_af[], double out_mac[])
 
 
 /// Calculate AF & MAC from a sparse genotype matrix, return the number of columns
-int SummaryStat_SpMat(SEXP mat, double out_af[], double out_mac[])
+int SummaryStat_SpMat(SEXP mat, double out_af[])
 {
 	// check
 	if (!Rf_inherits(mat, "dgCMatrix"))
@@ -171,14 +170,12 @@ int SummaryStat_SpMat(SEXP mat, double out_af[], double out_mac[])
 	if ((P.size() != Dim[1]+1) || (I.size() != X.size()))
 		Rf_error("%s", ERR_INVALID_SP_MAT);
 	// calculate AF & MAC for each SNV
-	const int nrow = Dim[0];
-	const int ncol = Dim[1];
+	const int nrow = Dim[0], ncol = Dim[1];
 	const double *pX = &X[0];
 	for (int i=0; i < ncol; i++)
 	{
-		const int st = P[i], ed = P[i+1];
+		int st = P[i], ed = P[i+1], n = nrow;
 		double sum = 0;
-		int n = nrow;
 		for (int j=st; j < ed; j++)
 		{
 			if (R_FINITE(pX[j]))
@@ -186,12 +183,7 @@ int SummaryStat_SpMat(SEXP mat, double out_af[], double out_mac[])
 			else
 				n--;
 		}
-		if (n > 0)
-		{
-			out_af[i] = sum / (2*n);
-			out_mac[i] = std::min(sum, 2*n-sum);
-		} else
-			out_af[i] = out_mac[i] = R_NaN;
+		out_af[i] = (n > 0) ? sum / (2*n) : R_NaN;
 	}
 	// output
 	return ncol;
@@ -199,9 +191,10 @@ int SummaryStat_SpMat(SEXP mat, double out_af[], double out_mac[])
 
 
 /// Return a sp_mat with imputed and flipped genotypes if needed
-///    excluding monomorphic variants
+///    excluding monomorphic variants and maf > maf_threshold,
+///    update af[], mac_imp[]
 sp_mat GetSp_Impute_SpMat(SEXP mat, double af[], double mac[],
-	double mac_imp[])
+	double maf_threshold, double missing_threshold)
 {
 	// check
 	if (!Rf_inherits(mat, "dgCMatrix"))
@@ -211,31 +204,45 @@ sp_mat GetSp_Impute_SpMat(SEXP mat, double af[], double mac[],
 	IntegerVector P = ObjM.slot("p");
 	NumericVector X = ObjM.slot("x");
 	IntegerVector Dim = ObjM.slot("Dim");
+	if (!R_FINITE(maf_threshold)) maf_threshold = 1;
 	// calculate # of non-zero values
-	const int nrow = Dim[0];
-	const int ncol = Dim[1];
+	const int nrow = Dim[0], ncol = Dim[1];
 	const double *pX = &X[0];
 	const int *pI = &I[0];
 	size_t nnzero=0, new_ncol=0;
 	for (int i=0; i < ncol; i++)
 	{
-		const double AF = af[i];
-		if (R_FINITE(AF) && 0<AF && AF<1)
+		const double AF  = af[i];
+		if (R_FINITE(AF))
 		{
-			new_ncol ++;
-			const int st = P[i], ed = P[i+1];
-			if (AF <= 0.5)
+			const double MAF = (AF <= 0.5) ? AF : (1-AF);
+			if ((0 < MAF) & (MAF <= maf_threshold))
 			{
-				nnzero += (ed - st);
-			} else {
-				// need flipping
-				nnzero += nrow;
+				const int st = P[i], ed = P[i+1];
+				int n_miss = 0;
 				for (int j=st; j < ed; j++)
+					if (!R_FINITE(pX[j])) n_miss++;
+				const double miss = (double)n_miss / nrow;
+				// Rprintf("miss: %g, mac: %g, maf: %g\n", miss, mac[i], MAF);
+				if (miss <= missing_threshold)
 				{
-					if (R_FINITE(pX[j]) && pX[j]==2)
-						nnzero--;
-				}
-			}
+					new_ncol ++;
+					if (AF <= 0.5)
+					{
+						nnzero += (ed - st);
+					} else {
+						// need flipping
+						nnzero += nrow;
+						for (int j=st; j < ed; j++)
+						{
+							if (R_FINITE(pX[j]) && pX[j]==2)
+								nnzero--;
+						}
+					}
+				} else
+					af[i] = R_NaN;
+			} else
+				af[i] = R_NaN;
 		}
 	}
 	// initialize the components of sp_mat
@@ -247,7 +254,7 @@ sp_mat GetSp_Impute_SpMat(SEXP mat, double af[], double mac[],
 	for (int i=0; i < ncol; i++)
 	{
 		const double AF = af[i];
-		if (R_FINITE(AF) && 0<AF && AF<1)
+		if (R_FINITE(AF))
 		{
 			const size_t old_idx = idx;
 			const int st = P[i], ed = P[i+1];
@@ -297,11 +304,10 @@ sp_mat GetSp_Impute_SpMat(SEXP mat, double af[], double mac[],
 			}
 			colptr[new_idx_col+1] = idx;
 			af[new_idx_col] = af[i];
-			mac[new_idx_col] = mac[i];
-			// update MAC for missing genotypes
+			// update MAC with imputed missing genotypes
 			double s = 0;
 			for (size_t j=old_idx; j < idx; j++) s += val[j];
-			mac_imp[new_idx_col] = s;
+			mac[new_idx_col] = s;
 			// next column
 			new_idx_col ++;
 		}
@@ -314,80 +320,69 @@ sp_mat GetSp_Impute_SpMat(SEXP mat, double af[], double mac[],
 
 
 /// Collapse ultra rare variants with imputed genotype matrix
-///     collapse_method = 1, presence or absence (PA)
-///     collapse_method = 2, presence or absence (PA_int)
-///     collapse_method = 3, sum up rare genotype (SumG)
+///     collapse_method = 1, max of dosages of rare variants (max)
+///     collapse_method = 2, sum up rare genotype (sum)
 sp_mat GetSp_CollapseGenoMat(const sp_mat &mat, double collapse_mac,
-	int collapse_method,
-	const double mac[], double inout_maf[], int &out_n_collapse)
+	int collapse_method, const double mac[], const double maf[],
+	double new_maf[], int &out_n_collapse)
 {
 	const int nrow = mat.n_rows;
 	const int ncol = mat.n_cols;
 	// check whether has any collapsing
-	int n_collapse=0;
+	int n_gcol=0, n_collapse=0;
 	for (int i=0; i < ncol; i++)
-		if (mac[i] <= collapse_mac) n_collapse ++;
+	{
+		const double C = mac[i];
+		if (R_FINITE(C) && (C > 0))
+		{
+			if (C <= collapse_mac) n_collapse++; else n_gcol++;
+		}
+	}
 	out_n_collapse = n_collapse;
-	if (n_collapse == 0) return mat;
-	// need collapsing for n_collapse > 0
-	uvec icol(ncol - n_collapse);
-	int icol_st=0, n_g_c1=0;
+	if (n_gcol == ncol)
+	{
+		memmove(new_maf, maf, sizeof(double)*ncol);
+		return mat;
+	}
+	// need extracting or collapsing
+	uvec icol(n_gcol);
 	dvec g_c1;
 	g_c1.zeros(nrow);
+	int icol_st=0, n_g_c1=0;
 	// for-loop
 	for (int i=0; i < ncol; i++)
 	{
-		if (mac[i] <= collapse_mac)
+		const double C = mac[i];
+		if (R_FINITE(C) && (C > 0))
 		{
-			if (mac[i] > 0)
+			if (C <= collapse_mac)
 			{
 				n_g_c1 ++;
 				sp_mat::const_iterator it = mat.begin_col(i);
 				sp_mat::const_iterator ed = mat.end_col(i);
 				switch (collapse_method)
 				{
-				case 1:  // presence or absence (PA)
-				case 2:  // presence or absence (PA_int), get rowMax
+				case 1:  // get rowMax (max)
 					for (; it != ed; ++it)
-					{
-						double g = *it;
-						if (g > g_c1[it.row()]) g_c1[it.row()] = g;
-					}
+						if ((*it) > g_c1[it.row()]) g_c1[it.row()] = *it;
 					break;
-				case 3:  // sum up genotype (SumG)
+				case 2:  // sum up genotype (sum)
 					for (; it != ed; ++it) g_c1[it.row()] += *it;
 					break;
 				default:
 					Rf_error("Invalid 'collapse_method: %d'.", collapse_method);
 				}
-			}
-		} else
-			icol[icol_st++] = i;
+			} else
+				icol[icol_st++] = i;
+		}
 	}
 	// set maf output
 	for (size_t i=0; i < icol.size(); i++)
-		inout_maf[i] = inout_maf[icol[i]];
+		new_maf[i] = maf[icol[i]];
 	// output
 	if (n_g_c1 > 0)
 	{
-		switch (collapse_method)
-		{
-		case 1:  // presence or absence (PA)
-			for (size_t i=0; i < g_c1.n_elem; i++)
-			{
-				double &v = g_c1[i];
-				if (v >= 1.5) v = 2; else if (v >= 0.5) v = 1;
-			}
-			break;
-		case 2:  // presence or absence (PA_int: 0, 1, 2)
-			for (size_t i=0; i < g_c1.n_elem; i++)
-			{
-				double &v = g_c1[i];
-				if (v >= 1.5) v = 2; else if (v >= 0.5) v = 1; else v = 0;
-			}
-			break;
-		}
-		inout_maf[icol.size()] = sum(g_c1) / (2*g_c1.size());
+		new_maf[icol.size()] = sum(g_c1) / (2*g_c1.size());
 		sp_mat sp = mat.cols(icol);
 		return join_rows(sp, sp_mat(g_c1));
 	} else

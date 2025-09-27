@@ -120,6 +120,9 @@ SIMD <- function()
     n
 }
 
+# date string
+.tm <- function() strftime(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
 # Check null model
 .check_modobj <- function(modobj, verbose)
 {
@@ -214,6 +217,7 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
             f <- openfn.gds(fn)
             on.exit(closefn.gds(f))
             fm <- get.attr.gdsn(f$root)$FileFormat[1L]
+            if (length(fm)==0L) fm <- ""
             if (fm %in% c("SAIGE_OUTPUT", "SAIGE_OUTPUT_SET"))
             {
                 if (is.null(varnm))

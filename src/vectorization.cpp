@@ -2,7 +2,7 @@
 //
 // vectorization.cpp: optimization with vectorization
 //
-// Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -219,8 +219,8 @@ void f64_mean_sd_maxmin(const double x[], size_t n, double &mean, double &sd,
 }
 
 /// get max, min, median
-void f64_medmaxmin(const double x[], size_t n, double &med, double &min,
-	double &max)
+void f64_medmaxmin(const double x[], size_t n, double &med, double &max,
+	double &min)
 {
 	double vmax = -INFINITY, vmin = INFINITY;
 	size_t num = 0;
@@ -345,6 +345,16 @@ COREARRAY_TARGET_CLONES MATH_OFAST double f64_sum(size_t n, const double *x)
 }
 
 
+/// sum_i x[i]
+COREARRAY_TARGET_CLONES MATH_OFAST double f64_sum_finite(size_t n, const double *x)
+{
+	double sum = 0;
+	for (size_t i=0; i < n; i++)
+		if (isfinite(x[i])) sum += x[i];
+	return sum;
+}
+
+
 /// x[i] = x[i] / sum_i x[i] (excluding not finite numbers)
 COREARRAY_TARGET_CLONES void f64_normalize(size_t n, double *x)
 {
@@ -353,9 +363,9 @@ COREARRAY_TARGET_CLONES void f64_normalize(size_t n, double *x)
 		if (isfinite(x[i])) sum += x[i];
 	if (sum > 0)
 	{
-		sum = 1 / sum;
+		double r = 1 / sum;
 		for (size_t i=0; i < n; i++)
-			if (isfinite(x[i])) x[i] *= sum;
+			if (isfinite(x[i])) x[i] *= r;
 	}
 }
 

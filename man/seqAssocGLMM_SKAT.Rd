@@ -2,15 +2,14 @@
 \alias{seqAssocGLMM_SKAT}
 \title{SKAT tests}
 \description{
-    SKAT p-value calculations using mixed models and the
-Saddlepoint approximation method for case-control imbalance.
+    Set-based SKAT tests using mixed models.
 }
 
 \usage{
-seqAssocGLMM_SKAT(gdsfile, modobj, units, wbeta=AggrParamBeta,
-    collapse.mac=10, collapse.method=c("PA", "PA_int", "SumG"), dsnode="",
-    ccimb.adj=TRUE, res.savefn="", res.compress="LZMA", parallel=FALSE,
-    verbose=TRUE, verbose.maf=FALSE)
+seqAssocGLMM_SKAT(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
+    missing=0.05, collapse.mac=10, collapse.method=c("max", "sum"),
+    ccimb.adj=TRUE, ER.mac=4.5, dsnode="", res.savefn="", res.compress="ZIP",
+    parallel=FALSE, verbose=TRUE, verbose.maf=FALSE)
 }
 
 \arguments{
@@ -18,17 +17,23 @@ seqAssocGLMM_SKAT(gdsfile, modobj, units, wbeta=AggrParamBeta,
     \item{modobj}{an R object for SAIGE model parameters}
     \item{units}{a list of units of selected variants, with S3 class
         \code{"SeqUnitListClass"} defined in the SeqArray package}
+    \item{maxMAF}{a numeric vector for MAF thresholds, e.g.,
+        \code{c(0.01, 0.001)} for rare variants}
     \item{wbeta}{weights for per-variant effect, using beta distribution
         \code{dbeta()} according to variant's MAF; a length-two vector, or a
         matrix with two rows for multiple beta parameters; by default, using
         beta(1,1) and beta(1,25) both}
+    \item{missing}{missing threshold for variants (checking <= \code{missing}),
+        \code{NaN} for no filter}
     \item{collapse.mac}{the mac threshold for collapsing ultra rare variants}
-    \item{collapse.method}{presence or absence ("PA", by default),
-        "PA_int" or average genotypes ("SumG")}
+    \item{collapse.method}{maximum of dosages of rare variants (\code{"max"},
+        by default), sum up rare genotypes (\code{"sum"})}
+    \item{ccimb.adj}{whether adjusting for case-control imbalance}
+    \item{ER.mac}{the maximum sum of MAC for the variants with efficient
+        resampling p-values}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
-    \item{ccimb.adj}{whether adjusting for case-control imbalance}
     \item{res.compress}{the compression method for the output file, it should
         be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none}
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
@@ -51,22 +56,23 @@ the variant sets \code{units} to a range of MAC and/or MAF.
 \value{
     Return a \code{data.frame} with the following components if not saving to
 a file:
-    \code{chr}, chromosome;
-    \code{start}, the starting position;
-    \code{end}, the ending position;
-    \code{numvar}, the number of variants in the window;
-    \code{maf.avg}, the average of MAFs in the window;
-    \code{maf.sd}, the standard deviation of MAFs in the window;
-    \code{maf.min}, the minimum of MAFs in the window;
-    \code{maf.max}, the maximum of MAFs in the window;
-    \code{mac.avg}, the average of MACs in the window;
-    \code{mac.sd}, the standard deviation of MACs in the window;
-    \code{mac.min}, the minimum of MACs in the window;
-    \code{mac.max}, the maximum of MACs in the window;
-    \code{ncol_g}, the actual number of variants used in the calculation
-including collapsed variants;
-    \code{n_collapse}, the number of ultra rare variants collapsing;
-    \code{pval}, adjusted p-value with Saddlepoint approximation;
+    \item{chr}{chromosome;}
+    \item{start}{the starting position;}
+    \item{end}{the ending position;}
+    \item{maxMAF}{maximum of MAFs;}
+    \item{numvar}{the number of variants in the window; if
+        \code{weight="Cauchy"}, it is the number of individual p-values in
+        the Cauchy test}
+    \item{macmin}{the minimum of MAC in the window;}
+    \item{macmed}{the median of MAC in the window;}
+    \item{macmax}{the maximum of MAC in the window;}
+    \item{summac}{the sum of minor allele counts;}
+    \item{weight}{the weighting strategy with the beta distribution parameters}
+    \item{n_collapse}{the number of variants running for single variant tests;}
+    \item{g_ncol}{the number of ultra rare variants for collapsing burden
+        tests (\code{<= collapse.mac});}
+    \item{g_minMAC}{x}
+    \item{pval}{SKAT p-value;}
 }
 
 \references{
@@ -103,8 +109,8 @@ glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, sp_grm,
 # get a list of variant units for burden tests
 units <- seqUnitSlidingWindows(gdsfile, win.size=50, win.shift=250)
 
-assoc <- seqAssocGLMM_SKAT(gdsfile, glmm, units)
-head(assoc)
+a <- seqAssocGLMM_SKAT(gdsfile, glmm, units, maxMAF=c(0.1,0.01))
+head(a)
 
 # close the GDS file
 seqClose(gdsfile)

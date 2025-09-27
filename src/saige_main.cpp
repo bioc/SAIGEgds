@@ -2,7 +2,7 @@
 //
 // saige_main.cpp: SAIGE association analysis
 //
-// Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -96,18 +96,19 @@ static bool SPA_always_use_fastSPA = true;
 // the default Cutoff value used in SPAtest
 static const double SPA_default_cutoff = 2;
 // the default p-value cutoff according to SPA_default_cutoff
-static const double SPA_default_pval_cutoff = 0.05;
+//   pchisq(SPA_cutoff^2, 1, lower.tail=F), where SPA_cutoff=2
+static const double SPA_default_pval_cutoff = 0.045500263896358;
 
 // ==== saige_misc.cpp ====
 namespace Misc
 {
 	extern int SummaryStat_Mat(SEXP mat, double out_af[], double out_mac[]);
-	extern int SummaryStat_SpMat(SEXP mat, double out_af[], double out_mac[]);
+	extern int SummaryStat_SpMat(SEXP mat, double out_af[]);
 	extern sp_mat GetSp_Impute_SpMat(SEXP mat, double af[], double mac[],
-		double mac_imp[]);
+		double maf_threshold, double missing_threshold);
 	extern sp_mat GetSp_CollapseGenoMat(const sp_mat &mat, double collapse_mac,
-		int collapse_method,
-		const double mac[], double inout_maf[], int &out_n_collapse);
+		int collapse_method, const double mac[], const double maf[],
+		double new_maf[], int &out_n_collapse);
 }
 
 
@@ -121,11 +122,16 @@ static TTrait mod_trait = TTrait::Unknown;  //< outcome type (Quant, ...)
 
 static double threshold_maf = 0;  //< the threshold of MAF filter
 static double threshold_mac = 0;  //< the threshold of MAC filter
-static double threshold_missing = 1;      //< the threshold of missing proportion per variant
-static double threshold_pval_spa = 0.05;  //< the threshold of p-value filter for SPA
+static double threshold_missing = 1;  //< the threshold of missing proportion per variant
+
+/// the threshold of p-value filter for SPA
+static double threshold_pval_spa = SPA_default_pval_cutoff;
+/// the threshold of MAC for conducting Efficient Resampling
+static double threshold_mac_ER = 4;
 
 static int mod_NSamp = 0;   //< the number of samples
 static int mod_NCoeff = 0;  //< the number of beta coefficients
+static int mod_NCase = 0;   //< the number of cases
 
 static int mod_ploidy = 2;  //< ploidy or <=0 if it is not a genotype
 
@@ -167,16 +173,17 @@ static double *buf_X1 = NULL;        //< ncol(X1)
 static double *buf_spa = NULL;       //< buffer for SPA calculation
 
 // aggregate tests
-static double threshold_summac = 0;  //< the threshold of weighted sum MAC
+static int numMaxMAF = 0;           //< # of MAF thresholds
+static double *ptrMaxMAF = NULL;    //< maxMAF, always strictly decreasing
 static int num_wbeta = 0;            //< # of beta parameters
 static double *buf_wbeta = NULL;     //< beta parameters
 static int num_unitsz = 0;           //< max unit size
 static double *buf_unitsz = NULL;    //< length() = max unit size
 
-/// the MAC threshold for collapsing ultra rare variants in ACAT-V
-static double threshold_acatv_mac = 0;
-/// the MAC threshold for collapsing ultra rare variants in SKAT
-static double threshold_skat_mac = 0;
+/// the MAC threshold for collapsing ultra rare variants
+static double threshold_ultra_mac = 10;
+/// collapsing the ultra rare variants: 1 (max), 2 (sum)
+static int collapse_ultra_method = 1;
 
 // the index of non-zero stored in buf_index
 #define IDX_i    buf_index[i]
@@ -204,10 +211,13 @@ BEGIN_RCPP
 	threshold_pval_spa = Rf_asReal(M["spa.pval"]);
 	if (!R_FINITE(threshold_pval_spa))
 		threshold_pval_spa = SPA_default_pval_cutoff;
+	threshold_mac_ER = Rf_asReal(M["ER.mac"]);
+	if (!R_FINITE(threshold_mac_ER)) threshold_mac_ER = 0;
 
 	// model parameters
 	mod_NSamp = Rf_length(M["y"]);
 	mod_NCoeff = NumericMatrix(wrap(M["XV"])).nrow();
+	mod_NCase = 0;
 	mod_ploidy = Rf_asInteger(M["geno.ploidy"]);
 	mod_tau = REAL(M["tau"]);
 	mod_y = REAL(M["y"]);
@@ -220,6 +230,11 @@ BEGIN_RCPP
 	mod_XVX = REAL(M["XVX"]);
 	mod_t_X = REAL(M["t_X"]);
 	mod_S_a = REAL(M["S_a"]);
+	if (mod_trait == TTrait::Binary)
+	{
+		for (int i=0; i < mod_NSamp; i++)
+			if (mod_y[i] != 0) mod_NCase++;
+	}
 
 	mod_varRatio = REAL(M["var.ratio"]);
 	mod_varRatioSqrt = REAL(M["vr_sqrt"]);
@@ -270,14 +285,13 @@ BEGIN_RCPP
 	buf_spa = REAL(M["buf_spa"]);
 
 	// buffer for aggregate tests
-	threshold_summac = Rf_asReal(M["summac"]);
-	if (!R_FINITE(threshold_summac)) threshold_summac = -1;
-	threshold_acatv_mac = Rf_asReal(M["acatv_mac"]);
-	if (!R_FINITE(threshold_acatv_mac)) threshold_acatv_mac = 10;
-	threshold_skat_mac = Rf_asReal(M["skat_mac"]);
-	if (!R_FINITE(threshold_skat_mac))
-		Rf_error("'skat.collapse.mac' should be a finite number.");
+	threshold_ultra_mac = Rf_asReal(M["ultra_mac"]);
+	if (!R_FINITE(threshold_ultra_mac)) threshold_ultra_mac = 10;
+	collapse_ultra_method = Rf_asInteger(M["collapse_method"]);
+	if (collapse_ultra_method == NA_INTEGER) collapse_ultra_method = 1;
 
+	numMaxMAF = Rf_length(M["maxMAF"]);
+	ptrMaxMAF = REAL(M["maxMAF"]);
 	num_wbeta = Rf_length(M["buf_wbeta"]) / 2;  // # of columns
 	buf_wbeta = REAL(M["buf_wbeta"]);
 	num_unitsz = M["num_unitsz"];
@@ -477,11 +491,24 @@ static double *get_ds(SEXP ds, R_xlen_t n, R_xlen_t start, double *ds_buf=NULL)
 
 // ====================================
 
+double SKATExactBin_Work(arma::mat &Z, arma::vec &res, arma::vec &pi1,
+	uint32_t ncase, arma::uvec &idx, arma::uvec &idxCompVec,
+	arma::mat &res_out, int NResampling, int ExactMax, double epsilon,
+	int test_type);
+
+static const int PVAl_METHOD_NORMAL = 1;  // Normal approximation
+static const int PVAL_METHOD_SPA    = 2;  // Saddlepoint approximation
+static const int PVAL_METHOD_ER     = 3;  // Efficient Resampling
+// static const int PVAL_METHOD_NORMAL_LOG10 = 4;  // Normal approximation (log10(p-value))
+// static const int PVAL_METHOD_SPA_LOG10    = 5;  // Saddlepoint approximation (log10(p-value))
+// static const int PVAL_METHOD_ER_LOG10     = 6;  // Efficient Resampling (log10(p-value))
+
 /// single variant test with score statistics
 ///   assuming no missing genotype in G and AF <= 0.5 when mod_ploidy > 0
 static size_t g_score_test(const double G[], double mac,
 	double *out_beta, double *out_SE, double *out_pval, double *out_pval_noadj,
-	bool *out_converged, double *Tstat, bool always_use_fast)
+	bool *out_converged, double *Tstat, bool always_use_fast,
+	int *out_p_method=NULL)
 {
 	// get the number of nonzeros and the nonzero indices
 	const size_t nnzero = f64_nonzero_index(mod_NSamp, &G[0], buf_index);
@@ -562,6 +589,7 @@ static size_t g_score_test(const double G[], double mac,
 	double pval_noadj = ::Rf_pchisq(S*S/var1, 1, FALSE, FALSE);
 	double pval = pval_noadj;
 	bool converged = R_FINITE(pval_noadj) != 0;
+	int p_method = PVAl_METHOD_NORMAL;
 
 	// need further SPAtest or not, if binary outcome
 	if ((mod_trait == TTrait::Binary) &&
@@ -597,24 +625,47 @@ static size_t g_score_test(const double G[], double mac,
 	#ifdef TIMING
 		auto_timing tm1(run_time[n_st_sv+1]);
 	#endif
-		// call Saddle_Prob in SPAtest
-		if (always_use_fast || (2*nnzero <= (size_t)mod_NSamp))
-		{
-			pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu,
-				buf_adj_g, nnzero, buf_index, SPA_default_cutoff,
-				converged, buf_spa, NULL);
-		} else {
-			pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
-				buf_adj_g, SPA_default_cutoff, converged, NULL);
-		}
-		if (pval==0 && pval_noadj>0)
-		{
-			pval = pval_noadj;
-			converged = false;
-		}
-
 		// effect size
 		beta = Tstat / var1;
+
+		if (mac <= threshold_mac_ER)
+		{
+			// using Efficient Resampling (ER)
+			arma::vec GVec((double*)G, mod_NSamp, false);
+			arma::mat Z_er(mod_NSamp, 1);
+			Z_er.col(0) = GVec;
+			arma::vec res_er((double*)mod_y_mu, mod_NSamp, false);
+			arma::vec pi1_er((double*)mod_mu, mod_NSamp, false);
+			arma::vec resout_er(mod_NSamp); // m_resout;
+			arma::uvec i1 = arma::find(GVec >= 0.25);
+			arma::uvec i0 = arma::find(GVec < 0.25);
+			pval = SKATExactBin_Work(
+				Z_er, res_er, pi1_er, mod_NCase, i1, i0, resout_er,
+				2e+6, 1e+4, 1e-6, 1);
+			p_method = PVAL_METHOD_ER;
+
+		} else {
+
+		#ifdef TIMING
+			auto_timing tm1(run_time[n_st_sv+1]);
+		#endif
+			// call Saddle_Prob in SPAtest
+			if (always_use_fast || (2*nnzero <= (size_t)mod_NSamp))
+			{
+				pval = Saddle_Prob_Fast(qtilde, m1, var2, mod_NSamp, mod_mu,
+					buf_adj_g, nnzero, buf_index, SPA_default_cutoff,
+					converged, buf_spa, NULL);
+			} else {
+				pval = Saddle_Prob(qtilde, m1, var2, mod_NSamp, mod_mu,
+					buf_adj_g, SPA_default_cutoff, converged, NULL);
+			}
+			if (pval==0 && pval_noadj>0)
+			{
+				pval = pval_noadj;
+				converged = false;
+			}
+			p_method = PVAL_METHOD_SPA;
+		}
 	}
 
 	double SE = fabs(beta / ::Rf_qnorm5(pval/2, 0, 1, TRUE, FALSE));
@@ -625,13 +676,15 @@ static size_t g_score_test(const double G[], double mac,
 	if (out_pval) *out_pval = pval;
 	if (out_pval_noadj) *out_pval_noadj = pval_noadj;
 	if (out_converged) *out_converged = converged;
+	if (out_p_method) *out_p_method = p_method;
 	return nnzero;
 }
 
 /// single variant test with score statistics
 static bool single_score_test(double G[],
 	double &oAF, double &omac, int &onum, double &obeta, double &oSE,
-	double &opval, double &opval_noadj, bool &oconverged, double *Tstat=NULL)
+	double &opval, double &opval_noadj, bool &oconverged,
+	int &p_method, double *Tstat=NULL)
 {
 	// calculate allele freq, and impute geno using the mean
 	double AF, AC;
@@ -657,7 +710,7 @@ static bool single_score_test(double G[],
 		// output
 		oAF = AF; omac = mac; onum = Num;
 		size_t nnz = g_score_test(G, mac_g, &obeta, &oSE, &opval, &opval_noadj,
-			&oconverged, Tstat, SPA_always_use_fastSPA);
+			&oconverged, Tstat, SPA_always_use_fastSPA, &p_method);
 		if (minus) obeta = -obeta;
 		// nnzero if not genotype
 		if (mod_ploidy <= 0)
@@ -673,7 +726,7 @@ static bool single_score_test(double G[],
 
 // ====================================
 
-/// calculate single-variant p-values for binary outcomes
+/// calculate single-variant p-value
 RcppExport SEXP saige_score_test_pval(SEXP dosage)
 {
 BEGIN_RCPP
@@ -690,20 +743,22 @@ BEGIN_RCPP
 	bool converged = false;
 	double AF, mac, beta, SE, pval, pval_noadj;
 	AF = mac = beta = SE = pval = pval_noadj = R_NaN;
+	int p_method = NA_INTEGER;
 
 	if (single_score_test(G, AF, mac, num, beta, SE, pval, pval_noadj,
-		converged))
+		converged, p_method))
 	{
 		const bool binary = (mod_trait == TTrait::Binary);
 		// output
-		SEXP rv_ans = NEW_NUMERIC(binary ? 8 : 6);
+		SEXP rv_ans = NEW_NUMERIC(binary ? 9 : 7);
 		double *ans = REAL(rv_ans);
 		ans[0] = AF;    ans[1] = mac;   ans[2] = num;
 		ans[3] = beta;  ans[4] = SE;    ans[5] = pval;
+		ans[6] = p_method;
 		if (binary)
 		{
-			ans[6] = pval_noadj;
-			ans[7] = converged ? 1 : 0;
+			ans[7] = pval_noadj;
+			ans[8] = converged ? 1 : 0;
 		}
 		return rv_ans;
 	} else
@@ -715,18 +770,28 @@ END_RCPP
 // ========================================================================= //
 // Aggregate Tests
 
-static const int AGGR_INDEX_START = 9;
+// maxMAF, numvar, mac[3], summac, "(beta1, beta2)"
+static const int AGGR_HEAD_LEN = 7;
 
-static void summary_maf_mac(NumericVector &ans, int n_snv,
-	const double maf[], const double mac[])
+static int get_min_med_max(int n, const double x[],
+	double &min, double &med, double &max)
 {
-	ans[0] = n_snv;
-	f64_mean_sd_maxmin(maf, n_snv, ans[1], ans[2], ans[4], ans[3]);
-	f64_mean_sd_maxmin(mac, n_snv, ans[5], ans[6], ans[8], ans[7]);
+	std::vector<double> a;
+	a.reserve(n);
+	for (int i=0; i < n; i++) if (R_FINITE(x[i])) a.push_back(x[i]);
+	n = a.size();
+	if (n > 0)
+	{
+		std::sort(a.begin(), a.end());
+		min = a[0]; max = a[n-1];
+		med = (a[(n-1)/2] + a[n/2]) / 2;
+	} else {
+		min = med = max = R_NaN;
+	}
+	return n;
 }
 
-static sp_mat get_G0_flipped_impute(SEXP dosage, double maf[],
-	double mac[], double mac_imp[])
+static sp_mat get_G0_flipped_impute(SEXP dosage, double maf[], double mac[])
 {
 	if (Rf_isMatrix(dosage))
 	{
@@ -737,9 +802,10 @@ static sp_mat get_G0_flipped_impute(SEXP dosage, double maf[],
 	} else {
 		// it should be a sparse matrix (dgCMatrix)
 		// maf stores AF here for imputation
-		Misc::SummaryStat_SpMat(dosage, maf, mac);
+		Misc::SummaryStat_SpMat(dosage, maf);
 		// monomorphic variants are removed
-		return Misc::GetSp_Impute_SpMat(dosage, maf, mac, mac_imp);
+		return Misc::GetSp_Impute_SpMat(dosage, maf, mac, ptrMaxMAF[0],
+			threshold_missing);
 		// maf stores MAF since flipping
 	}
 }
@@ -761,101 +827,157 @@ inline static double sum_col(const sp_mat &GMat, int col_i)
 	return sum;
 }
 
+static double acat_pval(R_xlen_t n, const double pval[], const double w[],
+	bool throw_error);
+
+// used in ACAT-V
+struct StructVarGeno
+{
+	dvec G;
+	double maf, mac, pval;
+	double used;
+	StructVarGeno() { init(); }
+	inline void init() { maf = mac = pval = R_NaN; used = false; }
+};
+
 
 // ====================================
 
-static void gmat_burden_test(const sp_mat &G0, double beta_b1, double beta_b2,
-	const double maf[], const double mac[], double w_burden[], double out_ans[])
+// Burden test using G0
+// Input: G0, beta1, beta2, maf, mac
+// Buffer: weight[]
+// Output: out_ans [ summac, beta, SE, pval, p_method, pval_noadj, converged ]
+static void gmat_burden_test(const sp_mat &G0, double beta1, double beta2,
+	const double maf[], const double mac[], double weight[], double out_ans[])
 {
 	const int n_snv = G0.n_cols;
-	int n_valid = 0;
-	double summac = 0;  // the sum of MAC
+	double summac = 0;  // to be the sum of MAC
 	for (int i=0; i < n_snv; i++)
 	{
-		const double F = maf[i];
-		if (R_FINITE(F) && (F > 0))
-		{
-			// set weights
-			w_burden[i] = Rf_dbeta(F, beta_b1, beta_b2, FALSE);
-			n_valid ++;
-		} else
-			w_burden[i] = R_NaN;
-		if (R_FINITE(mac[i])) summac += mac[i];
+		const double f = maf[i];
+		if (R_FINITE(f) && (f > 0))
+			weight[i] = Rf_dbeta(f, beta1, beta2, FALSE); // set weights
+		else
+			weight[i] = 0;
+		const double m = mac[i];
+		if (R_FINITE(m) && (m > 0)) summac += m;
 	}
+	f64_normalize(n_snv, weight);
 
 	// collapse SNVs with weights
 	dvec G;
 	G.zeros(mod_NSamp);
-	f64_normalize(n_snv, w_burden);
-	for (int i=0; i < n_snv; i++) add_g_w(G, G0, i, w_burden[i]);
+	for (int i=0; i < n_snv; i++)
+		if (weight[i] > 0) add_g_w(G, G0, i, weight[i]);
 
 	// p-value calculation
 	bool converged = false;
 	double beta, SE, pval, pval_noadj;
 	beta = SE = pval = pval_noadj = R_NaN;
-	if ((n_valid > 0) && (summac >= threshold_summac) && (summac > 0))
+	int p_method = NA_INTEGER;
+	if (summac > 0)
 	{
+		G *= summac / sum(G);
 		g_score_test(&G[0], summac, &beta, &SE, &pval, &pval_noadj,
-			&converged, NULL, false);
+			&converged, NULL, false, &p_method);
 	}
 
 	// set the output
 	out_ans[0] = summac;
 	out_ans[1] = beta; out_ans[2] = SE;
 	out_ans[3] = pval;
+	out_ans[4] = p_method;
 	if (mod_trait == TTrait::Binary)
 	{
-		out_ans[4] = pval_noadj;
-		out_ans[5] = converged ? 1 : 0;
+		out_ans[5] = pval_noadj;
+		out_ans[6] = converged ? 1 : 0;
 	}
 }
 
 
 /// calculate burden p-values
-RcppExport SEXP saige_burden_test_pval(SEXP dosage)
+RcppExport SEXP saige_burden_test_pval(SEXP dosage, SEXP maxMAF)
 {
 BEGIN_RCPP
 	// buffer
 	double *maf = buf_unitsz;
 	double *mac = buf_unitsz + num_unitsz;
-	double *mac_imp = buf_unitsz + 2*num_unitsz;
-	double *w_burden = buf_unitsz + 3*num_unitsz;
-
-	// get genotype matrix
-	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac, mac_imp);
-	const int n_snv = G0.n_cols;
+	double *weight = buf_unitsz + 2*num_unitsz;
+	// output object
 	const bool binary = (mod_trait == TTrait::Binary);
-	const int n_each_wb = binary ? 5 : 3;
-
-	// summarize maf & mac
-	const int st_idx = AGGR_INDEX_START + 1;
-	NumericVector ans(st_idx + n_each_wb*num_wbeta);
-	summary_maf_mac(ans, n_snv, maf, mac);
-	ans[AGGR_INDEX_START] = f64_sum(n_snv, mac);
-
-	// for each beta weight
-	for (int i=0; i < num_wbeta; i++)
+	const int ncol = numMaxMAF * num_wbeta + 1;
+	NumericMatrix ans(AGGR_HEAD_LEN + (binary ? 6 : 4), ncol);
+	// get genotype matrix
+	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	const int n_tot_snv = G0.n_cols;
+	int n_snv_old = -1;
+	// for-each maxMAF
+	int icol = 0;
+	for (int k=0; k < numMaxMAF; k++)
 	{
-		// get weights, beta function
-		const double b1 = buf_wbeta[2*i+0], b2 = buf_wbeta[2*i+1];
-		// calculation
-		double v[6];
-		gmat_burden_test(G0, b1, b2, maf, mac, w_burden, v);
-		// set the output
-		const int k = st_idx + n_each_wb*i;
-		if (i == 0) ans[AGGR_INDEX_START] = v[0];  // summac
-		ans[k+0] = v[1];  // beta
-		ans[k+1] = v[2];  // SE
-		ans[k+2] = v[3];  // pval
-		if (binary)
+		// maxMAF filter
+		const double maxMAF = ptrMaxMAF[k];
+		for (int i=0; i < n_tot_snv; i++)
+			if (R_FINITE(maf[i]) && maf[i] > maxMAF) maf[i] = mac[i] = R_NaN;
+		// MAC summary
+		double macmin, macmed, macmax;
+		int n_snv = get_min_med_max(n_tot_snv, mac, macmin, macmed, macmax);
+		if (n_snv <= 0) break;
+		if (n_snv == n_snv_old)
 		{
-			ans[k+3] = v[4];  // p.norm
-			ans[k+4] = v[5];  // converged
+			for (int i=1; i <= num_wbeta; i++) ans(0, icol-i) = maxMAF;
+			continue;
 		}
+		n_snv_old = n_snv;
+		// for each beta weight
+		for (int i=0; i < num_wbeta; i++, icol++)
+		{
+			double *p_ans = &ans(0, icol);
+			// get weights, beta function
+			const double b1 = buf_wbeta[2*i+0], b2 = buf_wbeta[2*i+1];
+			p_ans[0] = maxMAF;
+			p_ans[1] = n_snv;
+			p_ans[2] = macmin; p_ans[3] = macmed; p_ans[4] = macmax;
+			p_ans[6] = i+1;  // weight beta
+			// calculation
+			double v[7];
+			gmat_burden_test(G0, b1, b2, maf, mac, weight, v);
+			// set the output
+			p_ans[5] = v[0];  // summac
+			p_ans[7] = v[1];  p_ans[8] = v[2];   // beta, SE
+			p_ans[9] = v[3];  p_ans[10] = v[4];  // pval, pval_method
+			if (binary)
+			{
+				p_ans[11] = v[5];  // p.norm
+				p_ans[12] = v[6];  // converged
+			}
+		}
+	}
+	// Cauchy p-value
+	if (icol > 1)
+	{
+		std::vector<double> ps(icol);
+		std::vector<double> w(icol, 1);
+		for (int i=0; i < icol; i++) ps[i] = ans(9, i);
+		double *p_ans = &ans(0, icol);
+		p_ans[0] = ptrMaxMAF[0];
+		p_ans[1] = ps.size();
+		p_ans[6] = num_wbeta+1;
+		p_ans[9] = acat_pval(icol, &ps[0], &w[0], false);
+		p_ans[2] = p_ans[3] = p_ans[4] = p_ans[5] =
+			p_ans[7] = p_ans[8] = p_ans[10] = p_ans[11] = R_NaN;
+		p_ans[12] = R_FINITE(p_ans[9]) ? 1 : 0;
+		icol++;
 	}
 
 	// output
-	return ans;
+	if (icol > 0)
+	{
+		if (icol < ncol) ans = ans(_, Range(0, icol-1));
+		return ans;
+	} else {
+		return R_NilValue;
+	}
 END_RCPP
 }
 
@@ -870,13 +992,9 @@ struct Struct_SKAT
 	bool is_sparse;
 	dmat XVX_inv_XV, Si_X, XVX_inv_XV_X_Si_X;
 	Function chisq_pval;
-	// collapse_method = 1, presence or absence (PA)
-	// collapse_method = 2, presence or absence (PA_int)
-	// collapse_method = 3, sum up rare genotype (SumG)
-	int collapse_method;
 
 	// constructor
-	Struct_SKAT(SEXP sigma_inv, SEXP m1, SEXP m2, SEXP m3, Function f, int cm):
+	Struct_SKAT(SEXP sigma_inv, SEXP m1, SEXP m2, SEXP m3, Function f):
 		chisq_pval(f)
 	{
 		if (Rf_isNull(sigma_inv))
@@ -889,20 +1007,19 @@ struct Struct_SKAT
 		this->XVX_inv_XV = as<dmat>(m1);
 		this->Si_X = as<dmat>(m2);
 		this->XVX_inv_XV_X_Si_X = as<dmat>(m3);
-		this->collapse_method = cm;
 	}
 } *p_struct_skat = NULL;
 
 
 RcppExport SEXP saige_skat_test_init(SEXP sigma_inv, SEXP XVX_inv_XV,
-	SEXP Si_X, SEXP XVX_inv_XV_X_Si_X, SEXP collapse_method)
+	SEXP Si_X, SEXP XVX_inv_XV_X_Si_X)
 {
 BEGIN_RCPP
 	Environment pkg = Environment::namespace_env("SAIGEgds");
 	Function f_r = pkg[".skat_eig_chiq"];
 	// initialize Struct_SKAT
 	p_struct_skat = new Struct_SKAT(sigma_inv, XVX_inv_XV, Si_X,
-		XVX_inv_XV_X_Si_X, f_r, Rf_asInteger(collapse_method));
+		XVX_inv_XV_X_Si_X, f_r);
 	return R_NilValue;
 END_RCPP
 }
@@ -953,9 +1070,6 @@ static void gmat_skat_test_p1(const sp_mat &G0, double var_ratio[],
 		{
 			double v0 = ::Rf_qchisq(pval_noadj, 1, FALSE, FALSE);
 			double v1 = ::Rf_qchisq(pval, 1, FALSE, FALSE);
-
-// Rprintf("VarS/VarS_org (%d/%d): %g [MAC:%g, p0:%.3g, p1:%.3g]\n", i+1, ncol_g, v0/v1, mac, pval_noadj, pval);
-
 			double r = sqrt(v0 / v1) * vr_sqrt;
 			if (R_FINITE(r)) var_ratio[i] = r;
 		}
@@ -991,19 +1105,14 @@ static void gmat_skat_test_p1(const sp_mat &G0, double var_ratio[],
 
 /// calculation SKAT p-value with beta parameters
 static void gmat_skat_test_p2(const sp_mat &G0, const dvec &Ts, const dmat &GPG,
-	double beta_b1, double beta_b2,
-	const double maf[], const double var_ratio[],
-	double w_skat[], double out_ans[])
+	double beta_b1, double beta_b2, const double maf[],
+	const double var_ratio[], double w_skat[], double out_ans[])
 {
 #ifdef TIMING
 	auto_timing tm2(run_time[n_st_skat+2]);
 #endif
 	const int ncol_g = G0.n_cols;
-	if (ncol_g <= 0)
-	{
-		out_ans[0] = R_NaN;
-		return;
-	}
+	if (ncol_g <= 0) { out_ans[0] = R_NaN; return; }
 	// set weights (w_skat)
 	double w_sum = 0;
 	for (int i=0; i < ncol_g; i++)
@@ -1041,19 +1150,23 @@ static void gmat_skat_test_p2(const sp_mat &G0, const dvec &Ts, const dmat &GPG,
 		// need a burden test
 		dvec g_b;
 		g_b.zeros(G0.n_rows);
+		double summac = 0;
 		// collapse genotypes, using the original weights for SKAT
 		for (int i=0; i < ncol_g; i++)
+		{
+			summac += sum_col(G0, i);  // minor allele count
 			add_g_w(g_b, G0, i, w_skat[i]/var_ratio[i]);
+		}
+		// g_b *= summac / sum(g_b);  not used
 		// get Score and variance for g_b
 		double S=0, pval=1;
 		{
 			// not need sparse GRM here
 			const double *old = mod_sigma_inv_val;
 			mod_sigma_inv_val = NULL;
-			g_score_test(&g_b[0], -1, NULL, NULL, &pval, NULL, NULL, &S, false);
+			g_score_test(&g_b[0], summac, NULL, NULL, &pval, NULL, NULL, &S, false);
 			mod_sigma_inv_val = old;
 		}
-// Rprintf("pval: %g, noabj: %g, S^2: %g\n", pval, pval_noabj, sq(S));  // debug
 
 		if (R_FINITE(pval) && (pval > 0) && (pval < 1))
 		{
@@ -1061,8 +1174,6 @@ static void gmat_skat_test_p2(const sp_mat &G0, const dvec &Ts, const dmat &GPG,
 			double varQ = f64_sum(size_t(ncol_g)*ncol_g, &D[0]);
 			double r_min = varQ / V_sum;
 			if (r_min < 1) D *= 1/r_min;
-// Rprintf("V_sum: %g, varQ: %g\n", V_sum, varQ);  // debug
-// Rprintf("r_min: %g\n", r_min);  // debug
 		}
 	}
 
@@ -1100,151 +1211,198 @@ BEGIN_RCPP
 	// buffer
 	double *maf = buf_unitsz;
 	double *mac = buf_unitsz + num_unitsz;
-	double *mac_imp = buf_unitsz + 2*num_unitsz;
+	double *weight = buf_unitsz + 2*num_unitsz;
 	double *var_ratio = buf_unitsz + 3*num_unitsz;
-	double *w_skat = buf_unitsz + 4*num_unitsz;
-
+	double *maf_s = buf_unitsz + 4*num_unitsz;  // collapsing genotypes
+	// output object
+	const int ncol = numMaxMAF * num_wbeta + 1;
+	NumericMatrix ans(AGGR_HEAD_LEN + 4, ncol);
 	// get genotype matrix
-	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac, mac_imp);
-	const int n_snv = G0.n_cols;
-
-	// returned values
-	const int st_idx = AGGR_INDEX_START + 3;
-	NumericVector ans(st_idx + num_wbeta);
-	summary_maf_mac(ans, n_snv, maf, mac);
-
-	// collapse ultra rare variants
-	// maf could be revised according to the new G0
-	int n_collapse;
-	G0 = Misc::GetSp_CollapseGenoMat(G0, threshold_skat_mac,
-		p_struct_skat->collapse_method, mac_imp, maf, n_collapse);
-	const int g_ncol = G0.n_cols;
-	ans[9]  = n_collapse;
-	ans[10] = g_ncol;
-	ans[11] = min(sum(G0, 0));
-
-	// Tstat for each G_i in G0
-	dvec Ts;
-	// G_tilde' P G_tilde
-	// G'SiG - G'SiXUG - (G'SiXUG)' + G'U'X'SiXUG, where U=XVX_inv_XV
-	dmat GPG;
-	gmat_skat_test_p1(G0, var_ratio, Ts, GPG);
-
-	// for each beta weight
-	for (int w_i=0; w_i < num_wbeta; w_i++)
+	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	const int n_tot_snv = G0.n_cols;
+	int n_snv_old = -1;
+	// for-each maxMAF
+	int icol = 0;
+	for (int k=0; k < numMaxMAF; k++)
 	{
-		// get weights, beta function
-		const double b1 = buf_wbeta[2*w_i+0], b2 = buf_wbeta[2*w_i+1];
-		// calculation
-		double pval;
-		gmat_skat_test_p2(G0, Ts, GPG, b1, b2, maf, var_ratio, w_skat, &pval);
-		// output
-		ans[st_idx + w_i] = pval;
+		// maxMAF filter
+		const double maxMAF = ptrMaxMAF[k];
+		for (int i=0; i < n_tot_snv; i++)
+			if (R_FINITE(maf[i]) && maf[i] > maxMAF) maf[i] = mac[i] = R_NaN;
+		// MAC summary
+		double macmin, macmed, macmax;
+		int n_snv = get_min_med_max(n_tot_snv, mac, macmin, macmed, macmax);
+		if (n_snv <= 0) break;
+		if (n_snv == n_snv_old)
+		{
+			for (int i=1; i <= num_wbeta; i++) ans(0, icol-i) = maxMAF;
+			continue;
+		}
+		n_snv_old = n_snv;
+		const double summac = f64_sum_finite(n_tot_snv, mac);
+
+		// collapse ultra rare variants, output maf_s according to the new G00
+		int n_collapse;
+		sp_mat G00 = Misc::GetSp_CollapseGenoMat(G0, threshold_ultra_mac,
+			collapse_ultra_method, mac, maf, maf_s, n_collapse);
+		const int g_ncol = G00.n_cols;
+
+		// Tstat for each G_i in G00
+		dvec Ts;
+		// G_tilde' P G_tilde
+		// G'SiG - G'SiXUG - (G'SiXUG)' + G'U'X'SiXUG, where U=XVX_inv_XV
+		dmat GPG;
+		gmat_skat_test_p1(G00, var_ratio, Ts, GPG);
+	
+		// for each beta weight
+		for (int i=0; i < num_wbeta; i++, icol++)
+		{
+			double *p_ans = &ans(0, icol);
+			// get weights, beta function
+			const double b1 = buf_wbeta[2*i+0], b2 = buf_wbeta[2*i+1];
+			// calculation
+			double pval;
+			gmat_skat_test_p2(G00, Ts, GPG, b1, b2, maf_s, var_ratio, weight,
+				&pval);
+			// output
+			p_ans[0] = maxMAF;
+			p_ans[1] = n_snv;
+			p_ans[2] = macmin; p_ans[3] = macmed; p_ans[4] = macmax;
+			p_ans[5] = summac;
+			p_ans[6] = i+1;  // weight beta
+			p_ans[7] = n_collapse;  // n_collapse
+			p_ans[8] = g_ncol;  // g_ncol
+			p_ans[9] = 0;  // g_minMAC
+			p_ans[10] = pval;  // p-value
+		}
+	}
+	// Cauchy p-value
+	if (icol > 1)
+	{
+		std::vector<double> ps(icol);
+		std::vector<double> w(icol, 1);
+		for (int i=0; i < icol; i++) ps[i] = ans(10, i);
+		double *p_ans = &ans(0, icol);
+		p_ans[0] = ptrMaxMAF[0];
+		p_ans[1] = ps.size();
+		p_ans[6] = num_wbeta+1;
+		p_ans[2] = p_ans[3] = p_ans[4] = p_ans[5] =
+			p_ans[7] = p_ans[8] = p_ans[9] = R_NaN;
+		p_ans[10] = acat_pval(icol, &ps[0], &w[0], false);
+		icol++;
 	}
 
 	// output
-	return ans;
+	if (icol > 0)
+	{
+		if (icol < ncol) ans = ans(_, Range(0, icol-1));
+		return ans;
+	} else {
+		return R_NilValue;
+	}
 END_RCPP
 }
 
 
 // ====================================
 
-static double acat_pval(R_xlen_t n, const double pval[], const double w[],
-	bool throw_error);
-
-static void gmat_acatv_test(const sp_mat &G0, double beta_b1, double beta_b2,
-	const double maf[], const double mac[], const double mac_imp[],
-	double pvals[], double w_pval[], double out_ans[])
+// ACAT-V test using G0
+// Input: G0, beta1, beta2, maf, mac
+// Buffer: pval[], weight[], ultra
+// Output: out_ans [ n.single, n.burden, pval ]
+// if ultra_idx<0, G_ultra, ultra_maf & ultra_summac are not set
+static void gmat_acatv_test(const sp_mat &G0, double beta1, double beta2,
+	const double maf[], const double mac[],
+	double pval[], double weight[], StructVarGeno &ultra, double out_ans[])
 {
 	const int n_snv = G0.n_cols;
 	if (n_snv <= 0)
 	{
-		out_ans[0] = out_ans[1] = 0;
+		out_ans[0] = out_ans[1] = 0;  // n.single & n.burden
 		out_ans[2] = out_ans[3] = out_ans[4] = out_ans[5] = R_NaN;
 		return;
 	}
 	// initialize
 	int n_test   = 0;  // # of tests including single variant tests
 	int n_burden = 0;  // # of ultra rare SNVs for burden test
+	int ultra_var_idx = -1;
 
 	// for-loop for each variant
 	for (int i=0; i < n_snv; i++)
 	{
+		weight[i] = R_NaN;
 		const double C = mac[i];
 		if (R_FINITE(C) && (C > 0))
 		{
-			if (C > threshold_acatv_mac)
+			if (C > threshold_ultra_mac)
 			{
-				if (!R_FINITE(pvals[i]))
+				if (!R_FINITE(pval[i]))
 				{
-					dvec G(G0.col(i));
 					// p-value calculation
-					double pval=R_NaN, pval_noadj=pval;
-					g_score_test(&G[0], mac_imp[i], NULL, NULL,
-						&pval, &pval_noadj, NULL, NULL, SPA_always_use_fastSPA);
-					pvals[i] = pval;  // p-value for this SNV
+					dvec G(G0.col(i));
+					double pv=R_NaN, pv_noadj=pv;
+					g_score_test(&G[0], C, NULL, NULL,
+						&pv, &pv_noadj, NULL, NULL, SPA_always_use_fastSPA);
+					pval[i] = pv;  // p-value for this SNV
 				}
 				// save
-				const double p = maf[i];
-				w_pval[i] = sq(Rf_dbeta(p, beta_b1, beta_b2, FALSE)) * p * (1-p);
+				const double f = maf[i];
+				weight[i] = sq(Rf_dbeta(f, beta1, beta2, FALSE)) * f * (1-f);
 				n_test ++;
 			} else {
 				// burden test for ultra rare variants
 				n_burden ++;
+				ultra_var_idx = i;
 			}
 		}
 	}
 
 	// if collapsed SNVs for burden test
-	int ultra_var_idx = -1;
 	if (n_burden > 0)
 	{
-		dvec G;
-		G.zeros(mod_NSamp);
-		double sum_w=0, summaf=0, summac=0;
-		// get G and sum
-		for (int i=0; i < n_snv; i++)
+		if (!ultra.used)
 		{
-			const double C = mac[i];
-			if (R_FINITE(C) && (C > 0) && (C <= threshold_acatv_mac))
+			ultra.G.zeros(mod_NSamp);
+			ultra.maf = ultra.mac = 0;
+			// get G and sum
+			for (int i=0; i < n_snv; i++)
 			{
-				double w = Rf_dbeta(maf[i], beta_b1, beta_b2, FALSE);
-				add_g_w(G, G0, i, w);
-				sum_w += w;         // add weight
-				summaf += maf[i]; summac += mac[i];
-				ultra_var_idx = i;  // save the position
+				const double C = mac[i];
+				if (R_FINITE(C) && (C > 0) && (C <= threshold_ultra_mac))
+				{
+					add_g_w(ultra.G, G0, i, 1);
+					ultra.maf += maf[i]; ultra.mac += C;
+				}
 			}
+			ultra.maf /= n_burden;
+			// p-value
+			double pval=R_NaN, pval_noadj=pval;
+			if (ultra.mac > 0)
+			{
+				// p-value calculation
+				g_score_test(&ultra.G[0], ultra.mac, NULL, NULL,
+					&pval, &pval_noadj, NULL, NULL, false);
+			}
+			ultra.pval = pval;
+			ultra.used = true;
 		}
-		// normalize G
-		G *= 1 / sum_w;
-		// burden test
-		double pval=R_NaN, pval_noadj=pval;
-		if ((summac > 0) && (summac >= threshold_summac))
-		{
-			// p-value calculation
-			g_score_test(&G[0], summac, NULL, NULL, &pval, &pval_noadj,
-				NULL, NULL, false);
-		}
-		if (R_FINITE(pval))
-		{
-			const double p = summaf / n_burden;
-			w_pval[ultra_var_idx] =
-				sq(Rf_dbeta(p, beta_b1, beta_b2, FALSE)) * p * (1-p);
-			pvals[ultra_var_idx] = pval;
-			n_test ++;
-		}
+		const double f = ultra.maf;
+		weight[ultra_var_idx] =
+			sq(Rf_dbeta(f, beta1, beta2, FALSE)) * f * (1-f);
+		pval[ultra_var_idx] = ultra.pval;
+		n_test ++;
 	}
 
 	// set the output
 	out_ans[0] = n_test - (n_burden > 0);  // n.single
 	out_ans[1] = n_burden;  // n.burden
 	out_ans[2] =
-		(n_test > 0) ? acat_pval(n_snv, pvals, w_pval, false) : R_NaN;
-	f64_medmaxmin(pvals, n_snv, out_ans[3], out_ans[4], out_ans[5]);
+		(n_test > 0) ? acat_pval(n_snv, pval, weight, false) : R_NaN;
+	// get_min_med_max(n_snv, pval, out_ans[3], out_ans[4], out_ans[5]);
 
 	// clear
-	if (ultra_var_idx >= 0) pvals[ultra_var_idx] = R_NaN;
+	if (ultra_var_idx >= 0)
+		pval[ultra_var_idx] = weight[ultra_var_idx] = R_NaN;
 }
 	
 
@@ -1255,44 +1413,85 @@ BEGIN_RCPP
 	// buffer
 	double *maf = buf_unitsz;
 	double *mac = buf_unitsz + num_unitsz;
-	double *mac_imp = buf_unitsz + 2*num_unitsz;
-	double *w_pval = buf_unitsz + 3*num_unitsz;
-	double *pvals  = buf_unitsz + 4*num_unitsz;
-
+	double *weight = buf_unitsz + 2*num_unitsz;
+	double *pval = buf_unitsz + 3*num_unitsz;
+	// output object
+	const int ncol = numMaxMAF * num_wbeta + 1;
+	NumericMatrix ans(AGGR_HEAD_LEN + 3, ncol);
 	// get genotype matrix
-	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac, mac_imp);
-	const int n_snv = G0.n_cols;
-	// initialize pvals with NaN
-	for (int i=0; i < n_snv; i++) pvals[i] = R_NaN;
-
-	// summarize maf & mac
-	const int st_idx = AGGR_INDEX_START + 2;
-	NumericVector ans(st_idx + num_wbeta*4);
-	summary_maf_mac(ans, n_snv, maf, mac);
-
-	// for each beta weight
-	for (int w_i=0; w_i < num_wbeta; w_i++)
+	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	const int n_tot_snv = G0.n_cols;
+	int n_snv_old = -1;
+	// initialize single-variant pvals with NaN
+	for (int i=0; i < n_tot_snv; i++) weight[i] = pval[i] = R_NaN;
+	StructVarGeno ultra;
+	// for-each maxMAF
+	int icol = 0;
+	for (int k=0; k < numMaxMAF; k++)
 	{
-		// get weights, beta function
-		const double b1 = buf_wbeta[2*w_i+0], b2 = buf_wbeta[2*w_i+1];
-		// calculate individual p-value, if pvals[j]==NaN
-		double v[6];
-		gmat_acatv_test(G0, b1, b2, maf, mac, mac_imp, pvals, w_pval, v);
-		// set the output
-		if (w_i == 0)
+		// maxMAF filter
+		const double maxMAF = ptrMaxMAF[k];
+		for (int i=0; i < n_tot_snv; i++)
+			if (R_FINITE(maf[i]) && maf[i] > maxMAF) maf[i] = mac[i] = R_NaN;
+		// MAC summary
+		double macmin, macmed, macmax;
+		int n_snv = get_min_med_max(n_tot_snv, mac, macmin, macmed, macmax);
+		if (n_snv <= 0) break;
+		if (n_snv == n_snv_old)
 		{
-			ans[9]  = v[0];  // n.single
-			ans[10] = v[1];  // n.burden
+			for (int i=1; i <= num_wbeta; i++) ans(0, icol-i) = maxMAF;
+			continue;
 		}
-		const int k = st_idx + w_i * 4;
-		ans[k+0] = v[2];  // pval
-		ans[k+1] = v[3];  // p.median
-		ans[k+2] = v[4];  // p.min
-		ans[k+3] = v[5];  // p.max
+		n_snv_old = n_snv;
+		// sum of MACs
+		const double summac = f64_sum_finite(n_tot_snv, mac);
+		ultra.init();
+		// for each beta weight
+		for (int i=0; i < num_wbeta; i++, icol++)
+		{
+			double *p_ans = &ans(0, icol);
+			// get weights, beta function
+			const double b1 = buf_wbeta[2*i+0], b2 = buf_wbeta[2*i+1];
+			p_ans[0] = maxMAF;
+			p_ans[1] = n_snv;
+			p_ans[2] = macmin; p_ans[3] = macmed; p_ans[4] = macmax;
+			p_ans[5] = summac;  // summac
+			p_ans[6] = i+1;     // weight beta
+			// calculate individual p-value, if pvals[j]==NaN
+			double v[6];
+			gmat_acatv_test(G0, b1, b2, maf, mac, pval, weight, ultra, v);
+			// set the output
+			p_ans[7] = v[0];  // n.single
+			p_ans[8] = v[1];  // n.burden
+			p_ans[9] = v[2];  // p-value
+			// p_ans[10] = v[3];  // p-value, min
+			// p_ans[11] = v[4];  // p-value, med
+			// p_ans[12] = v[5];  // p-value, max
+		}
+	}
+	// Cauchy p-value
+	if (icol > 1)
+	{
+		std::vector<double> ps(icol);
+		std::vector<double> w(icol, 1);
+		for (int i=0; i < icol; i++) ps[i] = ans(9, i);
+		double *p_ans = &ans(0, icol);
+		p_ans[0] = ptrMaxMAF[0];
+		p_ans[1] = ps.size();
+		p_ans[6] = num_wbeta+1;
+		p_ans[2] = p_ans[3] = p_ans[4] = p_ans[5] = p_ans[7] = p_ans[8] = R_NaN;
+		p_ans[9] = acat_pval(icol, &ps[0], &w[0], false);
+		icol++;
 	}
 
 	// output
-	return ans;
+	if (icol > 0)
+	{
+		if (icol < ncol) ans = ans(_, Range(0, icol-1));
+		return ans;
+	} else {
+		return R_NilValue;
+	}
 END_RCPP
 }
 
@@ -1307,73 +1506,113 @@ BEGIN_RCPP
 	// buffer
 	double *maf = buf_unitsz;
 	double *mac = buf_unitsz + num_unitsz;
-	double *mac_imp = buf_unitsz + 2*num_unitsz;
-	double *ws  = buf_unitsz + 3*num_unitsz;
-	double *pvals = buf_unitsz + 4*num_unitsz;
-	double *var_ratio = buf_unitsz + 5*num_unitsz;
-	double *maf_s = buf_unitsz + 6*num_unitsz;
-
+	double *weight = buf_unitsz + 2*num_unitsz;
+	double *pval = buf_unitsz + 3*num_unitsz;
+	double *var_ratio = buf_unitsz + 4*num_unitsz;
+	double *maf_s = buf_unitsz + 5*num_unitsz;
+	// output object
+	const int ncol = numMaxMAF * num_wbeta + 1;
+	NumericMatrix ans(AGGR_HEAD_LEN + 7, ncol);
 	// get genotype matrix
-	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac, mac_imp);
-	const int n_snv = G0.n_cols;
-	// initialize pvals with NaN for ACAT-V
-	for (int i=0; i < n_snv; i++) pvals[i] = R_NaN;
-
-	// summarize maf & mac
-	const int st_idx = AGGR_INDEX_START + 1;
-	const int n_each_wb = p_struct_skat ? 3 : 2;
-	NumericVector ans(st_idx + n_each_wb*num_wbeta);
-	summary_maf_mac(ans, n_snv, maf, mac);
-
-	// initialize SKAT structure
-	sp_mat G0_s;  // genotype matrix for SKAT
-	dvec Ts;      // Tstat for each G_i in G0
-	dmat GPG;     // G_tilde' P G_tilde
-	if (p_struct_skat)
+	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	const int n_tot_snv = G0.n_cols;
+	int n_snv_old = -1;
+	// initialize single-variant pvals with NaN
+	for (int i=0; i < n_tot_snv; i++) weight[i] = pval[i] = R_NaN;
+	StructVarGeno ultra;
+	// for-each maxMAF
+	int icol = 0;
+	for (int k=0; k < numMaxMAF; k++)
 	{
-		memcpy(maf_s, maf, sizeof(double)*n_snv);
-		int n_collapse = 0;
-		G0_s = Misc::GetSp_CollapseGenoMat(G0, threshold_skat_mac,
-			p_struct_skat->collapse_method,
-			mac_imp, maf_s, n_collapse);
-		// maf_s could be revised according to collapsed genotypes
-		gmat_skat_test_p1(G0_s, var_ratio, Ts, GPG);
-	}
-
-	// for each beta weight
-	for (int i=0; i < num_wbeta; i++)
-	{
-		// get weights, beta function
-		const double b1 = buf_wbeta[2*i+0], b2 = buf_wbeta[2*i+1];
-		// calculation
-		const int k = st_idx + n_each_wb*i;
-		double v[6];
-		// burden p-value
-		gmat_burden_test(G0, b1, b2, maf, mac, ws, v);
-		ans[k+0] = v[3];
-		// calculate individual ACAT-V p-value, if pvals[j]==NaN
-		gmat_acatv_test(G0, b1, b2, maf, mac, mac_imp, pvals, ws, v);
-		ans[k+1] = v[2];
-		// SKAT p-value
-		if (p_struct_skat)
+		// maxMAF filter
+		const double maxMAF = ptrMaxMAF[k];
+		for (int i=0; i < n_tot_snv; i++)
+			if (R_FINITE(maf[i]) && maf[i] > maxMAF) maf[i] = mac[i] = R_NaN;
+		// MAC summary
+		double macmin, macmed, macmax;
+		int n_snv = get_min_med_max(n_tot_snv, mac, macmin, macmed, macmax);
+		if (n_snv <= 0) break;
+		if (n_snv == n_snv_old)
 		{
-			double pval;
-			gmat_skat_test_p2(G0_s, Ts, GPG, b1, b2, maf_s, var_ratio, ws,
-				&pval);
-			ans[k+2] = pval;
+			for (int i=1; i <= num_wbeta; i++) ans(0, icol-i) = maxMAF;
+			continue;
+		}
+		n_snv_old = n_snv;
+		// sum of MACs
+		const double summac = f64_sum_finite(n_tot_snv, mac);
+		ultra.init();
+
+		// collapse ultra rare variants, output maf_s according to the new G00
+		int n_collapse;
+		sp_mat G00 = Misc::GetSp_CollapseGenoMat(G0, threshold_ultra_mac,
+			collapse_ultra_method, mac, maf, maf_s, n_collapse);
+		// const int g_ncol = G00.n_cols;
+	
+		// Tstat for each G_i in G0 (SKAT)
+		dvec Ts;
+		// G_tilde' P G_tilde
+		// G'SiG - G'SiXUG - (G'SiXUG)' + G'U'X'SiXUG, where U=XVX_inv_XV
+		dmat GPG;
+		gmat_skat_test_p1(G00, var_ratio, Ts, GPG);
+	
+		// for each beta weight
+		for (int i=0; i < num_wbeta; i++, icol++)
+		{
+			double *p_ans = &ans(0, icol);
+			// get weights, beta function
+			const double b1 = buf_wbeta[2*i+0], b2 = buf_wbeta[2*i+1];
+			// output
+			p_ans[0] = maxMAF;
+			p_ans[1] = n_snv;
+			p_ans[2] = macmin; p_ans[3] = macmed; p_ans[4] = macmax;
+			p_ans[5] = summac;
+			p_ans[6] = i+1;    // weight beta
+			// n_collapse
+			p_ans[7] = n_collapse;
+			// burden test
+			double v[7];
+			gmat_burden_test(G0, b1, b2, maf, mac, weight, v);
+			p_ans[9] = v[3];
+			p_ans[12] = v[1]; p_ans[13] = v[2];  // beta, SE
+			// skat
+			double pv;
+			gmat_skat_test_p2(G00, Ts, GPG, b1, b2, maf_s, var_ratio, weight,
+				&pv);
+			p_ans[10] = pv;
+			// ACAT-V, calculate individual p-value, if pval[j]==NaN
+			gmat_acatv_test(G0, b1, b2, maf, mac, pval, weight, ultra, v);
+			if (n_collapse != v[1])
+				throw "Invalid n_collapse in saige_acato_test_pval()";
+			p_ans[11] = v[2];  // p-value
+			// ACAT-O p-value
+			const double w[3] = { 1, 1, 1 };
+			p_ans[8] = acat_pval(3, &p_ans[9], &w[0], false);
 		}
 	}
-
-	// combined p-value
-	const int n_pval = n_each_wb*num_wbeta;
-	ws = buf_unitsz;
-	if (n_pval > 5*num_unitsz)
-		ws = REAL(NEW_NUMERIC(n_pval));
-	for (int i=0; i < n_pval; i++) ws[i] = 1;
-	ans[st_idx-1] = acat_pval(n_pval, &ans[st_idx], ws, false);
+	// Cauchy p-value
+	if (icol > 1)
+	{
+		std::vector<double> ps(icol);
+		std::vector<double> w(icol, 1);
+		for (int i=0; i < icol; i++) ps[i] = ans(8, i);
+		double *p_ans = &ans(0, icol);
+		p_ans[0] = ptrMaxMAF[0];
+		p_ans[1] = ps.size();
+		p_ans[6] = num_wbeta+1;
+		p_ans[8] = acat_pval(icol, &ps[0], &w[0], false);
+		p_ans[2] = p_ans[3] = p_ans[4] = p_ans[5] = p_ans[7] =
+			p_ans[9] = p_ans[10] = p_ans[11] = p_ans[12] = p_ans[13] = R_NaN;
+		icol++;
+	}
 
 	// output
-	return ans;
+	if (icol > 0)
+	{
+		if (icol < ncol) ans = ans(_, Range(0, icol-1));
+		return ans;
+	} else {
+		return R_NilValue;
+	}
 END_RCPP
 }
 

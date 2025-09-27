@@ -108,7 +108,7 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
                 {
                     if (sink.number() > 0) sink()  # TODO
                     cat(paste0("Export to ", sQuote(basename(outfn)),
-                        " [start at ", date(), "]\n"))
+                        " [start at ", .tm(), "]\n"))
                 }
                 f <- seqOpen(names(snplst)[i])
                 on.exit(seqClose(f))
@@ -279,7 +279,7 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     nr <- ceiling(nvar_tot / 4L)  # in bytes
     ext_nb <- ceiling(nr/4L)*4L - nr  # 32-bit aligned
     g_pack <- seqGet2bGeno(gdsfile, samp_by_var=FALSE, ext_nbyte=ext_nb,
-        verbose=verbose)
+        verbose=verbose_progress)
     g_pack2 <- g_pack
     if (verbose_progress)
     {

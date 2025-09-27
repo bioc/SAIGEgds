@@ -1,3 +1,12 @@
+CHANGES IN VERSION 2.9.2
+-------------------------
+
+    o improve the work load balancing in `seqAssocGLMM_SPA()` according to
+      SeqArray_1.49.6
+
+    o new option 'verbose.pval' to improve the display in `seqAssocGLMM_SPA()`
+
+
 CHANGES IN VERSION 2.4.1
 -------------------------
 

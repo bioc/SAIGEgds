@@ -2,9 +2,6 @@
 ###                     SAIGEgds Codes                        ###
 ###                                                           ###
 
-# use C++11
-CXX_STD = CXX11
-
 # enable ARMA_64BIT_WORD for large matrices
 PKG_CPPFLAGS = -DARMA_64BIT_WORD=1
 

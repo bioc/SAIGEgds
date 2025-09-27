@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2025    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -19,11 +19,20 @@
 
 .trait_list <- c("quantitative", "binary")
 
+.load_skat <- function(verbose=TRUE)
+{
+    if (requireNamespace("SKAT", quietly=TRUE))
+    {
+        if (isTRUE(verbose))
+            cat("    SKAT package loaded for Efficient Resampling\n")
+    } else
+        stop("The 'SKAT' package should be installed to enable Efficient Resampling.")
+}
 
 # Internal model initialization
-.init_nullmod <- function(modobj, ii, maf, mac, missing, spa.pval, var.ratio,
-    geno.ploidy, Sigma_inv, chol_inv_X_Sigma,
-    summac=NaN, wbeta=double(), num_wbuf=0L, acatv_mac=10, skat_mac=10)
+.init_nullmod <- function(modobj, ii, maf, mac, missing, spa.pval, ER.mac,
+    var.ratio, geno.ploidy, Sigma_inv, chol_inv_X_Sigma,
+    maxMAF=1, wbeta=double(), num_wbuf=0L, ultra_mac=10, collapse_method="max")
 {
     # check
     if (!is.numeric(var.ratio) || anyNA(var.ratio))
@@ -59,7 +68,7 @@
     mobj <- list(
         trait = match(modobj$trait.type, .trait_list),
         maf = maf, mac = mac, missing = missing, spa.pval = spa.pval,
-        geno.ploidy = geno.ploidy,
+        ER.mac = ER.mac, geno.ploidy = geno.ploidy,
         tau = modobj$tau,
         y = y, mu = mu, y_mu = y - mu,
         mu2 = mu * (1 - mu),
@@ -106,12 +115,15 @@
     }
 
     # additional for aggregate tests
-    mobj$summac <- summac
-    mobj$acatv_mac <- acatv_mac
-    mobj$skat_mac <- skat_mac
+    mobj$maxMAF <- as.double(maxMAF)
     mobj$buf_wbeta <- as.double(wbeta)
     mobj$num_unitsz <- num_wbuf
     mobj$buf_unitsz <- matrix(0.0, nrow=num_wbuf, ncol=7L)
+    mobj$ultra_mac <- ultra_mac
+
+    i <- match(collapse_method, c("max", "sum"))
+    if (is.na(i)) stop("Internal error in 'collapse.method'.")
+    mobj$collapse_method <- i
 
     # output
     mobj
@@ -123,14 +135,12 @@
     {
         if (!aggregate)
         {
-            n <- index.gdsn(gdsfile, "genotype/data", silent=TRUE)
-            if (!is.null(n))
+            if (exist.gdsn(gdsfile, "genotype/data"))
             {
                 nm <- "$dosage_alt2"
             } else {
                 nm <- getOption("seqarray.node_ds", "annotation/format/DS")
-                n <- index.gdsn(gdsfile, nm, silent=TRUE)
-                if (is.null(n))
+                if (!exist.gdsn(gdsfile, nm))
                     stop("Dosages should be stored in genotype or annotation/format/DS.")
             }
         } else {
@@ -221,10 +231,18 @@
         } else {
             stop("Unknown format of the output file, and it should be RData, RDS or gds.")
         }
-        if (verbose) .cat(.crayon_inverse("Done."))
+        if (verbose)
+        {
+            .cat(.crayon_underline(.tm()))
+            .cat(.crayon_inverse("Done."))
+        }
         invisible()
     } else {
-        if (verbose) .cat(.crayon_inverse("Done."))
+        if (verbose)
+        {
+            .cat(.crayon_underline(.tm()))
+            .cat(.crayon_inverse("Done."))
+        }
         obj
     }
 }
@@ -235,15 +253,28 @@
 # SAIGE single variant analysis
 #
 
+PVAL_METHOD_LEVELS <- c("Normal", "SPA", "ER")
+
+.pval_method <- function(i)
+{
+    i <- suppressWarnings(as.integer(i))
+    attr(i, "levels") <- PVAL_METHOD_LEVELS
+    attr(i, "class") <- "factor"
+    i
+}
+
+
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
-    spa=TRUE, dsnode="", geno.ploidy=2L, res.savefn="", res.compress="ZIP",
-    parallel=FALSE, load.balancing=TRUE, verbose=TRUE)
+    spa=TRUE, ER.mac=4.5, dsnode="", geno.ploidy=2L, res.savefn="",
+    res.compress="ZIP", parallel=FALSE, load.balancing=TRUE,
+    verbose.pval=c(0, 5e-10, 5e-8, 5e-6, 5e-4, 1), verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(mac), length(mac)==1L)
     stopifnot(is.numeric(missing), length(missing)==1L)
     stopifnot(is.logical(spa), length(spa)==1L)
+    stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
     stopifnot(is.numeric(geno.ploidy) | is.na(geno.ploidy),
         length(geno.ploidy)==1L)
@@ -253,21 +284,26 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
     .check_compress(res.compress)
     stopifnot(is.logical(load.balancing), length(load.balancing)==1L,
         !is.na(load.balancing))
+    stopifnot(is.numeric(verbose.pval) | is.null(verbose.pval))
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
     if (verbose)
+    {
         cat(.crayon_inverse("SAIGE association analysis:\n"))
+        .cat(.crayon_underline(.tm()))
+    }
 
     # check model
     modobj <- .check_modobj(modobj, verbose)
     var.ratio <- .get_var_ratio(modobj)
     spa.pval <- if (isTRUE(spa)) NaN else -1
+    if (is.na(ER.mac)) ER.mac <- 0
 
     # GDS file
     if (is.character(gdsfile))
     {
         if (verbose)
-            .cat("    open ", sQuote(gdsfile))
+            .cat("    open ", sQuote(basename(gdsfile)))
         gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
         on.exit(seqClose(gdsfile))
     } else {
@@ -282,6 +318,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
 
     # determine the GDS node for dosages
     dsnode <- .dsnode(gdsfile, dsnode)
+    using_gt <- dsnode=="$dosage_alt2"
 
     # check sample ID
     seqSetFilter(gdsfile, sample.id=modobj$sample.id, warn=FALSE, verbose=FALSE)
@@ -330,12 +367,15 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
     if (dm[3L] <= 0) stop("No variant in the genotypic data set!")
 
     # initialize the internal model parameters
-    mobj <- .init_nullmod(modobj, ii, maf, mac, missing, spa.pval, var.ratio,
-        geno.ploidy, modobj$Sigma_inv, modobj$chol_inv_X_Sigma)
+    mobj <- .init_nullmod(modobj, ii, maf, mac, missing, spa.pval, ER.mac,
+        var.ratio, geno.ploidy, modobj$Sigma_inv, modobj$chol_inv_X_Sigma)
+
+    # load package(s)
+    if (ER.mac >= mac) .load_skat(verbose)
 
     # update parallel object
-    njobs <- SeqArray:::.NumParallel(parallel)
     parallel <- SeqArray:::.McoreParallel(parallel)
+    njobs <- SeqArray:::.NumParallel(parallel)
     is_fork <- SeqArray:::.IsForking(parallel)  # is forking or not?
     if (verbose)
         .cat("    # of processes: ", njobs)
@@ -362,6 +402,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         {
             .packageEnv$modobj <- NULL
             remove(modobj, envir=.packageEnv)
+            gc(verbose=FALSE, reset=TRUE, full=TRUE)  # reset memory
+            invisible()
         }
     }
 
@@ -377,9 +419,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         scan_fun <- function(f, dsnode, pverbose)
         {
             seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
-                as.is="list", parallel=FALSE,
-                .progress=pverbose && SeqArray:::process_index==1L,
-                .list_dup=FALSE, .useraw=NA)
+                as.is="list", parallel=FALSE, .list_dup=FALSE, .useraw=NA,
+                .progress=SeqArray:::.process_verbose(pverbose))
         }
     } else {
         # output to a GDS file
@@ -400,19 +441,19 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
             Append("beta", vapply(v$rv, `[`, 0, i=4L))
             Append("SE", vapply(v$rv, `[`, 0, i=5L))
             Append("pval", vapply(v$rv, `[`, 0, i=6L))
+            Append("method", as.integer(vapply(v$rv, `[`, 0, i=7L)))
             if (modobj$trait.type == "binary")
             {
-                Append("p.norm", vapply(v$rv, `[`, 0, i=7L))
-                Append("converged", vapply(v$rv, `[`, 0, i=8L)==1)
+                Append("p.norm", vapply(v$rv, `[`, 0, i=8L))
+                Append("converged", vapply(v$rv, `[`, 0, i=9L)==1L)
             }
             NULL
         }
         scan_fun <- function(f, dsnode, pverbose)
         {
             v<- seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
-                as.is="list", parallel=FALSE,
-                .progress=pverbose && SeqArray:::process_index==1L,
-                .list_dup=FALSE, .useraw=NA)
+                as.is="list", parallel=FALSE, .list_dup=FALSE, .useraw=NA,
+                .progress=SeqArray:::.process_verbose(pverbose))
             i <- seqGetData(f, "$variant_index")
             x <- !vapply(v, is.null, FALSE)
             list(id=i[x], rv=v[x])
@@ -437,7 +478,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         if (!is.na(geno.ploidy) && (geno.ploidy>0L))
         {
             add.gdsn(outf, "AF.alt", double())
-            add.gdsn(outf, "mac", double())
+            add.gdsn(outf, "mac", if (using_gt) integer() else double())
         } else {
             add.gdsn(outf, "mean", double())
             add.gdsn(outf, "nnzero", integer())
@@ -446,6 +487,9 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         add.gdsn(outf, "beta", double())
         add.gdsn(outf, "SE", double())
         add.gdsn(outf, "pval", double())
+        n <- add.gdsn(outf, "method", integer())
+        put.attr.gdsn(n, "R.class", "factor")
+        put.attr.gdsn(n, "R.levels", PVAL_METHOD_LEVELS)
         if (modobj$trait.type == "binary")
         {
             add.gdsn(outf, "p.norm", double())
@@ -454,12 +498,10 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
     }
 
     # scan variants
-    rv <- seqParallel(parallel, gdsfile, split="by.variant",
-        .initialize=initfun, .finalize=finalfun, .initparam=mobj,
-        .combine=combine_fun, FUN=scan_fun,
-        .balancing=load.balancing, .bl_size=50000L, .bl_progress=verbose,
-        dsnode=dsnode,
-        pverbose=verbose && ((njobs==1L) || !load.balancing))
+    rv <- seqParallel(parallel, gdsfile, FUN=scan_fun, split="by.variant",
+        .combine=combine_fun, .initialize=initfun, .finalize=finalfun,
+        .initparam=mobj, .balancing=load.balancing, .status_file=TRUE,
+        .proc_time=verbose, dsnode=dsnode, pverbose=verbose)
 
     # output to a GDS file?
     if (!isfn_gds)
@@ -489,8 +531,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
             pos = seqGetData(gdsfile, "position"),
             stringsAsFactors = FALSE
         )
-        # add RS IDs if possible
-        if (!is.null(index.gdsn(gdsfile, "annotation/id", silent=TRUE)))
+        # add RS IDs if exists
+        if (exist.gdsn(gdsfile, "annotation/id"))
             ans$rs.id <- seqGetData(gdsfile, "annotation/id")
         ans$ref <- seqGetData(gdsfile, "$ref")
         ans$alt <- seqGetData(gdsfile, "$alt")
@@ -498,20 +540,28 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         {
             ans$AF.alt <- vapply(rv, `[`, 0, i=1L)
             ans$mac <- vapply(rv, `[`, 0, i=2L)
+            if (using_gt) ans$mac <- as.integer(ans$mac)
         } else {
             ans$mean <- vapply(rv, `[`, 0, i=1L)
-            ans$nnzero <- vapply(rv, `[`, 0, i=2L)
+            ans$nnzero <- as.integer(vapply(rv, `[`, 0, i=2L))
         }
         ans$num  <- as.integer(vapply(rv, `[`, 0, i=3L))
         ans$beta <- vapply(rv, `[`, 0, i=4L)
         ans$SE   <- vapply(rv, `[`, 0, i=5L)
         ans$pval <- vapply(rv, `[`, 0, i=6L)
+        ans$method <- .pval_method(vapply(rv, `[`, 0, i=7L))
         if (modobj$trait.type == "binary")
         {
-            ans$p.norm <- vapply(rv, `[`, 0, i=7L)
-            ans$converged <- vapply(rv, `[`, 0, i=8L)==1
+            ans$p.norm <- vapply(rv, `[`, 0, i=8L)
+            ans$converged <- vapply(rv, `[`, 0, i=9L)==1L
         }
 
+        if (verbose && length(verbose.pval))
+        {
+            cat("P-value:")
+            print(table(cut(ans$pval, breaks=unique(sort(verbose.pval)),
+                include.lowest=TRUE), exclude=NULL))
+        }
         # save file?
         .save_R_obj(ans, res.compress, res.savefn, verbose)
 
@@ -547,16 +597,28 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         # sub variables
         i <- order(i)
         for (nm in c("AF.alt", "mac", "mean", "nnzero", "num", "beta", "SE",
-            "pval", "p.norm", "converged"))
+            "pval", "method", "p.norm", "converged"))
         {
             nd <- index.gdsn(outf, nm, silent=TRUE)
             if (!is.null(nd)) Add(nm, read.gdsn(nd)[i])
         }
 
+        if (verbose && length(verbose.pval))
+        {
+            cat("P-value:")
+            p <- read.gdsn(index.gdsn(outf, "pval"))
+            print(table(cut(p, breaks=unique(sort(verbose.pval)),
+                include.lowest=TRUE), exclude=NULL))
+        }
+
         # close the GDS file
         closefn.gds(outf); outf <- NULL
         cleanup.gds(res.savefn, verbose=FALSE)
-        if (verbose) .cat(.crayon_inverse("Done."))
+        if (verbose)
+        {
+            .cat(.crayon_underline(.tm()))
+            .cat(.crayon_inverse("Done."))
+        }
         invisible()
     }
 }

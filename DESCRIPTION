@@ -2,11 +2,12 @@ Package: SAIGEgds
 Type: Package
 Title: Scalable Implementation of Generalized mixed models using GDS files in
         Phenome-Wide Association Studies
-Version: 2.9.1
-Date: 2025-09-22
-Depends: R (>= 3.5.0), gdsfmt (>= 1.28.0), SeqArray (>= 1.43.7), Rcpp
+Version: 2.9.2
+Date: 2025-09-25
+Depends: R (>= 4.0.0), gdsfmt (>= 1.28.0), SeqArray (>= 1.49.6), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel (>= 5.0.0)
-Imports: methods, stats, utils, Matrix, RcppParallel, CompQuadForm, survey
+Imports: methods, stats, utils, Matrix, RcppParallel, SKAT, CompQuadForm,
+        survey
 Suggests: parallel, markdown, rmarkdown, crayon, SNPRelate, RUnit, knitr,
         ggmanh, BiocGenerics
 Authors@R: c(person("Xiuwen", "Zheng", role=c("aut", "cre"),
@@ -25,7 +26,7 @@ Description: Scalable implementation of generalized mixed models with highly
         Benchmarks show that SAIGEgds is significantly faster than the SAIGE R
         package.
 License: GPL-3
-SystemRequirements: C++11, GNU make
+SystemRequirements: GNU make
 VignetteBuilder: knitr
 ByteCompile: TRUE
 URL: https://github.com/AbbVie-ComputationalGenomics/SAIGEgds

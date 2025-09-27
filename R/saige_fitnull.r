@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -107,7 +107,7 @@
     {
         if (verbose)
         {
-            .cat(.crayon_underline(date()))
+            .cat(.crayon_underline(.tm()))
             .cat(.crayon_inverse("Calculate the average ratio of variances:"))
         }
         set.seed(seed)
@@ -145,7 +145,7 @@
     }
 
     # fit the null model
-    fit0 <- glm(formula, data=data, family=binomial)
+    fit0 <- glm(formula, data=data, family=binomial, offset=param$covoffset)
     if (verbose)
     {
         if (is.null(gdsfile) && is.null(grm.mat))
@@ -184,7 +184,8 @@
             converged = fit0$converged)
     }
 
-    # use updated mu to set obj.noK
+    # use updated mu to set obj.noK (ScoreTest_NULL_Model)
+    if (!is.null(param$Xmat)) X <- param$Xmat
     mu <- glmm$fitted.values
     V <- mu*(1-mu)
     XV <- t(X * V)
@@ -338,7 +339,7 @@
 
 
 # check use.cateMAC
-.cateMAC_default <- c(1.5, 2.5, 3.5, 4.5, 5.5, 10.5, 20.5)
+.cateMAC_default <- c(5.5, 10.5, 20.5)
 
 .check_use_cateMAC <- function(use.cateMAC)
 {
@@ -454,9 +455,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
     variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
     inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
-    cateMAC.inc.maf=TRUE, cateMAC.simu=FALSE, X.transform=TRUE, tol=0.02,
-    maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L, num.marker=30L,
-    tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
+    cateMAC.inc.maf=TRUE, cateMAC.simu=TRUE, use.offset=FALSE, X.transform=TRUE,
+    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
+    num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
     geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L,
     fork.loading=FALSE, verbose=TRUE)
 {
@@ -494,6 +495,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         stop("'cateMAC.inc.maf' should be FALSE, TRUE or a numeric vector for MAF.")
     }
     stopifnot(is.logical(cateMAC.simu), length(cateMAC.simu)==1L)
+    stopifnot(is.logical(use.offset), length(use.offset)==1L)
     stopifnot(is.logical(X.transform), length(X.transform)==1L)
     stopifnot(is.numeric(tol), length(tol)==1L)
     stopifnot(is.numeric(maxiter), length(maxiter)==1L)
@@ -513,7 +515,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     if (verbose)
     {
         .cat(.crayon_inverse("SAIGE association analysis:"))
-        .cat(.crayon_underline(date()))
+        .cat(.crayon_underline(.tm()))
     }
 
     # check GRM matrix if specified
@@ -787,7 +789,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         # calculate sparse GRM
         grm.mat <- .fit_calc_sp_grm(gdsfile, nsnp.sub.random, maf,
             missing.rate, rel.cutoff, num.thread, FALSE, FALSE, verbose)
-        gc(verbose=FALSE)  # reduce memory usage
+        gc(verbose=FALSE, reset=TRUE, full=TRUE)  # reduce memory usage
         if (verbose) cat("Done (sparse GRM)\n")
     }
     if (!is.null(grm.mat) && !identical(sid, colnames(grm.mat)))
@@ -797,7 +799,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     }
 
     X <- model.matrix(formula, data)
-    if (NCOL(X) <= 1L) X.transform <- FALSE
+    if (NCOL(X) <= 1L) use.offset <- X.transform <- FALSE
+
+    # transform to avoid multi-collinearity and improve numeric stability
     if (isTRUE(X.transform))
     {
         if (verbose)
@@ -829,7 +833,24 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             .cat("    new formula: ", format(formula))
     }
 
-    # clear the internal matrix
+    # estimate the fixed effect coefficients or not
+    covoffset <- Xmat <- NULL
+    if (isTRUE(use.offset))
+    {
+        if (verbose)
+            cat("    using covariate offset instead of estimating each fixed effect coefficient\n")
+        Xmat <- model.matrix(formula, data=data)
+        if (trait.type == "binary")
+        {
+            mod <- glm(formula, data=data, family=binomial)
+        } else {
+            mod <- glm(formula, data=data, family=gaussian)
+        }
+        covoffset <- Xmat[, -1L, drop=F] %*%  mod$coefficients[-1L]
+        formula <- as.formula("y ~ 1")
+    }	    
+
+    # clear the internal GRM matrix
     .Call(saige_init_fit_grm)
     # internal buffer for diagonal of GRM
     buf_sigma_diag <- double(n_samp)
@@ -858,8 +879,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         {
             .cat("    using ",
                 .pretty_size(as.double(object.size(packed.geno))),
-                " (", ifelse(isTRUE(geno.sparse), "sparse", "dense"),
-                " genotype matrix)")
+                " (stored in a ",
+                ifelse(isTRUE(geno.sparse), "sparse", "dense"), " form)")
         }
 
         # initialize internal variables and buffers
@@ -909,6 +930,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     # parameters for fitting the model
     param <- list(
         trait = match(trait.type, .trait_list),
+        covoffset = covoffset, Xmat = Xmat,
         num.thread = num.thread, seed = seed,
         tol = tol, tolPCG = tolPCG,
         maxiter = maxiter, maxiterPCG = maxiterPCG, no_iteration = FALSE,
@@ -968,9 +990,12 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     }
 
     # tweak the result
-    if (!isTRUE(X.transform))
+    if (!isTRUE(X.transform) || isTRUE(use.offset))
     {
-        names(glmm$coefficients) <- colnames(glmm$obj.noK$X1)
+        if (isTRUE(use.offset))
+            names(glmm$coefficients) <- "(Offset)"
+        else
+            names(glmm$coefficients) <- colnames(glmm$obj.noK$X1)
     } else {
         coef <- solve(X_qrr, glmm$coefficients * sqrt(nrow(data)))
         names(coef) <- X_name
@@ -1004,7 +1029,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     }
     if (verbose)
     {
-        .cat(.crayon_underline(date()))
+        .cat(.crayon_underline(.tm()))
         .cat(.crayon_inverse("Done."))
     }
 

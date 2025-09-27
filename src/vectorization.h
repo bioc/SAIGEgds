@@ -2,7 +2,7 @@
 //
 // vectorization.h: optimization with vectorization
 //
-// Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds.
 //
@@ -93,6 +93,8 @@ namespace vectorization
 	double f64_dot(size_t n, const double *x, const double *y);
 	/// sum_i x[i]
 	double f64_sum(size_t n, const double *x);
+	/// sum_i finite x[i]
+	double f64_sum_finite(size_t n, const double *x);
 	/// x[i] = x[i] / sum_i x[i] (excluding not finite numbers)
 	void f64_normalize(size_t n, double *x);
 

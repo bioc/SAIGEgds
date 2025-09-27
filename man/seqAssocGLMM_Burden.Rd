@@ -2,14 +2,13 @@
 \alias{seqAssocGLMM_Burden}
 \title{Burden tests}
 \description{
-    Burden p-value calculations using mixed models and the
-Saddlepoint approximation method for case-control imbalance.
+    Set-based burden tests using mixed models.
 }
 
 \usage{
-seqAssocGLMM_Burden(gdsfile, modobj, units, wbeta=AggrParamBeta, ccimb.adj=TRUE,
-    summac=3, dsnode="", res.savefn="", res.compress="LZMA", parallel=FALSE,
-    verbose=TRUE, verbose.maf=FALSE)
+seqAssocGLMM_Burden(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
+    missing=0.05, ccimb.adj=TRUE, ER.mac=4.5, dsnode="", res.savefn="",
+    res.compress="ZIP", parallel=FALSE, verbose=TRUE, verbose.maf=FALSE)
 }
 
 \arguments{
@@ -17,14 +16,17 @@ seqAssocGLMM_Burden(gdsfile, modobj, units, wbeta=AggrParamBeta, ccimb.adj=TRUE,
     \item{modobj}{an R object for SAIGE model parameters}
     \item{units}{a list of units of selected variants, with S3 class
         \code{"SeqUnitListClass"} defined in the SeqArray package}
+    \item{maxMAF}{a numeric vector for MAF thresholds, e.g.,
+        \code{c(0.01, 0.001)} for rare variants}
     \item{wbeta}{weights for per-variant effect, using beta distribution
         \code{dbeta()} according to variant's MAF; a length-two vector, or a
         matrix with two rows for multiple beta parameters; by default, using
         beta(1,1) and beta(1,25) both}
+    \item{missing}{missing threshold for variants (checking <= \code{missing}),
+        \code{NaN} for no filter}
     \item{ccimb.adj}{whether adjusting for case-control imbalance or not}
-    \item{summac}{a threshold for the sum of minor allele counts (MAC)
-        (checking \code{>= summac}); no calculation if the sum of MAC
-        \code{< summac}}
+    \item{ER.mac}{the maximum sum of MAC for the variants with efficient
+        resampling p-values}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
@@ -47,34 +49,35 @@ the variant sets \code{units} to a range of MAC and/or MAF.
 \value{
     Return a \code{data.frame} with the following components if not saving to
 a file:
-    \code{chr}, chromosome;
-    \code{start}, the starting position;
-    \code{end}, the ending position;
-    \code{numvar}, the number of variants in the window;
-    \code{maf.avg}, the average of MAFs in the window;
-    \code{maf.sd}, the standard deviation of MAFs in the window;
-    \code{maf.min}, the minimum of MAFs in the window;
-    \code{maf.max}, the maximum of MAFs in the window;
-    \code{mac.avg}, the average of MACs in the window;
-    \code{mac.sd}, the standard deviation of MACs in the window;
-    \code{mac.min}, the minimum of MACs in the window;
-    \code{mac.max}, the maximum of MACs in the window;
-    \code{summac}, the sum of minor allele counts;
-    \code{beta}, beta coefficient, log odds ratio if binary outcomes;
-    \code{SE}, standard error for beta coefficient;
-    \code{pval}, p-value (adjusted p-value with Saddlepoint approximation
-        if \code{ccimb.adj=TRUE} and binary outcomes);
+    \item{chr}{chromosome;}
+    \item{start}{the starting position;}
+    \item{end}{the ending position;}
+    \item{maxMAF}{maximum of MAFs;}
+    \item{numvar}{the number of variants in the window; if
+        \code{weight="Cauchy"}, it is the number of individual p-values in
+        the Cauchy test}
+    \item{macmin}{the minimum of MAC in the window;}
+    \item{macmed}{the median of MAC in the window;}
+    \item{macmax}{the maximum of MAC in the window;}
+    \item{summac}{the sum of minor allele counts;}
+    \item{weight}{the weighting strategy with the beta distribution parameters}
+    \item{beta}{beta coefficient, log odds ratio if binary outcomes
+        (alternative allele vs. reference allele);}
+    \item{SE}{standard error for beta coefficient;}
+    \item{pval}{final p-value (if the Saddlepoint approximation or efficient
+        resampling is applied);}
+    \item{method}{\code{"Normal"}: \code{pval} is calculated by assuming
+        asymptotic normality; \code{"SPA"}: using the Saddlepoint approximation
+        method; \code{"ER"}: using the efficient resampling}
     \item{p.norm}{p-values based on asymptotic normality (could be 0 if it
         is too small, e.g., \code{pnorm(-50) = 0} in R; used for checking only}
-    \code{cvg}, whether the SPA algorithm converges or not for adjusted p-value.
+    \item{converged}{whether the SPA algorithm converges or not for p-values.}
 }
 
 \author{Xiuwen Zheng}
 \seealso{
-    \code{\link{seqAssocGLMM_ACAT_V}},
-    \code{\link{seqAssocGLMM_ACAT_O}},
-    \code{\link{seqAssocGLMM_SKAT}},
-    \code{\link{seqUnitFilterCond}}
+    \code{\link{seqAssocGLMM_ACAT_V}}, \code{\link{seqAssocGLMM_ACAT_O}},
+    \code{\link{seqAssocGLMM_SKAT}}, \code{\link{seqUnitFilterCond}}
 }
 
 \examples{
@@ -93,8 +96,8 @@ glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary")
 # get a list of variant units for burden tests
 units <- seqUnitSlidingWindows(gdsfile, win.size=500, win.shift=250)
 
-assoc <- seqAssocGLMM_Burden(gdsfile, glmm, units)
-head(assoc)
+a <- seqAssocGLMM_Burden(gdsfile, glmm, units, maxMAF=c(0.1,0.01))
+head(a)
 
 # close the GDS file
 seqClose(gdsfile)
