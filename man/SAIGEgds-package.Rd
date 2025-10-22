@@ -65,7 +65,8 @@ pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
 head(pheno)
 
 # fit the null model
-glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary")
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary",
+    geno.sparse=FALSE)
 
 # p-value calculation
 assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=10)
