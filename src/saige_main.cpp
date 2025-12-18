@@ -19,11 +19,6 @@
 // with SAIGEgds.
 // If not, see <http://www.gnu.org/licenses/>.
 
-// To ensure atanpi, cospi, sinpi, tanpi are defined, used in ACAT calculation
-#ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
-#   define __STDC_WANT_IEC_60559_FUNCS_EXT__    1
-#endif
-
 #include "vectorization.h"
 #include "vec_ext.h"
 #include <RcppArmadillo.h>
@@ -34,6 +29,7 @@
 #include <math.h>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 
 
 using namespace Rcpp;
@@ -1620,12 +1616,6 @@ END_RCPP
 
 // ========================================================================= //
 
-#ifdef HAVE_ATANPI
-extern double atanpi(double x);
-#else
-inline static double atanpi(double x) { return atan(x) / M_PI; }
-#endif
-
 static const double ROUND_ZERO = 1e-300;
 static const double ROUND_ONE  = 1 - 1e-16;
 
@@ -1678,7 +1668,7 @@ static double acat_pval(R_xlen_t n, const double pval[], const double w[],
 	Tstat /= sumw;
 	// get p-value from Tstat, and return
 	if (Tstat <= 5e+14)
-		return 0.5 - atanpi(Tstat);
+		return 0.5 - std::atan(Tstat) / M_PI;  // 0.5 - atanpi(Tstat)
 	else
 		return 1.0 / Tstat * M_1_PI;
 }
