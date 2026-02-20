@@ -40,10 +40,21 @@ static void Init_SKAT_Pkg_Functions()
 {
 	if (!Have_SKAT_Func)
 	{
+		// load SKAT pacakge
+		Rcpp::Environment base = Rcpp::Environment::base_env();
+		Rcpp::Function requireNamespace = base["requireNamespace"];
+		requireNamespace("SKAT");
+		// load C functions
 		LOAD_SKAT("RGetProb", skat_GetProb);
 		LOAD_SKAT("RSKATExact", skat_SKATExact);
 		Have_SKAT_Func = true;
 	}
+}
+
+RcppExport SEXP saige_init_skat_pkg()
+{
+	Init_SKAT_Pkg_Functions();
+	return R_NilValue;
 }
 
 
@@ -69,7 +80,8 @@ void SKATExactBin_ComputeProb_Group(arma::uvec &idx, arma::uvec &idxCompVec,
 	std::vector<double> &prob)
 {
 	const int k = idx.n_elem;
-	int ngroup1 = 10;  // use the default value as ER will only be used for variants with MAC <= 10;
+	// use the default value as ER will only be used for variants with MAC <= 10
+	int ngroup1 = 10;
 	arma::vec p1 = pi1(idx);
 	arma::vec p2 = pi1(idxCompVec);
 	arma::uvec id_temp = arma::find(p1 >= 1);
