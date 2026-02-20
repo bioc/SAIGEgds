@@ -331,6 +331,12 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
 # SAIGE SKAT tests
 #
 
+# initialize loading SKAT functions
+.skat_init_func <- function()
+{
+    .Call("saige_init_skat_pkg", PACKAGE="SAIGEgds")
+}
+
 # get p-value from mixed Chi square distribution
 #   (try CompQuadForm first, then saddle point method, suggested by UW DCC)
 # used in saige_main.cpp
