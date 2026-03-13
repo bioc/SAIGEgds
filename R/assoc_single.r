@@ -394,14 +394,14 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         initfun <- function(proc_id, mobj)
         {
             eval(.load_lib)
-            .packageEnv$modobj <- mobj
+            .PkgEnv$modobj <- mobj
             .Call(saige_score_test_init, mobj)
         }
         # clear when exit
         finalfun <- function(proc_id, param)
         {
-            .packageEnv$modobj <- NULL
-            remove(modobj, envir=.packageEnv)
+            .PkgEnv$modobj <- NULL
+            remove(modobj, envir=.PkgEnv)
             gc(verbose=FALSE, reset=TRUE, full=TRUE)  # reset memory
             invisible()
         }

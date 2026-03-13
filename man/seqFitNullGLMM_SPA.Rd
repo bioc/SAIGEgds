@@ -16,7 +16,7 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
     geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L,
-    fork.loading=FALSE, verbose=TRUE)
+    fork.loading, parallel.loading=FALSE, verbose=TRUE)
 }
 
 \arguments{
@@ -101,8 +101,9 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
         '.RData', or '.rds'}
     \item{seed}{an integer passed to \code{set.seed()} as a seed for random
         numbers, or \code{NULL} for no action}
-    \item{fork.loading}{load genotypes via parallel or not; multiple
-        processes can reduce loading time of genotypes, but may double the
+    \item{fork.loading}{deprecated, use \code{parallel.loading} instead}
+    \item{parallel.loading}{load genotypes via parallel or not; multiple
+        processes can reduce loading time of genotypes, but may increase the
         memory usage}
     \item{verbose}{if \code{TRUE}, show information}
 }

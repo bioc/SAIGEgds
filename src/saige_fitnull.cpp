@@ -620,7 +620,7 @@ static MATH_OFAST void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 		// initialize
 		memset(GRM.buf_crossprod, 0, sizeof(double)*GRM.NumSamp*SAIGE_NumThread);
 		double sum_b = f64_sum(GRM.NumSamp, &b[0]);
-		dvec sum_cp_g0;
+		dvec sum_cp_g0;  // offset used in Sparse G
 		sum_cp_g0.zeros(SAIGE_NumThread);
 
 		// crossprod with b
@@ -632,13 +632,13 @@ static MATH_OFAST void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 				const double *p = &GRM.buf_std_geno[4*i];
 				const BYTE *pg = (const BYTE*)RAW(VECTOR_ELT(GRM.SparseG, i));
 				// calculate dot = g * b
-				double d =
+				double dot =
 					sum_b * p[0] +                     // g0 * b
 					(*fc_get_dot_sp_b)(p, &b[0], pg);  // g1 * b, g2 * b, g3 * b
-				// update GRM.buf_crossprod += d .* std.geno
+				// update GRM.buf_crossprod += dot .* std.geno
 				double *pbb = GRM.buf_crossprod + GRM.NumSamp * th_idx;
-				sum_cp_g0[th_idx] += d * p[0];      // g0 * d
-				(*fc_set_dot_sp_b)(pbb, d, p, pg);  // g1 * d, g2 * d, g3 * d
+				sum_cp_g0[th_idx] += dot * p[0];      // g0 * dot
+				(*fc_set_dot_sp_b)(pbb, dot, p, pg);  // g1 * dot, g2 * dot, g3 * dot
 			}
 			PARALLEL_END
 		} else {
@@ -697,7 +697,7 @@ static MATH_OFAST void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 			for (int i=0; i < SAIGE_NumThread; i++, s += GRM.NumSamp)
 				f64_add(len, s, p);
 			if (!GRM.PackedG)
-				f64_add(len, sum_g0, p);
+				f64_add(len, sum_g0, p);  // it is GRM.SparseG
 			f64_mul(len, scalar, p);
 		}
 		PARALLEL_END
@@ -823,7 +823,7 @@ inline static double calcCV(const dvec &x)
 
 inline static double calcCV(const dvec &x, int st)
 {
-	return(calcCV(x(span(st, x.size()-1))));
+	return(calcCV(x(arma::span(st, x.size()-1))));
 }
 
 

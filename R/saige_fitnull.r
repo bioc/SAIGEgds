@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2026    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -414,31 +414,73 @@
     }
 }
 
-# simulated genotype packed RAW matrix (mac_low <= MAC < mac_high)
-.get_sparse_geno <- function(gdsfile, nfork, verbose)
+# get a sparse form of genotypes
+.get_sparse_geno <- function(gdsfile, nproc, verbose)
 {
+    # check
+    if (is.character(gdsfile))
+    {
+        stopifnot(length(gdsfile)==1L)
+        if (isTRUE(verbose))
+            .cat("Open ", sQuote(basename(gdsfile)))
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
+        on.exit(seqClose(gdsfile))
+    } else {
+        stopifnot(inherits(gdsfile, "SeqVarGDSClass"))
+    }
     # integer genotypes or numeric dosages
     if (exist.gdsn(gdsfile, "genotype/data"))
     {
-        nm <- "$dosage_alt"
+        varnm <- "$dosage_alt2"
     } else if (exist.gdsn(gdsfile, "annotation/format/DS/data"))
     {
-        nm <- "annotation/format/DS"
+        varnm <- "annotation/format/DS"
         if (verbose) cat("    using 'annotation/format/DS'\n")
     } else {
         stop("'genotype' and 'annotation/format/DS' are not available.")
     }
-    # internal buffer
-    n_samp <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim[2L]
-    buf_b256 <- integer((ceiling(n_samp/256)+1)*3 + 1)
-    buf_b1 <- raw(3*ceiling(n_samp/256)*257)
-    .Call(saige_init_sparse, n_samp, buf_b256, buf_b1)
-    fc <- .cfunction("saige_get_sparse")
-    # run
-    seqParallel(nfork, gdsfile, FUN=function(f) {
-        seqApply(f, nm, fc, as.is="list", .useraw=TRUE, .list_dup=FALSE,
-            .progress=nfork==1L && verbose)
-    }, .balancing=TRUE, .bl_size=1000L, .bl_progress=verbose)
+    # initialize
+    dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
+    nsamp <- dm[2L]; nvar  <- dm[3L]
+    remove(dm)
+    # process
+    stopifnot(is.numeric(nproc))
+    if (nproc > 1L)
+    {
+        # parallel loading
+        cl <- parallel::makeCluster(nproc)
+        on.exit(parallel::stopCluster(cl), add=TRUE)
+        bs <- ceiling(nvar/100L)  # block size
+        seqParallel(cl, gdsfile, FUN=function(gds, varnm)
+        {
+            gc(FALSE, reset=TRUE)
+            seqApply(gds, varnm, .cfunction("saige_get_sparse"),
+                as.is="list", .useraw=TRUE, .list_dup=FALSE)
+        },
+        .initialize=function(proc_id, nsamp)
+        {
+            # internal buffer
+            buf_b256 <- integer((ceiling(nsamp/256L) + 1L)*3L + 1L)
+            buf_b1 <- raw(3L*ceiling(nsamp/256L)*257L)
+            assign("buf_b256", buf_b256, envir=.PkgEnv)
+            assign("buf_b1", buf_b1, envir=.PkgEnv)
+            .Call(saige_init_sparse, nsamp, buf_b256, buf_b1)
+        },
+        .finalize=function(proc_id, nsamp)
+        {
+            .PkgEnv$buf_b256 <- .PkgEnv$buf_b1 <- NULL
+            remove("buf_b256", "buf_b1", envir=.PkgEnv)
+        }, .initparam=nsamp, .balancing=TRUE, .bl_size=bs, .bl_progress=verbose,
+            varnm=varnm)
+    } else {
+        # internal buffer
+        buf_b256 <- integer((ceiling(nsamp/256L) + 1L)*3L + 1L)
+        buf_b1 <- raw(3L*ceiling(nsamp/256L)*257L)
+        .Call(saige_init_sparse, nsamp, buf_b256, buf_b1)
+        # apply
+        seqApply(gdsfile, varnm, .cfunction("saige_get_sparse"),
+            as.is="list", .useraw=TRUE, .list_dup=FALSE, .progress=verbose)
+    }
 }
 
 # get information from the output of .get_sparse_geno()
@@ -459,7 +501,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
     geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L,
-    fork.loading=FALSE, verbose=TRUE)
+    fork.loading, parallel.loading=FALSE, verbose=TRUE)
 {
     # check
     stopifnot(inherits(formula, "formula"))
@@ -510,8 +552,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
     stopifnot(is.character(model.savefn), length(model.savefn)==1L)
     stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
-    stopifnot(is.logical(fork.loading), length(fork.loading)==1L)
+    stopifnot(is.logical(parallel.loading), length(parallel.loading)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
+    if (!missing(fork.loading))
+        warning("'fork.loading' is deprecated, please use parallel.loading instead.")
     if (verbose)
     {
         .cat(.crayon_inverse("SAIGE association analysis:"))
@@ -864,16 +908,16 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             .cat("    ", gdsfile$filename)
             cat("Loading SNP genotypes from the GDS file:\n")
         }
-        nfork <- 1L
-        if (SeqArray:::.IsForking(num.thread) && isTRUE(fork.loading))
-            nfork <- num.thread
+        nproc <- 1L
+        if (isTRUE(parallel.loading)) nproc <- num.thread
         if (isTRUE(geno.sparse))
         {
             # sparse genotypes
-            packed.geno <- .get_sparse_geno(gdsfile, nfork, verbose)
+            packed.geno <- .get_sparse_geno(gdsfile, nproc, verbose)
         } else {
             # 2-bit packed genotypes
-            packed.geno <- seqGet2bGeno(gdsfile, verbose=verbose)
+            packed.geno <- seqGet2bGeno(gdsfile, parallel=nproc,
+                verbose=verbose)
         }
         if (verbose)
         {

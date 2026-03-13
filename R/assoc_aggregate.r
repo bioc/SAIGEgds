@@ -260,13 +260,13 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
         seqParallel(parallel, NULL, split="none", .combine="none",
             FUN = function(mobj) {
                 eval(.load_lib)
-                .packageEnv$mobj <- mobj
+                .PkgEnv$mobj <- mobj
                 .Call(saige_score_test_init, mobj)
             }, mobj=mobj)
         # finalize
         on.exit({
             seqParallel(parallel, NULL, split="none", .combine="none",
-                FUN = function() { .packageEnv$mobj <- NULL })
+                FUN = function() { .PkgEnv$mobj <- NULL })
         }, add=TRUE)
     }
 
@@ -492,7 +492,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
             FUN = function(mobj) {
                 eval(.load_lib)
                 mobj$Sigma_inv_cg <- .sp_to_dgCMatrix(mobj$Sigma_inv)
-                .packageEnv$mobj <- mobj
+                .PkgEnv$mobj <- mobj
                 # initialize SKAT
                 .Call(saige_score_test_init, mobj)
                 .Call(saige_skat_test_init, mobj$Sigma_inv_cg, mobj$t_XVX_inv_XV,
@@ -502,7 +502,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
         on.exit({
             seqParallel(parallel, NULL, split="none", .combine="none",
                 FUN = function() {
-                    .packageEnv$mobj <- NULL
+                    .PkgEnv$mobj <- NULL
                     .Call(saige_skat_test_done)
                 })
         }, add=TRUE)
@@ -656,13 +656,13 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
         seqParallel(parallel, NULL, split="none", .combine="none",
             FUN = function(mobj) {
                 eval(.load_lib)
-                .packageEnv$mobj <- mobj
+                .PkgEnv$mobj <- mobj
                 .Call(saige_score_test_init, mobj)
             }, mobj=mobj)
         # finalize
         on.exit({
             seqParallel(parallel, NULL, split="none", .combine="none",
-                FUN = function() { .packageEnv$mobj <- NULL })
+                FUN = function() { .PkgEnv$mobj <- NULL })
         }, add=TRUE)
     }
 
@@ -849,7 +849,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
             FUN = function(mobj) {
                 eval(.load_lib)
                 mobj$Sigma_inv_cg <- .sp_to_dgCMatrix(mobj$Sigma_inv)
-                .packageEnv$mobj <- mobj
+                .PkgEnv$mobj <- mobj
                 .Call(saige_score_test_init, mobj)
                 if (!is.null(mobj$Sigma_inv))
                 {
@@ -864,7 +864,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
         on.exit({
             seqParallel(parallel, NULL, split="none", .combine="none",
                 FUN = function() {
-                    .packageEnv$mobj <- NULL
+                    .PkgEnv$mobj <- NULL
                     .Call(saige_skat_test_done)
                 })
         }, add=TRUE)

@@ -12,7 +12,7 @@
 
 
 # Package-wide variable
-.packageEnv <- new.env()
+.PkgEnv <- new.env()
 
 
 #######################################################################

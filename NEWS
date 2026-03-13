@@ -1,3 +1,16 @@
+CHANGES IN VERSION 2.11.2
+-------------------------
+
+    o fix a C++ error that 'span' is ambiguous
+
+
+CHANGES IN VERSION 2.10.2
+-------------------------
+
+    o 'fork.loading' is deprecated in `seqFitNullGLMM_SPA()`, use
+      'parallel.loading' instead
+
+
 CHANGES IN VERSION 2.9.2
 -------------------------
 
