@@ -25,8 +25,10 @@
     {
         if (isTRUE(verbose))
             cat("    SKAT package loaded for Efficient Resampling\n")
-    } else
-        stop("The 'SKAT' package should be installed to enable Efficient Resampling.")
+    } else {
+        stop("The 'SKAT' package should be installed to enable ",
+            "Efficient Resampling.")
+    }
 }
 
 # Internal model initialization
@@ -40,7 +42,10 @@
     if (!is.null(Sigma_inv))
     {
         if (!is.matrix(Sigma_inv) && !inherits(Sigma_inv, "dsCMatrix"))
-            stop("Sigma_inv should be a dense matrix or a sparse matrix 'dsCMatrix'.")
+        {
+            stop("Sigma_inv should be a dense matrix or ",
+                "a sparse matrix 'dsCMatrix'.")
+        }
     }
     if (!is.null(chol_inv_X_Sigma) && !is.matrix(chol_inv_X_Sigma))
         stop("chol_inv_X_Sigma should be a dense matrix.")
@@ -49,8 +54,8 @@
     {
         if (identical(class(modobj$obj.noK), "SA_NULL"))
         {
-            warning(
-                "For more accurate model building, the null model should be built using SAIGEgds>=v1.9.1!",
+            warning("For more accurate model building, ",
+                "the null model should be built using SAIGEgds>=v1.9.1!",
                 call.=FALSE, immediate.=TRUE)
         } else
             stop("Unknown model object.")
@@ -72,9 +77,11 @@
         tau = modobj$tau,
         y = y, mu = mu, y_mu = y - mu,
         mu2 = mu * (1 - mu),
-        t_XXVX_inv = t(modobj$obj.noK$XXVX_inv[ii,, drop=FALSE]),  # K x n_samp (K << n_samp, more efficient)
+        # K x n_samp (K << n_samp, more efficient)
+        t_XXVX_inv = t(modobj$obj.noK$XXVX_inv[ii,, drop=FALSE]),
         XV = modobj$obj.noK$XV[, ii, drop=FALSE],  # K x n_samp
-        t_XVX_inv_XV = t(modobj$obj.noK$XXVX_inv[ii,, drop=FALSE] * V),  # K x n_samp
+        # K x n_samp
+        t_XVX_inv_XV = t(modobj$obj.noK$XXVX_inv[ii,, drop=FALSE] * V),
         t_X = t_X1,  # K x n_samp
         var.ratio = var.ratio,
         vr_sqrt = sqrt(var.ratio),
@@ -141,7 +148,10 @@
             } else {
                 nm <- getOption("seqarray.node_ds", "annotation/format/DS")
                 if (!exist.gdsn(gdsfile, nm))
-                    stop("Dosages should be stored in genotype or annotation/format/DS.")
+                {
+                    stop("Dosages should be stored in genotype or ",
+                        "annotation/format/DS.")
+                }
             }
         } else {
             nm <- "$dosage_sp2"
@@ -186,7 +196,10 @@
             vr <- mean(modobj$var.ratio$ratio, na.rm=TRUE)
         } else {
             if (!is.numeric(cateMAC))
-                stop("'use.cateMAC' should be a numeric vector for multiple variance ratios.")
+            {
+                stop("'use.cateMAC' should be a numeric vector for ",
+                    "multiple variance ratios.")
+            }
             x <- modobj$var.ratio$ratio
             d <- cut(modobj$var.ratio$mac, c(0, cateMAC, Inf),
                 right=FALSE, dig.lab=15L)
@@ -229,7 +242,8 @@
         {
             saveRDS(obj, file=res.savefn, compress=cm)
         } else {
-            stop("Unknown format of the output file, and it should be RData, RDS or gds.")
+            stop("Unknown format of the output file, and it should be ",
+                "RData, RDS or gds.")
         }
         if (verbose)
         {
@@ -513,7 +527,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         if (any(x))
         {
             x <- !x
-            seqSetFilter(gdsfile, variant.sel=x, action="intersect", verbose=FALSE)
+            seqSetFilter(gdsfile, variant.sel=x, action="intersect",
+                verbose=FALSE)
             rv <- rv[x]
         }
         if (verbose)
@@ -560,7 +575,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         {
             cat("P-value:")
             print(table(cut(ans$pval, breaks=unique(sort(verbose.pval)),
-                include.lowest=TRUE), exclude=NULL))
+                        include.lowest=TRUE), exclude=NULL))
         }
         # save file?
         .save_R_obj(ans, res.compress, res.savefn, verbose)
@@ -597,7 +612,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         # sub variables
         i <- order(i)
         for (nm in c("AF.alt", "mac", "mean", "nnzero", "num", "beta", "SE",
-            "pval", "method", "p.norm", "converged"))
+                "pval", "method", "p.norm", "converged"))
         {
             nd <- index.gdsn(outf, nm, silent=TRUE)
             if (!is.null(nd)) Add(nm, read.gdsn(nd)[i])
@@ -608,7 +623,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
             cat("P-value:")
             p <- read.gdsn(index.gdsn(outf, "pval"))
             print(table(cut(p, breaks=unique(sort(verbose.pval)),
-                include.lowest=TRUE), exclude=NULL))
+                        include.lowest=TRUE), exclude=NULL))
         }
 
         # close the GDS file

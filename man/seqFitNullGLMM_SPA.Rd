@@ -21,7 +21,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
 
 \arguments{
     \item{formula}{an object of class \code{formula} (or one that can be
-        coerced to that class), e.g., \code{y ~ x1 + x2}, see \code{\link{lm}}}
+        coerced to that class), e.g., \code{y ~ x1 + x2}, see
+        \code{\link[stats]{lm}}}
     \item{data}{a data frame for the formulas}
     \item{gdsfile}{a SeqArray GDS filename or a GDS object for genotypes used
         in the GRM calculation; see details}

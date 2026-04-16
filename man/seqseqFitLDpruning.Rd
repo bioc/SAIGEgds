@@ -39,8 +39,8 @@ seqFitLDpruning(gdsfile, sample.id=NULL, variant.id=NULL,
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
         processing), a numeric value for the number of cores, or other value;
         \code{parallel} is passed to the argument \code{cl} in
-        \code{\link{seqParallel}}, see \code{\link{seqParallel}} for more
-        details}
+        \code{\link[SeqArray]{seqParallel}}, see
+        \code{\link[SeqArray]{seqParallel}} for more details}
     \item{parallel.multi}{only applicable when there are multiple input files
         in \code{gdsfile} and \code{save.gdsfn} is used; multiple GDS files can
         be extracted to create a sub GDS file in parallel via

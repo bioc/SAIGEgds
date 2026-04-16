@@ -56,7 +56,7 @@
         if (nrow(grm.mat) != ncol(grm.mat))
             stop("grm.mat should a numeric square matrix.")
         if ((is.matrix(grm.mat) && !is.double(grm.mat)) ||
-            (inherits(grm.mat, "sparseMatrix") && !is.double(grm.mat@x)))
+                (inherits(grm.mat, "sparseMatrix") && !is.double(grm.mat@x)))
         {
             stop("grm.mat should be a numeric matrix.")
         }
@@ -191,7 +191,8 @@
     XV <- t(X * V)
     XVX_inv <- solve(crossprod(X, X * V))
     XXVX_inv <- X %*% XVX_inv
-    obj.noK <- list(y=unname(fit0$y), mu=mu, V=V, X1=X, XV=XV, XXVX_inv=XXVX_inv)
+    obj.noK <- list(y=unname(fit0$y), mu=mu, V=V, X1=X, XV=XV,
+        XXVX_inv=XXVX_inv)
     glmm$obj.noK <- obj.noK
 
     if (!is.null(grm.mat))
@@ -471,7 +472,7 @@
             .PkgEnv$buf_b256 <- .PkgEnv$buf_b1 <- NULL
             remove("buf_b256", "buf_b1", envir=.PkgEnv)
         }, .initparam=nsamp, .balancing=TRUE, .bl_size=bs, .bl_progress=verbose,
-            varnm=varnm)
+        varnm=varnm)
     } else {
         # internal buffer
         buf_b256 <- integer((ceiling(nsamp/256L) + 1L)*3L + 1L)
@@ -506,10 +507,11 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     # check
     stopifnot(inherits(formula, "formula"))
     stopifnot(is.data.frame(data))
-    stopifnot(is.null(gdsfile) | inherits(gdsfile, "SeqVarGDSClass") |
-        is.character(gdsfile))
+    stopifnot(is.null(gdsfile) || inherits(gdsfile, "SeqVarGDSClass") ||
+            is.character(gdsfile))
     trait.type <- match.arg(trait.type)
-    stopifnot(is.character(sample.col), length(sample.col)==1L, !is.na(sample.col))
+    stopifnot(is.character(sample.col), length(sample.col)==1L,
+        !is.na(sample.col))
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
     stopifnot(is.numeric(max.num.snp), length(max.num.snp)==1L)
@@ -534,7 +536,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         if (any(cateMAC.inc.maf<=0 | cateMAC.inc.maf>=1))
             stop("'cateMAC.inc.maf' should be between 0 and 1.")
     } else {
-        stop("'cateMAC.inc.maf' should be FALSE, TRUE or a numeric vector for MAF.")
+        stop("'cateMAC.inc.maf' should be FALSE, TRUE or ",
+            "a numeric vector for MAF.")
     }
     stopifnot(is.logical(cateMAC.simu), length(cateMAC.simu)==1L)
     stopifnot(is.logical(use.offset), length(use.offset)==1L)
@@ -555,7 +558,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     stopifnot(is.logical(parallel.loading), length(parallel.loading)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
     if (!missing(fork.loading))
-        warning("'fork.loading' is deprecated, please use parallel.loading instead.")
+    {
+        warning("'fork.loading' is deprecated, ",
+            "please use 'parallel.loading' instead.")
+    }
     if (verbose)
     {
         .cat(.crayon_inverse("SAIGE association analysis:"))
@@ -601,7 +607,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     if (sample.col %in% vars)
         stop(sprintf("'%s' should not be in the formula.", sample.col))
     if (!(sample.col %in% colnames(data)))
-        stop(sprintf("'%s' should be one of the columns in 'data'.", sample.col))
+    {
+        stop(sprintf("'%s' should be one of the columns in 'data'.",
+                sample.col))
+    }
     if (is.factor(data[[sample.col]]))
         stop(sprintf("'%s' should not be a factor variable.", sample.col))
     if (any(is.na(data[[sample.col]])))
@@ -667,8 +676,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             sel[is.na(sel)] <- FALSE
             if (verbose)
             {
-                .cat("# of variants specified in the variance ratio estimation: ",
-                    nrow(v))
+                .cat("# of variants specified in ",
+                    "the variance ratio estimation: ", nrow(v))
             }
         }
 
@@ -720,19 +729,22 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
                     if (verbose)
                     {
                         cat(sprintf("    MAC%s, %g):\t",
-                            if (last > .Machine$double.eps) paste0("[", last) else "(0",
-                            mac))
+                                if (last > .Machine$double.eps)
+                                    paste0("[", last) else "(0",
+                                mac))
                     }
                     n <- 5L * num.marker
-                    rand.packed.geno[[k]] <- .simu_geno(length(sid), n, last, mac)
+                    rand.packed.geno[[k]] <-
+                        .simu_geno(length(sid), n, last, mac)
                     rand.packed.geno.vid <- c(rand.packed.geno.vid,
                         paste0("simu", k, "_g", seq_len(n)))
                     if (verbose)
                         cat(sprintf("%d+ simulated variants\n", num.marker))
                 } else {
                     stop(sprintf("Less variants (n=%d) than %d in MAC[%g, %g)",
-                        length(ii), num.marker, last, mac),
-                        ", consider using simulated genotypes via 'cateMAC.simu=TRUE'.")
+                            length(ii), num.marker, last, mac),
+                        ", consider using simulated genotypes ",
+                        "via 'cateMAC.simu=TRUE'.")
                 }
             } else {
                 n <- length(ii)
@@ -761,7 +773,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
                 seqSetFilter(gdsfile, variant.sel=ii, action="intersect",
                     verbose=FALSE)
                 i <- match(ii, sort(ii))
-                rand.packed.geno[[k]] <- seqGet2bGeno(gdsfile, verbose=FALSE)[,i]
+                rand.packed.geno[[k]] <-
+                    seqGet2bGeno(gdsfile, verbose=FALSE)[,i]
                 rand.packed.geno.vid <- c(rand.packed.geno.vid,
                     seqGetData(gdsfile, "variant.id")[i])
                 seqFilterPop(gdsfile)
@@ -813,7 +826,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         num.thread <- 1L
     .Call(saige_set_numthread, num.thread)
     if (verbose)
-        .cat("    using ", num.thread, " thread", ifelse(num.thread>1L, "s", ""))
+    {
+        .cat("    using ", num.thread, " thread",
+            if (num.thread>1L) "s" else "")
+    }
 
     # rearrange grm.mat if needed
     if (isTRUE(grm.mat))
@@ -882,7 +898,10 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     if (isTRUE(use.offset))
     {
         if (verbose)
-            cat("    using covariate offset instead of estimating each fixed effect coefficient\n")
+        {
+            cat("    using covariate offset instead of estimating",
+                "each fixed effect coefficient\n")
+        }
         Xmat <- model.matrix(formula, data=data)
         if (trait.type == "binary")
         {
@@ -966,7 +985,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             if (!is.null(gdsfile)) cat("Approximate u") else cat("U")
             cat("ser-defined sparse genetic relationship matrix:\n")
             cat(sprintf("    %d x %d, # of nonzero: %d (%s)\n",
-                n_samp, n_samp, a, s))
+                    n_samp, n_samp, a, s))
         }
     } else if (is.null(grm.mat) && is.null(gdsfile) && verbose)
         cat("Assuming independent outcomes\n")
@@ -1068,7 +1087,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         {
             saveRDS(glmm, file=model.savefn)
         } else {
-            stop("Unknown format of the output file, and it should be RData or RDS.")
+            stop("Unknown format of the output file, ",
+                "and it should be RData or RDS.")
         }
     }
     if (verbose)

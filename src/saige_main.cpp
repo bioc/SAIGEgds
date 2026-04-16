@@ -1741,9 +1741,30 @@ RcppExport SEXP saige_set_option(SEXP val, SEXP use_avx, SEXP Rverbose)
 	return R_NilValue;
 }
 
+// forward declarations from vectorization.cpp
 RcppExport SEXP saige_simd_version();
-RcppExport SEXP saige_store_2b_geno(SEXP, SEXP, SEXP, SEXP, SEXP);
-RcppExport SEXP saige_store_sp_geno(SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_simd_sp_grm();
+// forward declarations from saige_fitnull.cpp
+RcppExport SEXP saige_set_numthread(SEXP);
+RcppExport SEXP saige_init_fit_grm();
+RcppExport SEXP saige_store_2b_geno(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_store_sp_geno(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_init_sparse(SEXP, SEXP, SEXP);
+RcppExport SEXP saige_get_sparse_info(SEXP);
+RcppExport SEXP saige_get_sparse(SEXP);
+RcppExport SEXP saige_store_dense_grm(SEXP, SEXP, SEXP);
+RcppExport SEXP saige_store_sparse_grm(SEXP, SEXP, SEXP);
+RcppExport SEXP saige_fit_AI_PCG(SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_get_grm_diag();
+RcppExport SEXP saige_set_geno2b_raw(SEXP, SEXP, SEXP);
+RcppExport SEXP saige_calc_var_ratio(SEXP, SEXP, SEXP, SEXP);
+// forward declarations from saige_misc.cpp
+RcppExport SEXP saige_grm_sp_reraw(SEXP, SEXP, SEXP);
+RcppExport SEXP saige_grm_sp_calc(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_grm_sp_calc_ijx(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_grm_ds_calc(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+// forward declarations from saige_permu.cpp
+RcppExport SEXP saige_init_skat_pkg();
 
 /// initialize the package
 RcppExport void R_init_SAIGEgds(DllInfo *info)
@@ -1752,14 +1773,49 @@ RcppExport void R_init_SAIGEgds(DllInfo *info)
 
 	static R_CallMethodDef callMethods[] =
 	{
+		// saige_main.cpp
+	#ifdef TIMING
+		CALL(saige_timing, 0),
+	#endif
 		CALL(saige_score_test_init, 1),
-		CALL(saige_simd_version, 0),
-		CALL(saige_store_2b_geno, 5),
-		CALL(saige_store_sp_geno, 5),
+		CALL(saige_score_test_pval, 1),
+		CALL(saige_burden_test_pval, 2),
+		CALL(saige_skat_test_init, 4),
+		CALL(saige_skat_test_reset, 0),
+		CALL(saige_skat_test_done, 0),
+		CALL(saige_skat_test_pval, 1),
+		CALL(saige_acatv_test_pval, 1),
+		CALL(saige_acato_test_pval, 1),
 		CALL(saige_acat_p, 2),
+		CALL(saige_set_option, 3),
+		// vectorization.cpp
+		CALL(saige_simd_version, 0),
+		CALL(saige_simd_sp_grm, 0),
+		// saige_fitnull.cpp
+		CALL(saige_set_numthread, 1),
+		CALL(saige_init_fit_grm, 0),
+		CALL(saige_store_2b_geno, 6),
+		CALL(saige_store_sp_geno, 6),
+		CALL(saige_init_sparse, 3),
+		CALL(saige_get_sparse_info, 1),
+		CALL(saige_get_sparse, 1),
+		CALL(saige_store_dense_grm, 3),
+		CALL(saige_store_sparse_grm, 3),
+		CALL(saige_fit_AI_PCG, 4),
+		CALL(saige_get_grm_diag, 0),
+		CALL(saige_set_geno2b_raw, 3),
+		CALL(saige_calc_var_ratio, 4),
+		// saige_misc.cpp
+		CALL(saige_grm_sp_reraw, 3),
+		CALL(saige_grm_sp_calc, 7),
+		CALL(saige_grm_sp_calc_ijx, 8),
+		CALL(saige_grm_ds_calc, 7),
+		// saige_permu.cpp
+		CALL(saige_init_skat_pkg, 0),
 		{ NULL, NULL, 0 }
 	};
 
 	R_registerRoutines(info, NULL, callMethods, NULL, NULL);
+	R_useDynamicSymbols(info, FALSE);
 	vec_init_function();
 }

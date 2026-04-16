@@ -39,8 +39,8 @@ seqAssocGLMM_SKAT(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
         processing), a numeric value for the number of cores, or other value;
         \code{parallel} is passed to the argument \code{cl} in
-        \code{\link{seqParallel}}, see \code{\link{seqParallel}} for more
-        details}
+        \code{\link[SeqArray]{seqParallel}}, see
+        \code{\link[SeqArray]{seqParallel}} for more details}
     \item{verbose}{if \code{TRUE}, show information}
     \item{verbose.maf}{if \code{TRUE}, show summary of MAFs in units}
 }
@@ -86,7 +86,7 @@ in large biobanks and cohorts. Nat Genet. 2020; 52: 634-9.
     \code{\link{seqAssocGLMM_ACAT_V}},
     \code{\link{seqAssocGLMM_ACAT_O}},
     \code{\link{seqAssocGLMM_Burden}},
-    \code{\link{seqUnitFilterCond}}
+    \code{\link[SeqArray]{seqUnitFilterCond}}
 }
 
 \examples{

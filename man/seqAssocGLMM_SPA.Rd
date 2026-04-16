@@ -34,12 +34,12 @@ seqAssocGLMM_SPA(gdsfile, modobj, maf=NaN, mac=10, missing=0.05, spa=TRUE,
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
     \item{res.compress}{the compression method for the output file, it should
         be one of ZIP, ZIP_RA, LZMA, LZMA_RA and none; see
-        \code{\link{compression.gdsn}} for more details}
+        \code{\link[gdsfmt]{compression.gdsn}} for more details}
     \item{parallel}{\code{FALSE} (serial processing), \code{TRUE} (multicore
         processing), a numeric value for the number of cores, or other value;
         \code{parallel} is passed to the argument \code{cl} in
-        \code{\link{seqParallel}}, see \code{\link{seqParallel}} for more
-        details}
+        \code{\link[SeqArray]{seqParallel}}, see
+        \code{\link[SeqArray]{seqParallel}} for more details}
     \item{load.balancing}{load balancing for the calculation in parallel
         if \code{TRUE}}
     \item{verbose.pval}{\code{NULL} or a numeric vector for dividing p-values

@@ -417,7 +417,7 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     if (verbose)
         cat("Filtering variants:\n")
     seqSetFilterCond(gdsfile, maf=maf, missing.rate=missing.rate,
-         parallel=num.thread, .progress=verbose, verbose=FALSE)
+        parallel=num.thread, .progress=verbose, verbose=FALSE)
 
     # calculating ...
     m <- .fit_calc_sp_grm(gdsfile, nsnp.sub.random, maf, missing.rate,
@@ -469,7 +469,7 @@ seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     if (verbose)
         cat("Filtering variants:\n")
     seqSetFilterCond(gdsfile, maf=maf, missing.rate=missing.rate,
-         parallel=num.thread, .progress=verbose, verbose=FALSE)
+        parallel=num.thread, .progress=verbose, verbose=FALSE)
     dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
     nsamp <- dm[2L]
     nvar <- dm[3L]

@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2026    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -24,8 +24,8 @@
 {
     use_avx <- match.arg(use_avx)
     use_avx <- match(use_avx, c("avx512f","avx2","no"))
-	.Call(saige_set_option, always_fastSPA, use_avx, verbose)
-	invisible()
+    .Call(saige_set_option, always_fastSPA, use_avx, verbose)
+    invisible()
 }
 
 .cfunction <- function(name)
@@ -98,14 +98,16 @@ SIMD <- function()
 
 .crayon_inverse <- function(s)
 {
-    if (getOption("gds.crayon", TRUE) && requireNamespace("crayon", quietly=TRUE))
+    if (getOption("gds.crayon", TRUE) &&
+            requireNamespace("crayon", quietly=TRUE))
         s <- crayon::inverse(s)
     s
 }
 
 .crayon_underline <- function(s)
 {
-    if (getOption("gds.crayon", TRUE) && requireNamespace("crayon", quietly=TRUE))
+    if (getOption("gds.crayon", TRUE) &&
+            requireNamespace("crayon", quietly=TRUE))
         s <- crayon::underline(s)
     s
 }
@@ -228,7 +230,8 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
                     rv[[nm]] <- readex.gdsn(index.gdsn(f, nm), index)
                 rv <- as.data.frame(rv, stringsAsFactors=FALSE)
             } else {
-                stop("FileFormat should be 'SAIGE_OUTPUT' or 'SAIGE_OUTPUT_BURDEN'.")
+                stop("FileFormat should be ",
+                    "'SAIGE_OUTPUT' or 'SAIGE_OUTPUT_BURDEN'.")
             }
         } else if (grepl("\\.(rda|RData)$", fn, ignore.case=TRUE))
         {
@@ -246,7 +249,7 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
         if (!is.null(index))
             stop("'index' should be NULL for multiple input files.")
         rv <- lapply(fn, function(nm)
-            seqSAIGE_LoadPval(nm, varnm, verbose=verbose))
+                seqSAIGE_LoadPval(nm, varnm, verbose=verbose))
         if (verbose) cat("Merging ...\n")
         rv <- do.call(rbind, rv)
         if (verbose)

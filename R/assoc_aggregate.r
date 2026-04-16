@@ -37,7 +37,7 @@ AggrParamBeta <- structure(c(1,1,1,25), dim=c(2L,2L),
     if (verbose)
     {
         v <- apply(wbeta, 2L, function(x)
-            paste0("beta(", x[1L], ",", x[2L], ")"))
+                paste0("beta(", x[1L], ",", x[2L], ")"))
         .cat("    variant weights: ", paste(v, collapse=", "))
     }
     invisible()
@@ -107,8 +107,7 @@ AggrParamBeta <- structure(c(1,1,1,25), dim=c(2L,2L),
     unlist(lapply(mat_lst, function(m) m[irow, ]))
 }
 
-.ncol <- function(x)
-    if (length(d <- dim(x)) > 1L) d[2L] else 0L
+.ncol <- function(x) if (length(d <- dim(x)) > 1L) d[2L] else 0L
 
 .aggr_ret_obj <- function(units, obj, wbeta)
 {
@@ -377,10 +376,10 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
     stopifnot(is.logical(verbose.maf), length(verbose.maf)==1L)
 
     # check packages
-    pkg_cqf <- suppressPackageStartupMessages(requireNamespace("CompQuadForm",
-        quietly=TRUE))
-    pkg_svy <- suppressPackageStartupMessages(requireNamespace("survey",
-        quietly=TRUE))
+    pkg_cqf <- suppressPackageStartupMessages(
+        requireNamespace("CompQuadForm", quietly=TRUE))
+    pkg_svy <- suppressPackageStartupMessages(
+        requireNamespace("survey", quietly=TRUE))
     if (!pkg_cqf || !pkg_svy)
         stop("The packages 'CompQuadForm' and 'survey' should be installed.")
 
@@ -495,8 +494,8 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
                 .PkgEnv$mobj <- mobj
                 # initialize SKAT
                 .Call(saige_score_test_init, mobj)
-                .Call(saige_skat_test_init, mobj$Sigma_inv_cg, mobj$t_XVX_inv_XV,
-                    mobj$Si_X, mobj$XVX_inv_XV_X_Si_X)
+                .Call(saige_skat_test_init, mobj$Sigma_inv_cg,
+                    mobj$t_XVX_inv_XV, mobj$Si_X, mobj$XVX_inv_XV_X_Si_X)
             }, mobj=mobj)
         # finalize
         on.exit({
@@ -737,10 +736,10 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
     stopifnot(is.logical(verbose.maf), length(verbose.maf)==1L)
 
     # check packages
-    pkg_cqf <- suppressPackageStartupMessages(requireNamespace("CompQuadForm",
-        quietly=TRUE))
-    pkg_svy <- suppressPackageStartupMessages(requireNamespace("survey",
-        quietly=TRUE))
+    pkg_cqf <- suppressPackageStartupMessages(
+        requireNamespace("CompQuadForm", quietly=TRUE))
+    pkg_svy <- suppressPackageStartupMessages(
+        requireNamespace("survey", quietly=TRUE))
     if (!pkg_cqf || !pkg_svy)
         stop("The packages 'CompQuadForm' and 'survey' should be installed.")
 
@@ -786,8 +785,8 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
         verbose)
     if (verbose)
     {
-        .cat("    MAC threshold for collapsing ultra rare variants for ACAT-V and SKAT: <= ",
-            sprintf("%.15g", collapse.mac))
+        .cat("    MAC threshold for collapsing ultra rare variants in ",
+            "ACAT-V and SKAT: <= ", sprintf("%.15g", collapse.mac))
         cat("    ACAT-O p-values combine Burden, ACAT-V and SKAT\n")
         if (modobj$trait.type == "binary")
         {
