@@ -2,8 +2,8 @@ Package: SAIGEgds
 Type: Package
 Title: Scalable Implementation of Generalized mixed models using GDS files in
         Phenome-Wide Association Studies
-Version: 2.11.4
-Date: 2026-04-15
+Version: 2.11.5
+Date: 2026-04-23
 Depends: R (>= 4.0.0), gdsfmt (>= 1.28.0), SeqArray (>= 1.50.2), Rcpp
 LinkingTo: Rcpp, RcppArmadillo, RcppParallel (>= 5.0.0)
 Imports: methods, stats, utils, Matrix, RcppParallel, SKAT, CompQuadForm,
@@ -24,7 +24,9 @@ Description: Scalable implementation of generalized mixed models with highly
         package (v0.45, Zhou et al. 2018 and Zhou et al. 2020), and it is
         extended to include the state-of-the-art ACAT-O set-based tests.
         Benchmarks show that SAIGEgds is significantly faster than the SAIGE R
-        package.
+        package. Optional OpenCL-based GPU acceleration is supported for the
+        GRM cross-product computation in null model fitting and for GRM
+        construction.
 License: GPL-3
 SystemRequirements: GNU make
 VignetteBuilder: knitr

@@ -156,3 +156,31 @@ test.pACAT <- function()
     # check
 	checkEquals(A1, A2, "R / C implementation of ACAT")
 }
+
+
+test.saige_gpu_fallback <- function()
+{
+	# This test verifies that use.gpu=TRUE works without error
+	# even when no GPU is available (graceful fallback to CPU).
+
+	# open a GDS file
+	fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds")
+	gdsfile <- seqOpen(fn)
+	on.exit(seqClose(gdsfile))
+
+	# load phenotype
+	phenofn <- system.file("extdata", "pheno.txt.gz", package="SAIGEgds")
+	pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
+
+	# fit the null model with use.gpu=TRUE (should fall back to CPU gracefully)
+	glmm_cpu <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile,
+		use.gpu=FALSE, verbose=FALSE)
+	glmm_gpu <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile,
+		use.gpu=TRUE, verbose=FALSE)
+
+	# results should match (if GPU was used, within tolerance; if CPU fallback, exact)
+	checkEquals(glmm_cpu$tau, glmm_gpu$tau,
+		"GPU fallback: tau should match CPU", tolerance=1e-6)
+	checkEquals(glmm_cpu$coefficients, glmm_gpu$coefficients,
+		"GPU fallback: coefficients should match CPU", tolerance=1e-6)
+}

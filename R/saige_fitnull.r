@@ -120,7 +120,7 @@
 
 # binary outcome
 .fit_binary <- function(verbose, X.transform, phenovar, data, formula, param,
-    tau.init, gdsfile, grm.mat, seed, n_var)
+    tau.init, gdsfile, grm.mat, seed, n_varm, calc_vr=TRUE)
 {
     if (verbose)
     {
@@ -164,13 +164,18 @@
     if (!is.null(gdsfile) || !is.null(grm.mat))
     {
         # initial tau
-        tau <- fixtau <- c(0, 0)
-        if (fit0$family$family %in% c("binomial", "poisson"))
-            tau[1] <- fixtau[1] <- 1
-        if (sum(tau.init[fixtau==0]) == 0)
-            tau[fixtau==0] <- 0.1
-        else
-            tau[fixtau==0] <- tau.init[fixtau==0]
+        if (isTRUE(param$no_iteration))
+        {
+            tau <- tau.init
+        } else {
+            tau <- fixtau <- c(0, 0)
+            if (fit0$family$family %in% c("binomial", "poisson"))
+                tau[1] <- fixtau[1] <- 1
+            if (sum(tau.init[fixtau==0]) == 0)
+                tau[fixtau==0] <- 0.1
+            else
+                tau[fixtau==0] <- tau.init[fixtau==0]
+        }
         # iterate
         glmm <- .Call(saige_fit_AI_PCG, fit0, X, tau, param)
     } else {
@@ -219,13 +224,16 @@
     }
 
     # calculate the variance ratio
-    .calcVR(gdsfile, seed, fit0, glmm, obj.noK, param, verbose)
+    if (calc_vr)
+        .calcVR(gdsfile, seed, fit0, glmm, obj.noK, param, verbose)
+    else
+        glmm
 }
 
 
 # quantitative outcome
 .fit_quant <- function(verbose, X.transform, phenovar, data, inv.norm, formula,
-    param, tau.init, gdsfile, grm.mat, seed, n_var)
+    param, tau.init, gdsfile, grm.mat, seed, n_var, calc_vr=TRUE)
 {
     if (verbose)
     {
@@ -289,9 +297,14 @@
         mu.eta <- fit0$family$mu.eta(eta)
         Y <- eta - offset + (y - mu)/mu.eta
         # initial tau
-        tau <- tau.init
-        if (sum(tau) == 0) tau <- c(0.5, 0.5)
-        tau <- var(Y) * tau / sum(tau)
+        if (isTRUE(param$no_iteration))
+        {
+            tau <- tau.init
+        } else {
+            tau <- tau.init
+            if (sum(tau) == 0) tau <- c(0.5, 0.5)
+            tau <- var(Y) * tau / sum(tau)
+        }
         # iterate
         glmm <- .Call(saige_fit_AI_PCG, fit0, X, tau, param)
     } else {
@@ -335,7 +348,10 @@
     }
 
     # calculate the variance ratio
-    .calcVR(gdsfile, seed, fit0, glmm, obj.noK, param, verbose)
+    if (calc_vr)
+        .calcVR(gdsfile, seed, fit0, glmm, obj.noK, param, verbose)
+    else
+        glmm
 }
 
 
@@ -492,161 +508,11 @@
 }
 
 
-# fit the null model
-seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
-    trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.01,
-    missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
-    variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
-    inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
-    cateMAC.inc.maf=TRUE, cateMAC.simu=TRUE, use.offset=FALSE, X.transform=TRUE,
-    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
-    num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
-    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L,
-    fork.loading, parallel.loading=FALSE, verbose=TRUE)
+# load genotypes and prepare random markers from a GDS file
+.load_geno_grm_gds <- function(gdsfile, sid, variant.id, variant.id.varratio,
+    use.cateMAC, cateMAC.inc.maf, cateMAC.simu, maf, missing.rate,
+    max.num.snp, num.marker, seed, noRE, formula, num.thread, verbose)
 {
-    # check
-    stopifnot(inherits(formula, "formula"))
-    stopifnot(is.data.frame(data))
-    stopifnot(is.null(gdsfile) || inherits(gdsfile, "SeqVarGDSClass") ||
-            is.character(gdsfile))
-    trait.type <- match.arg(trait.type)
-    stopifnot(is.character(sample.col), length(sample.col)==1L,
-        !is.na(sample.col))
-    stopifnot(is.numeric(maf), length(maf)==1L)
-    stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
-    stopifnot(is.numeric(max.num.snp), length(max.num.snp)==1L)
-    stopifnot(is.null(variant.id) | is.vector(variant.id))
-    stopifnot(is.null(variant.id.varratio) | is.vector(variant.id.varratio))
-    stopifnot(is.numeric(nsnp.sub.random), length(nsnp.sub.random)==1L,
-        nsnp.sub.random>=0L)
-    stopifnot(is.numeric(rel.cutoff), length(rel.cutoff)==1L)
-    if (is.na(rel.cutoff)) rel.cutoff <- -Inf
-    if (is.logical(inv.norm))
-        inv.norm <- if (isTRUE(inv.norm)) "residuals" else "none"
-    inv.norm <- match.arg(inv.norm)
-    use.cateMAC <- .check_use_cateMAC(use.cateMAC)
-    if (is.logical(cateMAC.inc.maf))
-    {
-        stopifnot(length(cateMAC.inc.maf) == 1L)
-    } else if (is.numeric(cateMAC.inc.maf))
-    {
-        stopifnot(is.vector(cateMAC.inc.maf))
-        if (anyNA(cateMAC.inc.maf))
-            stop("'cateMAC.inc.maf' should not include NA/NaN.")
-        if (any(cateMAC.inc.maf<=0 | cateMAC.inc.maf>=1))
-            stop("'cateMAC.inc.maf' should be between 0 and 1.")
-    } else {
-        stop("'cateMAC.inc.maf' should be FALSE, TRUE or ",
-            "a numeric vector for MAF.")
-    }
-    stopifnot(is.logical(cateMAC.simu), length(cateMAC.simu)==1L)
-    stopifnot(is.logical(use.offset), length(use.offset)==1L)
-    stopifnot(is.logical(X.transform), length(X.transform)==1L)
-    stopifnot(is.numeric(tol), length(tol)==1L)
-    stopifnot(is.numeric(maxiter), length(maxiter)==1L)
-    stopifnot(is.numeric(nrun), length(nrun)==1L)
-    stopifnot(is.numeric(tolPCG), length(tolPCG)==1L)
-    stopifnot(is.numeric(maxiterPCG), length(maxiterPCG)==1L)
-    stopifnot(is.numeric(num.marker), length(num.marker)==1L)
-    stopifnot(is.numeric(tau.init), length(tau.init)==2L)
-    stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
-    stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
-    stopifnot(is.logical(geno.sparse), length(geno.sparse)==1L)
-    stopifnot(is.numeric(num.thread), length(num.thread)==1L)
-    stopifnot(is.character(model.savefn), length(model.savefn)==1L)
-    stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
-    stopifnot(is.logical(parallel.loading), length(parallel.loading)==1L)
-    stopifnot(is.logical(verbose), length(verbose)==1L)
-    if (!missing(fork.loading))
-    {
-        warning("'fork.loading' is deprecated, ",
-            "please use 'parallel.loading' instead.")
-    }
-    if (verbose)
-    {
-        .cat(.crayon_inverse("SAIGE association analysis:"))
-        .cat(.crayon_underline(.tm()))
-    }
-
-    # check GRM matrix if specified
-    if (isFALSE(grm.mat)) grm.mat <- NULL
-    noRE <- is.null(gdsfile) && is.null(grm.mat)  # no random effect
-    grm.mat <- .check_grm_mat(grm.mat, verbose)
-
-    # GDS file
-    if (is.character(gdsfile))
-    {
-        if (verbose)
-            .cat("Open ", sQuote(gdsfile))
-        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
-        on.exit(seqClose(gdsfile))
-    } else if (!is.null(gdsfile))
-    {
-        # save the filter on GDS file
-        seqFilterPush(gdsfile)
-        on.exit(seqFilterPop(gdsfile))
-    }
-
-    # show warnings immediately
-    saveopt <- options(warn=1L)
-    on.exit(options(warn=saveopt$warn), add=TRUE)
-    if (!is.null(seed)) set.seed(seed)
-
-    # variables in the formula
-    s <- as.character(formula)
-    formula_str <- paste(s[2L], s[1L], s[3L])
-    vars <- all.vars(formula)
-    phenovar <- all.vars(formula)[1L]
-    y <- data[[phenovar]]
-    if (is.null(y))
-        stop("There is no '", phenovar, "' in the input data frame.")
-    if (!is.factor(y) && !is.numeric(y) && !is.logical(y))
-        stop("The response variable should be numeric or a factor.")
-
-    # check sample id
-    if (sample.col %in% vars)
-        stop(sprintf("'%s' should not be in the formula.", sample.col))
-    if (!(sample.col %in% colnames(data)))
-    {
-        stop(sprintf("'%s' should be one of the columns in 'data'.",
-                sample.col))
-    }
-    if (is.factor(data[[sample.col]]))
-        stop(sprintf("'%s' should not be a factor variable.", sample.col))
-    if (any(is.na(data[[sample.col]])))
-        stop(sprintf("'%s' should not have any missing value.", sample.col))
-    if (anyDuplicated(data[[sample.col]]))
-        stop(sprintf("'%s' in data should be unique.", sample.col))
-
-    # remove missing values
-    data <- data[, c(sample.col, vars)]
-    data <- na.omit(data)
-    data <- droplevels(data)
-    sid <- NULL
-    if (!is.null(gdsfile))
-    {
-        seqResetFilter(gdsfile, sample=TRUE, verbose=FALSE)
-        sid <- seqGetData(gdsfile, "sample.id")
-    }
-    if (!is.null(grm.mat) && !isTRUE(grm.mat))
-    {
-        if (is.null(sid))
-            sid <- colnames(grm.mat)
-        else
-            sid <- intersect(sid, colnames(grm.mat))
-        if (length(sid) <= 0L)
-            stop("'gdsfile' and 'grm.mat' should have shared sample IDs.")
-    } else if (is.null(sid))
-        sid <- data[[sample.col]]
-    i <- match(sid, data[[sample.col]])
-    i <- i[!is.na(i)]
-    data <- data[i, ]
-    if (nrow(data) <= 0L)
-        stop("No common sample.id between 'data' and the GDS file.")
-    if (!is.null(gdsfile))
-        seqSetFilter(gdsfile, sample.id=data[[sample.col]], verbose=FALSE)
-    sid <- data[[sample.col]]
-
     if (!is.null(gdsfile))
     {
         # use gds genotype file
@@ -813,6 +679,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         n_samp <- length(sid)
         n_var  <- NA_integer_
         rand.packed.geno <- NULL
+        rand.packed.geno.vid <- NULL
         if (verbose)
         {
             .cat("Fit the null model: ", format(formula),
@@ -820,6 +687,194 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             .cat("    # of samples: ", .pretty(n_samp))
         }
     }
+
+    # output
+    list(n_samp=n_samp, n_var=n_var, rand.packed.geno=rand.packed.geno,
+        rand.packed.geno.vid=rand.packed.geno.vid, use.cateMAC=use.cateMAC)
+}
+
+
+# fit the null model
+seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
+    trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.01,
+    missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
+    variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
+    inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
+    cateMAC.inc.maf=TRUE, cateMAC.simu=TRUE, use.offset=FALSE, X.transform=TRUE,
+    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
+    num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
+    geno.sparse=TRUE, use.gpu=FALSE, save.packed.geno=FALSE, num.thread=1L,
+    model.savefn="", seed=200L, fork.loading, parallel.loading=FALSE,
+    verbose=TRUE)
+{
+    # check
+    stopifnot(inherits(formula, "formula"))
+    stopifnot(is.data.frame(data))
+    stopifnot(is.null(gdsfile) || inherits(gdsfile, "SeqVarGDSClass") ||
+            is.character(gdsfile))
+    trait.type <- match.arg(trait.type)
+    stopifnot(is.character(sample.col), length(sample.col)==1L,
+        !is.na(sample.col))
+    stopifnot(is.numeric(maf), length(maf)==1L)
+    stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
+    stopifnot(is.numeric(max.num.snp), length(max.num.snp)==1L)
+    stopifnot(is.null(variant.id) | is.vector(variant.id))
+    stopifnot(is.null(variant.id.varratio) | is.vector(variant.id.varratio))
+    stopifnot(is.numeric(nsnp.sub.random), length(nsnp.sub.random)==1L,
+        nsnp.sub.random>=0L)
+    stopifnot(is.numeric(rel.cutoff), length(rel.cutoff)==1L)
+    if (is.na(rel.cutoff)) rel.cutoff <- -Inf
+    if (is.logical(inv.norm))
+        inv.norm <- if (isTRUE(inv.norm)) "residuals" else "none"
+    inv.norm <- match.arg(inv.norm)
+    use.cateMAC <- .check_use_cateMAC(use.cateMAC)
+    if (is.logical(cateMAC.inc.maf))
+    {
+        stopifnot(length(cateMAC.inc.maf) == 1L)
+    } else if (is.numeric(cateMAC.inc.maf))
+    {
+        stopifnot(is.vector(cateMAC.inc.maf))
+        if (anyNA(cateMAC.inc.maf))
+            stop("'cateMAC.inc.maf' should not include NA/NaN.")
+        if (any(cateMAC.inc.maf<=0 | cateMAC.inc.maf>=1))
+            stop("'cateMAC.inc.maf' should be between 0 and 1.")
+    } else {
+        stop("'cateMAC.inc.maf' should be FALSE, TRUE or ",
+            "a numeric vector for MAF.")
+    }
+    stopifnot(is.logical(cateMAC.simu), length(cateMAC.simu)==1L)
+    stopifnot(is.logical(use.offset), length(use.offset)==1L)
+    stopifnot(is.logical(X.transform), length(X.transform)==1L)
+    stopifnot(is.numeric(tol), length(tol)==1L)
+    stopifnot(is.numeric(maxiter), length(maxiter)==1L)
+    stopifnot(is.numeric(nrun), length(nrun)==1L)
+    stopifnot(is.numeric(tolPCG), length(tolPCG)==1L)
+    stopifnot(is.numeric(maxiterPCG), length(maxiterPCG)==1L)
+    stopifnot(is.numeric(num.marker), length(num.marker)==1L)
+    stopifnot(is.numeric(tau.init), length(tau.init)==2L)
+    stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
+    stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
+    stopifnot(is.logical(geno.sparse), length(geno.sparse)==1L)
+    stopifnot(is.logical(save.packed.geno), length(save.packed.geno)==1L)
+    stopifnot(is.numeric(num.thread), length(num.thread)==1L)
+    stopifnot(is.character(model.savefn), length(model.savefn)==1L)
+    stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
+    stopifnot(is.logical(parallel.loading), length(parallel.loading)==1L)
+    stopifnot(is.logical(use.gpu), length(use.gpu)==1L)
+    stopifnot(is.logical(verbose), length(verbose)==1L)
+    if (!missing(fork.loading))
+    {
+        warning("'fork.loading' is deprecated, ",
+            "please use 'parallel.loading' instead.")
+    }
+    if (verbose)
+    {
+        .cat(.crayon_inverse("SAIGE association analysis:"))
+        .cat(.crayon_underline(.tm()))
+    }
+
+    # initialize GPU if requested
+    if (isTRUE(use.gpu))
+    {
+        use.gpu <- .Call(saige_gpu_init, verbose)
+        if (!use.gpu && verbose)
+            cat("GPU not available, falling back to CPU.\n")
+        if (use.gpu)
+        {
+            on.exit(.Call(saige_gpu_cleanup), add=TRUE)
+            geno.sparse <- FALSE  # sparse genotype is not supported for GPU
+        }
+    }
+
+    # check GRM matrix if specified
+    if (isFALSE(grm.mat)) grm.mat <- NULL
+    noRE <- is.null(gdsfile) && is.null(grm.mat)  # no random effect
+    grm.mat <- .check_grm_mat(grm.mat, verbose)
+
+    # GDS file
+    if (is.character(gdsfile))
+    {
+        if (verbose)
+            .cat("Open ", sQuote(gdsfile))
+        gdsfile <- seqOpen(gdsfile, allow.duplicate=TRUE)
+        on.exit(seqClose(gdsfile))
+    } else if (!is.null(gdsfile))
+    {
+        # save the filter on GDS file
+        seqFilterPush(gdsfile)
+        on.exit(seqFilterPop(gdsfile))
+    }
+
+    # show warnings immediately
+    saveopt <- options(warn=1L)
+    on.exit(options(warn=saveopt$warn), add=TRUE)
+    if (!is.null(seed)) set.seed(seed)
+
+    # variables in the formula
+    s <- as.character(formula)
+    formula_str <- paste(s[2L], s[1L], s[3L])
+    vars <- all.vars(formula)
+    phenovar <- all.vars(formula)[1L]
+    y <- data[[phenovar]]
+    if (is.null(y))
+        stop("There is no '", phenovar, "' in the input data frame.")
+    if (!is.factor(y) && !is.numeric(y) && !is.logical(y))
+        stop("The response variable should be numeric or a factor.")
+
+    # check sample id
+    if (sample.col %in% vars)
+        stop(sprintf("'%s' should not be in the formula.", sample.col))
+    if (!(sample.col %in% colnames(data)))
+    {
+        stop(sprintf("'%s' should be one of the columns in 'data'.",
+                sample.col))
+    }
+    if (is.factor(data[[sample.col]]))
+        stop(sprintf("'%s' should not be a factor variable.", sample.col))
+    if (any(is.na(data[[sample.col]])))
+        stop(sprintf("'%s' should not have any missing value.", sample.col))
+    if (anyDuplicated(data[[sample.col]]))
+        stop(sprintf("'%s' in data should be unique.", sample.col))
+
+    # remove missing values
+    data <- data[, c(sample.col, vars)]
+    data <- na.omit(data)
+    data <- droplevels(data)
+    sid <- NULL
+    if (!is.null(gdsfile))
+    {
+        seqResetFilter(gdsfile, sample=TRUE, verbose=FALSE)
+        sid <- seqGetData(gdsfile, "sample.id")
+    }
+    if (!is.null(grm.mat) && !isTRUE(grm.mat))
+    {
+        if (is.null(sid))
+            sid <- colnames(grm.mat)
+        else
+            sid <- intersect(sid, colnames(grm.mat))
+        if (length(sid) <= 0L)
+            stop("'gdsfile' and 'grm.mat' should have shared sample IDs.")
+    } else if (is.null(sid))
+        sid <- data[[sample.col]]
+    i <- match(sid, data[[sample.col]])
+    i <- i[!is.na(i)]
+    data <- data[i, ]
+    if (nrow(data) <= 0L)
+        stop("No common sample.id between 'data' and the GDS file.")
+    if (!is.null(gdsfile))
+        seqSetFilter(gdsfile, sample.id=data[[sample.col]], verbose=FALSE)
+    sid <- data[[sample.col]]
+
+    # load genotypes for GRM
+    v <- .load_geno_grm_gds(gdsfile, sid, variant.id, variant.id.varratio,
+        use.cateMAC, cateMAC.inc.maf, cateMAC.simu, maf, missing.rate,
+        max.num.snp, num.marker, seed, noRE, formula, num.thread, verbose)
+    n_samp <- v$n_samp
+    n_var  <- v$n_var
+    rand.packed.geno <- v$rand.packed.geno
+    rand.packed.geno.vid <- v$rand.packed.geno.vid
+    use.cateMAC <- v$use.cateMAC
+    remove(v)
 
     # set the number of internal threads
     if (is.na(num.thread) || num.thread < 1L)
@@ -848,7 +903,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         }
         # calculate sparse GRM
         grm.mat <- .fit_calc_sp_grm(gdsfile, nsnp.sub.random, maf,
-            missing.rate, rel.cutoff, num.thread, FALSE, FALSE, verbose)
+            missing.rate, rel.cutoff, num.thread, FALSE, use.gpu,
+            verbose, verbose)
         gc(verbose=FALSE, reset=TRUE, full=TRUE)  # reduce memory usage
         if (verbose) cat("Done (sparse GRM)\n")
     }
@@ -1074,6 +1130,13 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         glmm$sample.id <- sid
         glmm$variant.id <- NULL
     }
+    if (isTRUE(save.packed.geno))
+    {
+        glmm$packed.geno <- packed.geno
+        glmm$rand.packed.geno <- rand.packed.geno
+        glmm$rand.packed.geno.vid <- rand.packed.geno.vid
+        glmm$grm.mat <- grm.mat
+    }
     class(glmm) <- "ClassSAIGE_NullModel"
 
     if (!is.na(model.savefn) && model.savefn!="")
@@ -1101,4 +1164,310 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         return(invisible(glmm))
     else
         return(glmm)
+}
+
+
+# refit the null model
+seqRefitNullGLMM <- function(formula, data, model=NULL,
+    sample.col="sample.id", inv.norm=c("residuals", "quant", "none"),
+    use.offset=FALSE, X.transform=TRUE, tau.update=FALSE, recalcVR=FALSE,
+    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
+    num.marker=30L, traceCVcutoff=0.0025, ratioCVcutoff=0.001,
+    num.thread=1L, seed=200L, use.gpu=FALSE, verbose=TRUE)
+{
+    # check
+    stopifnot(inherits(formula, "formula"))
+    stopifnot(is.data.frame(data))
+    stopifnot(inherits(model, "ClassSAIGE_NullModel"))
+    if (is.null(model$packed.geno))
+        stop("'model' should be created with 'save.packed.geno=TRUE'.")
+    stopifnot(is.character(sample.col), length(sample.col)==1L,
+        !is.na(sample.col))
+    if (is.logical(inv.norm))
+        inv.norm <- if (isTRUE(inv.norm)) "residuals" else "none"
+    inv.norm <- match.arg(inv.norm)
+    stopifnot(is.logical(use.offset), length(use.offset)==1L)
+    stopifnot(is.logical(X.transform), length(X.transform)==1L)
+    stopifnot(is.logical(tau.update), length(tau.update)==1L)
+    stopifnot(is.logical(recalcVR), length(recalcVR)==1L)
+    stopifnot(is.numeric(tol), length(tol)==1L)
+    stopifnot(is.numeric(maxiter), length(maxiter)==1L)
+    stopifnot(is.numeric(nrun), length(nrun)==1L)
+    stopifnot(is.numeric(tolPCG), length(tolPCG)==1L)
+    stopifnot(is.numeric(maxiterPCG), length(maxiterPCG)==1L)
+    stopifnot(is.numeric(num.marker), length(num.marker)==1L)
+    stopifnot(is.numeric(traceCVcutoff), length(traceCVcutoff)==1L)
+    stopifnot(is.numeric(ratioCVcutoff), length(ratioCVcutoff)==1L)
+    stopifnot(is.numeric(num.thread), length(num.thread)==1L)
+    stopifnot(is.numeric(seed), length(seed)==1L, is.finite(seed))
+    stopifnot(is.logical(use.gpu), length(use.gpu)==1L)
+    stopifnot(is.logical(verbose), length(verbose)==1L)
+
+    if (verbose)
+    {
+        .cat(.crayon_inverse("SAIGE association analysis (refitting):"))
+        .cat(.crayon_underline(.tm()))
+    }
+
+    # initialize GPU if requested
+    if (isTRUE(use.gpu))
+    {
+        use.gpu <- .Call(saige_gpu_init, verbose)
+        if (!use.gpu && verbose)
+            cat("GPU not available, falling back to CPU.\n")
+        if (use.gpu)
+            on.exit(.Call(saige_gpu_cleanup), add=TRUE)
+    }
+
+    # extract from saved model
+    trait.type <- model$trait.type
+    packed.geno <- model$packed.geno
+    rand.packed.geno <- model$rand.packed.geno
+    rand.packed.geno.vid <- model$rand.packed.geno.vid
+    grm.mat <- model$grm.mat
+    use.cateMAC <- model$use.cateMAC
+    geno.sparse <- is.list(packed.geno)
+
+    # show warnings immediately
+    saveopt <- options(warn=1L)
+    on.exit(options(warn=saveopt$warn), add=TRUE)
+    if (!is.null(seed)) set.seed(seed)
+
+    # variables in the formula
+    s <- as.character(formula)
+    formula_str <- paste(s[2L], s[1L], s[3L])
+    vars <- all.vars(formula)
+    phenovar <- all.vars(formula)[1L]
+    y <- data[[phenovar]]
+    if (is.null(y))
+        stop("There is no '", phenovar, "' in the input data frame.")
+    if (!is.factor(y) && !is.numeric(y) && !is.logical(y))
+        stop("The response variable should be numeric or a factor.")
+
+    # check sample id
+    if (sample.col %in% vars)
+        stop(sprintf("'%s' should not be in the formula.", sample.col))
+    if (!(sample.col %in% colnames(data)))
+    {
+        stop(sprintf("'%s' should be one of the columns in 'data'.",
+                sample.col))
+    }
+    if (is.factor(data[[sample.col]]))
+        stop(sprintf("'%s' should not be a factor variable.", sample.col))
+    if (any(is.na(data[[sample.col]])))
+        stop(sprintf("'%s' should not have any missing value.", sample.col))
+    if (anyDuplicated(data[[sample.col]]))
+        stop(sprintf("'%s' in data should be unique.", sample.col))
+
+    # remove missing values and match samples to model
+    data <- data[, c(sample.col, vars)]
+    data <- na.omit(data)
+    data <- droplevels(data)
+    sid <- model$sample.id
+    i <- match(sid, data[[sample.col]])
+    if (any(is.na(i)))
+        stop("All samples in the model must be present in the new data.")
+    data <- data[i, ]
+    n_samp <- length(sid)
+
+    # number of variants from saved model
+    n_var <- length(model$variant.id)
+
+    if (verbose)
+    {
+        .cat("Refit the null model: ", format(formula))
+        .cat("    # of samples: ", .pretty(n_samp))
+        .cat("    # of variants: ", .pretty(n_var))
+        .cat("    trait type: ", trait.type)
+    }
+
+    # set the number of internal threads
+    if (is.na(num.thread) || num.thread < 1L)
+        num.thread <- 1L
+    .Call(saige_set_numthread, num.thread)
+    if (verbose)
+    {
+        .cat("    using ", num.thread, " thread",
+            if (num.thread>1L) "s" else "")
+    }
+
+    # rearrange grm.mat if needed
+    if (!is.null(grm.mat) && !identical(sid, colnames(grm.mat)))
+    {
+        i <- match(sid, colnames(grm.mat))
+        if (anyNA(i))
+            stop("All samples in the model should be present in GRM.")
+        if (!all(i == seq_along(i))) grm.mat <- grm.mat[i, i]
+    }
+
+    X <- model.matrix(formula, data)
+    if (NCOL(X) <= 1L) use.offset <- X.transform <- FALSE
+
+    # transform to avoid multi-collinearity and improve numeric stability
+    if (isTRUE(X.transform))
+    {
+        if (verbose)
+            cat("Transform on the design matrix with QR decomposition:\n")
+        frm <- model.frame(formula, data)
+        y <- model.response(frm, type="any")
+        # check multi-collinearity
+        m <- lm(y ~ X - 1)
+        i_na <- which(is.na(m$coefficients))
+        if (length(i_na) > 0L)
+        {
+            X <- X[, -i_na]
+            if (verbose)
+            {
+                .cat("    exclude ", length(i_na), " covariates (",
+                    paste(colnames(X)[i_na], collapse=", "),
+                    ") to avoid multi collinearity.")
+            }
+        }
+        X_name <- colnames(X)
+        Xqr <- qr(X)  # QR decomposition
+        X_new <- qr.Q(Xqr) * sqrt(nrow(X))
+        X_qrr <- qr.R(Xqr)
+        data <- data.frame(cbind(y, X_new))
+        nm <- paste0("x_", seq_len(ncol(X_new))-1L)
+        colnames(data) <- c("y", nm)
+        formula <- as.formula(paste("y ~", paste(nm, collapse=" + "), "-1"))
+        if (verbose)
+            .cat("    new formula: ", format(formula))
+    }
+
+    # estimate the fixed effect coefficients or not
+    covoffset <- Xmat <- NULL
+    if (isTRUE(use.offset))
+    {
+        if (verbose)
+        {
+            cat("    using covariate offset instead of estimating",
+                "each fixed effect coefficient\n")
+        }
+        Xmat <- model.matrix(formula, data=data)
+        if (trait.type == "binary")
+        {
+            mod <- glm(formula, data=data, family=binomial)
+        } else {
+            mod <- glm(formula, data=data, family=gaussian)
+        }
+        covoffset <- Xmat[, -1L, drop=F] %*%  mod$coefficients[-1L]
+        formula <- as.formula("y ~ 1")
+    }
+
+    # clear the internal GRM matrix and reinitialize
+    .Call(saige_init_fit_grm)
+    buf_sigma_diag <- double(n_samp)
+
+    # reload SNP genotypes from the saved model
+    if (verbose)
+        cat("Reloading SNP genotypes from the saved model:\n")
+    buf_std_geno <- double(4L*n_var)
+    buf_crossprod <- matrix(0.0, nrow=n_samp, ncol=num.thread)
+    if (isTRUE(geno.sparse))
+    {
+        .Call(saige_store_sp_geno, packed.geno, rand.packed.geno,
+            n_samp, buf_std_geno, buf_sigma_diag, buf_crossprod)
+    } else {
+        .Call(saige_store_2b_geno, packed.geno, rand.packed.geno,
+            n_samp, buf_std_geno, buf_sigma_diag, buf_crossprod)
+    }
+    if (verbose)
+    {
+        .cat("    using ",
+            .pretty_size(as.double(object.size(packed.geno))),
+            " (stored in a ",
+            ifelse(geno.sparse, "sparse", "dense"), " form)")
+    }
+
+    # reload GRM if available
+    if (is.matrix(grm.mat))
+    {
+        .Call(saige_store_dense_grm, n_samp, grm.mat, buf_sigma_diag)
+        if (verbose)
+        {
+            cat("User-defined genetic relationship matrix:\n")
+            cat(sprintf("    %d x %d (dense matrix)\n", n_samp, n_samp))
+        }
+    } else if (inherits(grm.mat, "sparseMatrix"))
+    {
+        grm.mat <- .sp_to_dgCMatrix(grm.mat)
+        .Call(saige_store_sparse_grm, n_samp, grm.mat, buf_sigma_diag)
+        if (verbose)
+        {
+            a <- nnzero(grm.mat)
+            s <- sprintf("%.3f%%", a/prod(dim(grm.mat))*100)
+            if (s=="0.000%") s <- "<0.001%"
+            cat("User-defined sparse genetic relationship matrix:\n")
+            cat(sprintf("    %d x %d, # of nonzero: %d (%s)\n",
+                n_samp, n_samp, a, s))
+        }
+    }
+
+    # parameters for fitting the model
+    param <- list(
+        trait = match(trait.type, .trait_list),
+        covoffset = covoffset, Xmat = Xmat,
+        num.thread = num.thread, seed = seed,
+        tol = tol, tolPCG = tolPCG,
+        maxiter = maxiter, maxiterPCG = maxiterPCG,
+        no_iteration = !isTRUE(tau.update),
+        nrun = nrun, num.marker = num.marker,
+        traceCVcutoff = traceCVcutoff, ratioCVcutoff = ratioCVcutoff,
+        verbose = verbose,
+        indent = ""
+    )
+
+    # initialize tau for fitting the model
+    tau.init <- model$tau
+    tau.init[tau.init < 0] <- 0
+    # gdsfile flag: TRUE indicates genotypes are loaded (for GRM diagonal)
+    has.geno <- if (!is.null(packed.geno)) TRUE else NULL
+
+    # fit the null model (AIREML) and build obj.noK
+    if (trait.type == "binary")
+    {
+        glmm <- .fit_binary(verbose, X.transform, phenovar, data, formula,
+            param, tau.init, has.geno, grm.mat, seed, n_var,
+            calc_vr=isTRUE(recalcVR))
+    } else if (trait.type == "quantitative")
+    {
+        glmm <- .fit_quant(verbose, X.transform, phenovar, data, inv.norm,
+            formula, param, tau.init, has.geno, grm.mat, seed, n_var,
+            calc_vr=isTRUE(recalcVR))
+    } else
+        stop("Invalid 'trait.type'.")
+
+    # variance ratio
+    if (!isTRUE(recalcVR))
+        glmm$var.ratio <- model$var.ratio
+
+    glmm <- c(list(formula=formula_str), glmm)
+    glmm$use.cateMAC <- use.cateMAC
+
+    # tweak the result
+    if (!isTRUE(X.transform) || isTRUE(use.offset))
+    {
+        if (isTRUE(use.offset))
+            names(glmm$coefficients) <- "(Offset)"
+        else
+            names(glmm$coefficients) <- colnames(glmm$obj.noK$X1)
+    } else {
+        coef <- solve(X_qrr, glmm$coefficients * sqrt(nrow(data)))
+        names(coef) <- X_name
+        glmm$coefficients <- coef
+    }
+    names(glmm$tau) <- c("Sigma_E", "Sigma_G")
+    glmm$trait.type <- trait.type
+    glmm$sample.id <- sid
+    glmm$variant.id <- model$variant.id
+    class(glmm) <- "ClassSAIGE_NullModel"
+
+    if (verbose)
+    {
+        .cat(.crayon_underline(.tm()))
+        .cat(.crayon_inverse("Done."))
+    }
+
+    glmm
 }

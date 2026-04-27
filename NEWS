@@ -3,6 +3,20 @@ CHANGES IN VERSION 2.12.0
 
     o fix a C++ error that 'span' is ambiguous
 
+    o new functions `seqRefitNullGLMM()`, `seqAssocGLMM_GT()` and
+      `seqAssocGLMM_ACAT_O_GT()`
+
+    o SAIGEgds supports optional OpenCL-based GPU acceleration for the GRM
+      cross-product computation during null model fitting
+
+    o new `use.gpu` argument in `seqFitSparseGRM()` and `seqFitDenseGRM()` for
+      OpenCL GPU-accelerated GRM construction
+
+    o new 'geno.model' argument in `seqAssocGLMM_SPA()`, `seqAssocGLMM_GT()`,
+      `seqAssocGLMM_Burden()`, `seqAssocGLMM_SKAT()`, `seqAssocGLMM_ACAT_V()`,
+      `seqAssocGLMM_ACAT_O()` and `seqAssocGLMM_ACAT_O_GT()` for additive,
+      dominant, or recessive genetic models
+
 
 CHANGES IN VERSION 2.10.2
 -------------------------

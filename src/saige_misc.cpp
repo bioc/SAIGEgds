@@ -23,6 +23,7 @@
 #include "vec_ext.h"
 #include <RcppArmadillo.h>
 #include "saige.h"
+#include "gpu_opencl.h"
 #include <vector>
 #include <algorithm>
 
@@ -542,7 +543,7 @@ static void grm_sp_calc_block(const double rel,
 
 /// Create a sparse GRM by return a list of (i,j,x)
 RcppExport SEXP saige_grm_sp_calc(SEXP nVariant, SEXP g_pack, SEXP g_lookup,
-	SEXP rel_cutoff, SEXP bl_size, SEXP prog, SEXP prog_func)
+	SEXP rel_cutoff, SEXP bl_size, SEXP use_gpu, SEXP prog, SEXP prog_func)
 {
 BEGIN_RCPP
 	// initialize values
@@ -552,11 +553,37 @@ BEGIN_RCPP
 	NumericMatrix G_Lookup(g_lookup);
 	const double rel = Rf_asReal(rel_cutoff);
 	const int bs = Rf_asInteger(bl_size);
+	const bool try_gpu = (Rf_asLogical(use_gpu) == TRUE);
 	Function prog_fc_r(prog_func);
 	const bool verbose = !Rf_isNull(prog);
 
 	// number of threading
 	if (SAIGE_NumThread > nSamp) SAIGE_NumThread = nSamp;
+
+	// Try GPU path first
+	if (try_gpu && gpu_opencl_available())
+	{
+		const int n_byte_stride = G_Pack.nrow();  // actual stride (32-bit aligned)
+		std::vector<int> gpu_i, gpu_j;
+		struct ProgData { Function *fc; SEXP prog; bool verbose; };
+		ProgData pd = { &prog_fc_r, prog, verbose };
+		auto prog_cb = [](void *data) {
+			ProgData *p = (ProgData *)data;
+			if (p->verbose) (*p->fc)(p->prog, 1);
+		};
+		if (gpu_grm_sparse_scan(&G_Pack[0], nSamp, n_snp, n_byte_stride,
+			rel, bs, gpu_i, gpu_j, prog_cb, &pd))
+		{
+			const size_t n = gpu_i.size();
+			IntegerVector r_i(n), r_j(n);
+			for (size_t i=0; i < n; i++)
+			{
+				r_i[i] = gpu_i[i]; r_j[i] = gpu_j[i];
+			}
+			return List::create(_["i"] = r_i, _["j"] = r_j);
+		}
+		// GPU failed, fall through to CPU
+	}
 
 	// fill g_lookup using float or double
 	grm_sp_init_lookup(g_pack, g_lookup, USE_FLOAT_BOOL);
@@ -602,7 +629,8 @@ END_RCPP
 
 /// Update the non-zero entries (i,j,x) in GRM using the full variant set
 RcppExport SEXP saige_grm_sp_calc_ijx(SEXP I, SEXP J, SEXP nVariant,
-	SEXP g_pack, SEXP g_lookup, SEXP bl_size, SEXP prog, SEXP prog_func)
+	SEXP g_pack, SEXP g_lookup, SEXP bl_size, SEXP use_gpu,
+	SEXP prog, SEXP prog_func)
 {
 BEGIN_RCPP
 	// initialize values
@@ -610,6 +638,7 @@ BEGIN_RCPP
 	RawMatrix G_Pack(g_pack);
 	NumericMatrix G_Lookup(g_lookup);
 	const size_t bs = Rf_asInteger(bl_size);
+	const bool try_gpu = (Rf_asLogical(use_gpu) == TRUE);
 	Function prog_fc_r(prog_func);
 	const bool verbose = !Rf_isNull(prog);
 
@@ -619,6 +648,20 @@ BEGIN_RCPP
 	const size_t n_block = (nnzero / bs) + ((nnzero % bs) ? 1 : 0);
 	// number of threading
 	if ((size_t)SAIGE_NumThread > n_block) SAIGE_NumThread = n_block;
+
+	// Try GPU path first
+	if (try_gpu && gpu_opencl_available() && nnzero > 0)
+	{
+		const int n_byte_stride = G_Pack.nrow();  // actual stride (32-bit aligned)
+		NumericVector X(nnzero);
+		if (gpu_grm_sparse_refine(&G_Pack[0], G_Pack.ncol(), n_snp,
+			n_byte_stride, INTEGER(I), INTEGER(J), (int)nnzero, REAL(X)))
+		{
+			return X;
+		}
+		// GPU failed, fall through to CPU
+	}
+
 	// fill g_lookup
 	grm_sp_init_lookup(g_pack, g_lookup, true);
 	// resulting numeric vector
@@ -665,9 +708,9 @@ END_RCPP
 
 // ========================================================================= //
 
-/// Create a sparse GRM
+/// Create a dense GRM
 RcppExport SEXP saige_grm_ds_calc(SEXP nVariant, SEXP g_pack, SEXP g_lookup,
-	SEXP use_double, SEXP bl_size, SEXP prog, SEXP prog_func)
+	SEXP use_double, SEXP bl_size, SEXP use_gpu, SEXP prog, SEXP prog_func)
 {
 BEGIN_RCPP
 	// initialize values
@@ -677,11 +720,31 @@ BEGIN_RCPP
 	NumericMatrix G_Lookup(g_lookup);
 	const bool use_f64 = Rf_asLogical(use_double) == TRUE;
 	const int bs = Rf_asInteger(bl_size);
+	const bool try_gpu = (Rf_asLogical(use_gpu) == TRUE);
 	Function prog_fc_r(prog_func);
 	const bool verbose = !Rf_isNull(prog);
 
 	// number of threading
 	if (SAIGE_NumThread > nSamp) SAIGE_NumThread = nSamp;
+
+	// Try GPU path first
+	if (try_gpu && gpu_opencl_available())
+	{
+		const int n_byte_stride = G_Pack.nrow();  // actual stride (32-bit aligned)
+		NumericMatrix grm_gpu(nSamp, nSamp);
+		struct ProgData { Function *fc; SEXP prog; bool verbose; };
+		ProgData pd = { &prog_fc_r, prog, verbose };
+		auto prog_cb = [](void *data) {
+			ProgData *p = (ProgData *)data;
+			if (p->verbose) (*p->fc)(p->prog, 1);
+		};
+		if (gpu_grm_dense_calc(&G_Pack[0], nSamp, n_snp, n_byte_stride,
+			use_f64, bs, REAL(grm_gpu), prog_cb, &pd))
+		{
+			return grm_gpu;
+		}
+		// GPU failed, fall through to CPU
+	}
 
 	// fill g_lookup
 	grm_sp_init_lookup(g_pack, g_lookup, use_f64);

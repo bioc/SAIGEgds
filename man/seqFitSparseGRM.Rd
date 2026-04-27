@@ -9,10 +9,10 @@
 \usage{
 seqFitSparseGRM(gdsfile, sample.id=NULL, variant.id=NULL, nsnp.sub.random=2000L,
     rel.cutoff=0.125, maf=0.01, missing.rate=0.005, num.thread=1L,
-    return.ID=FALSE, seed=200L, verbose=TRUE)
+    use.gpu=FALSE, return.ID=FALSE, seed=200L, verbose=TRUE)
 seqFitDenseGRM(gdsfile, sample.id=NULL, variant.id=NULL, maf=0.01,
-    missing.rate=0.005, num.thread=1L, use.double=TRUE, return.ID=FALSE,
-    verbose=TRUE)
+    missing.rate=0.005, num.thread=1L, use.gpu=FALSE, use.double=TRUE,
+    return.ID=FALSE, verbose=TRUE)
 }
 
 \arguments{
@@ -32,6 +32,8 @@ seqFitDenseGRM(gdsfile, sample.id=NULL, variant.id=NULL, maf=0.01,
     \item{missing.rate}{threshold of missing rate (checking <= missing.rate),
         if \code{variant.id=NULL}; \code{NaN} for no filter}
     \item{num.thread}{the number of threads, 1 by default}
+    \item{use.gpu}{if \code{TRUE}, attempt to use OpenCL GPU acceleration
+        for GRM computation; falls back to CPU if no GPU is available}
     \item{use.double}{\code{TRUE} for using 64-bit double precision to
         calculate GRM; otherwise, to use 32-bit single precision}
     \item{return.ID}{if \code{TRUE}, return the IDs for samples, the full

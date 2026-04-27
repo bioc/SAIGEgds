@@ -261,6 +261,21 @@ seqSAIGE_LoadPval <- function(fn, varnm=NULL, index=NULL, verbose=TRUE)
 
 
 #######################################################################
+# Get flipped and imputed genotype sparse matrix
+#
+
+.seqGetGenoFlipImpute <- function(dosage, missing=1, maxMAF=0.5)
+{
+    stopifnot(inherits(dosage, "dgCMatrix"))
+    stopifnot(is.numeric(missing), length(missing)==1L)
+    stopifnot(is.numeric(maxMAF), length(maxMAF)==1L)
+    .Call(saige_get_G0_flipped_impute, dosage, as.double(missing),
+        as.double(maxMAF))
+}
+
+
+
+#######################################################################
 # Heritability estimation
 #
 

@@ -14,7 +14,9 @@ useDynLib(SAIGEgds,
     saige_acato_test_pval,
     saige_acat_p,
     saige_grm_sp_calc, saige_grm_sp_calc_ijx, saige_grm_sp_reraw,
-    saige_set_option
+    saige_set_option,
+    saige_get_G0_flipped_impute,
+    saige_gpu_init, saige_gpu_cleanup
 )
 
 # Export all names

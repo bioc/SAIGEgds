@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2024    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2026    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -167,8 +167,12 @@ AggrParamBeta <- structure(c(1,1,1,25), dim=c(2L,2L),
 # SAIGE burden tests
 #
 
+.scan_fc_aggr_burden <- function(g, maxMAF)
+    .Call(saige_burden_test_pval, g, maxMAF)
+
 seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
     wbeta=AggrParamBeta, missing=0.05, ccimb.adj=TRUE, ER.mac=4.5, dsnode="",
+    geno.model=c("additive", "dominant", "recessive"),
     res.savefn="", res.compress="ZIP", parallel=FALSE,
     verbose=TRUE, verbose.maf=FALSE)
 {
@@ -180,6 +184,7 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
     stopifnot(is.logical(ccimb.adj), length(ccimb.adj)==1L)
     stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
+    geno.model <- match.arg(geno.model)
     stopifnot(is.character(res.savefn), length(res.savefn)==1L)
     .check_compress(res.compress)
     stopifnot(is.logical(verbose), length(verbose)==1L)
@@ -228,6 +233,7 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
         .cat("    MAF threshold", ifelse(length(maxMAF)>1L, "s", ""), ": ",
             paste(maxMAF, collapse=", "))
         .cat("    missing proportion threshold: ", .pretty_lt_eq(missing))
+        .cat("    genetic model: ", geno.model)
     }
 
     # update parallel object
@@ -244,7 +250,7 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
     # initialize the internal model parameters
     mobj <- .init_nullmod(modobj, ii, 0, 0, missing, spa.pval, ER.mac,
         var.ratio, 2L, modobj$Sigma_inv, modobj$chol_inv_X_Sigma, maxMAF,
-        wbeta, sz_wmax)
+        wbeta, sz_wmax, geno.model=geno.model)
 
     # initialize internally
     if (njobs<=1L || is_fork)
@@ -273,7 +279,7 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
     if (verbose)
         cat("Calculating p-values:\n")
     rv <- seqUnitApply(gdsfile, units, dsnode,
-        FUN=function(x, maxMAF) .Call(saige_burden_test_pval, x, maxMAF),
+        FUN=.scan_fc_aggr_burden,
         as.is="list", parallel=parallel, .useraw=NA, .progress=verbose,
         maxMAF=maxMAF)
 
@@ -352,10 +358,13 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
     }
 }
 
+.scan_fc_aggr_skat <- function(g) .Call(saige_skat_test_pval, g)
+
 # SKAT tests
 seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
     wbeta=AggrParamBeta, missing=0.05, collapse.mac=10,
     collapse.method=c("max", "sum"), ccimb.adj=TRUE, ER.mac=4.5, dsnode="",
+    geno.model=c("additive", "dominant", "recessive"),
     res.savefn="", res.compress="ZIP", parallel=FALSE,
     verbose=TRUE, verbose.maf=FALSE)
 {
@@ -370,6 +379,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
     stopifnot(is.logical(ccimb.adj), length(ccimb.adj)==1L)
     stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
+    geno.model <- match.arg(geno.model)
     stopifnot(is.character(res.savefn), length(res.savefn)==1L)
     .check_compress(res.compress)
     stopifnot(is.logical(verbose), length(verbose)==1L)
@@ -452,6 +462,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
         .cat("    MAF threshold", ifelse(length(maxMAF)>1L, "s", ""), ": ",
             paste(maxMAF, collapse=", "))
         .cat("    missing proportion threshold: ", .pretty_lt_eq(missing))
+        .cat("    genetic model: ", geno.model)
     }
 
     # update parallel object
@@ -467,7 +478,8 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
     # initialize the internal model parameters
     mobj <- .init_nullmod(modobj, ii, 0, 0, missing, spa.pval, ER.mac,
         var.ratio, 2L, modobj$Sigma_inv, modobj$chol_inv_X_Sigma,
-        maxMAF, wbeta, sz_wmax, collapse_method=collapse.method)
+        maxMAF, wbeta, sz_wmax, collapse_method=collapse.method,
+        geno.model=geno.model)
     # load package(s)
     .load_skat(FALSE)
 
@@ -511,7 +523,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
     if (verbose)
         cat("Calculating p-values:\n")
     rv <- seqUnitApply(gdsfile, units, dsnode,
-        FUN=function(x) .Call(saige_skat_test_pval, x), as.is="list",
+        FUN=.scan_fc_aggr_skat, as.is="list",
         parallel=parallel, .useraw=NA, .progress=verbose)
     # check
     if (length(rv) != length(units$index))
@@ -557,9 +569,13 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
 # SAIGE ACAT-V tests
 #
 
+.scan_fc_aggr_acatv <- function(g) .Call(saige_acatv_test_pval, g)
+
 seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
     wbeta=AggrParamBeta, missing=0.05, ccimb.adj=TRUE, collapse.mac=10,
-    ER.mac=4.5, dsnode="", res.savefn="", res.compress="ZIP", parallel=FALSE,
+    ER.mac=4.5, dsnode="",
+    geno.model=c("additive", "dominant", "recessive"),
+    res.savefn="", res.compress="ZIP", parallel=FALSE,
     verbose=TRUE, verbose.maf=FALSE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
@@ -572,6 +588,7 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
         is.finite(collapse.mac))
     stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
+    geno.model <- match.arg(geno.model)
     stopifnot(is.character(res.savefn), length(res.savefn)==1L)
     .check_compress(res.compress)
     stopifnot(is.logical(verbose), length(verbose)==1L)
@@ -625,6 +642,7 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
         .cat("    MAF threshold", ifelse(length(maxMAF)>1L, "s", ""), ": ",
             paste(maxMAF, collapse=", "))
         .cat("    missing proportion threshold: ", .pretty_lt_eq(missing))
+        .cat("    genetic model: ", geno.model)
     }
 
     # update parallel object
@@ -640,7 +658,7 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
     # initialize the internal model parameters
     mobj <- .init_nullmod(modobj, ii, 0, 0, missing, spa.pval, ER.mac,
         var.ratio, 2L, modobj$Sigma_inv, modobj$chol_inv_X_Sigma,
-        maxMAF, wbeta, sz_wmax, collapse.mac)
+        maxMAF, wbeta, sz_wmax, collapse.mac, geno.model=geno.model)
 
     # initialize internally
     if (njobs<=1L || is_fork)
@@ -669,7 +687,7 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
     if (verbose)
         cat("Calculating p-values:\n")
     rv <- seqUnitApply(gdsfile, units, dsnode,
-        FUN=function(x) .Call(saige_acatv_test_pval, x), as.is="list",
+        FUN=.scan_fc_aggr_acatv, as.is="list",
         parallel=parallel, .useraw=NA, .progress=verbose)
     # check
     if (length(rv) != length(units$index))
@@ -713,9 +731,12 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
 # SAIGE ACAT-O tests
 #
 
+.scan_fc_aggr_acato <- function(g) .Call(saige_acato_test_pval, g)
+
 seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
     wbeta=AggrParamBeta, missing=0.05, collapse.mac=10,
     collapse.method=c("max", "sum"), ccimb.adj=TRUE, ER.mac=4.5, dsnode="",
+    geno.model=c("additive", "dominant", "recessive"),
     res.savefn="", res.compress="ZIP", parallel=FALSE,
     verbose=TRUE, verbose.maf=FALSE)
 {
@@ -730,6 +751,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
     stopifnot(is.logical(ccimb.adj), length(ccimb.adj)==1L)
     stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
+    geno.model <- match.arg(geno.model)
     stopifnot(is.character(res.savefn), length(res.savefn)==1L)
     .check_compress(res.compress)
     stopifnot(is.logical(verbose), length(verbose)==1L)
@@ -806,6 +828,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
         .cat("    MAF threshold", ifelse(length(maxMAF)>1L, "s", ""), ": ",
             paste(maxMAF, collapse=", "))
         .cat("    missing proportion threshold: ", .pretty_lt_eq(missing))
+        .cat("    genetic model: ", geno.model)
     }
 
     # update parallel object
@@ -821,7 +844,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
     # initialize the internal model parameters
     mobj <- .init_nullmod(modobj, ii, 0, 0, missing, spa.pval, ER.mac,
         var.ratio, 2L, modobj$Sigma_inv, modobj$chol_inv_X_Sigma,
-        maxMAF, wbeta, sz_wmax, collapse.mac)
+        maxMAF, wbeta, sz_wmax, collapse.mac, geno.model=geno.model)
     i <- match(collapse.method, c("max", "sum"))
     if (is.na(i)) stop("Internal error in 'collapse.method'.")
     mobj$collapse.method <- i
@@ -873,7 +896,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
     if (verbose)
         cat("Calculating p-values:\n")
     rv <- seqUnitApply(gdsfile, units, dsnode,
-        FUN=function(x) .Call(saige_acato_test_pval, x), as.is="list",
+        FUN=.scan_fc_aggr_acato, as.is="list",
         parallel=parallel, .useraw=NA, .progress=verbose)
     # check
     if (length(rv) != length(units$index))
@@ -917,4 +940,171 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
         # save file?
         .save_R_obj(ans, res.compress, res.savefn, verbose)
     }
+}
+
+
+
+#######################################################################
+# SAIGE ACAT-O tests on in-memory genotype matrices
+#
+
+seqAssocGLMM_ACAT_O_GT <- function(gt_lst, modobj, maxMAF=0.01,
+    wbeta=AggrParamBeta, missing=0.05, collapse.mac=10,
+    collapse.method=c("max", "sum"), ccimb.adj=TRUE, ER.mac=4.5,
+    geno.model=c("additive", "dominant", "recessive"),
+    verbose=TRUE, verbose.maf=FALSE)
+{
+    stopifnot(is.list(gt_lst), length(gt_lst) > 0L)
+    stopifnot(is.numeric(maxMAF), 0<maxMAF & maxMAF<=1)
+    .check_wbeta(wbeta)
+    stopifnot(is.numeric(missing), length(missing)==1L)
+    stopifnot(is.numeric(collapse.mac), length(collapse.mac)==1L,
+        is.finite(collapse.mac))
+    collapse.method <- match.arg(collapse.method)
+    stopifnot(is.logical(ccimb.adj), length(ccimb.adj)==1L)
+    stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
+    geno.model <- match.arg(geno.model)
+    stopifnot(is.logical(verbose), length(verbose)==1L)
+    stopifnot(is.logical(verbose.maf), length(verbose.maf)==1L)
+
+    # check packages
+    pkg_cqf <- suppressPackageStartupMessages(
+        requireNamespace("CompQuadForm", quietly=TRUE))
+    pkg_svy <- suppressPackageStartupMessages(
+        requireNamespace("survey", quietly=TRUE))
+    if (!pkg_cqf || !pkg_svy)
+        stop("The packages 'CompQuadForm' and 'survey' should be installed.")
+
+    if (verbose)
+        .cat(.crayon_inverse("SAIGE ACAT-O analysis (in-memory):"))
+
+    # check model
+    modobj <- .check_modobj(modobj, verbose)
+    if (is.null(modobj$Sigma_inv) || is.null(modobj$chol_inv_X_Sigma))
+    {
+        stop("A (sparse) genetic relationship matrix 'grm.mat' should be ",
+            "specified in seqFitNullGLMM_SPA(), when the null model is built ",
+            "for SKAT.")
+    }
+
+    # check gt_lst: each element should be a numeric matrix (sample x variant)
+    n <- length(modobj$sample.id)
+    nv <- integer(length(gt_lst))
+    for (j in seq_along(gt_lst))
+    {
+        g <- gt_lst[[j]]
+        if (!(is.numeric(g) && is.matrix(g)) && !inherits(g, "Matrix"))
+            stop("gt_lst[[", j, "]] should be a numeric matrix or Matrix.")
+        if (nrow(g) != n)
+            stop("nrow(gt_lst[[", j, "]]) should be ", n, ".")
+        nv[j] <- ncol(g)
+    }
+    sz_wmax <- max(nv)
+
+    # variance ratio
+    var.ratio <- .get_var_ratio(modobj)
+    spa.pval <- NaN  # according to Cutoff=2 in SPAtest
+    if (!isTRUE(ccimb.adj)) spa.pval <- -1
+    if (is.na(ER.mac)) ER.mac <- 0
+
+    if (verbose)
+    {
+        .cat("    # of samples: ", .pretty(n))
+        .cat("    # of units: ", .pretty(length(gt_lst)))
+        if (length(nv) > 1L)
+        {
+            .cat("    avg # of variants per unit: ", mean(nv))
+            .cat("    min # of variants in a unit: ", min(nv))
+            .cat("    max # of variants in a unit: ", sz_wmax)
+            .cat("    sd  # of variants in a unit: ", sd(nv))
+        } else {
+            .cat("    # of variants per unit: ", sz_wmax)
+        }
+        .cat("    trait: ", modobj$trait.type)
+        .cat("    MAC threshold for collapsing ultra rare variants in ",
+            "ACAT-V and SKAT: <= ", sprintf("%.15g", collapse.mac))
+        cat("    ACAT-O p-values combine Burden, ACAT-V and SKAT\n")
+        if (modobj$trait.type == "binary")
+        {
+            if (isTRUE(ccimb.adj))
+                cat("    accounting for case-control imbalance\n")
+            else
+                cat("    not accounting for case-control imbalance\n")
+        }
+    }
+
+    # show beta weights
+    if (!is.matrix(wbeta))
+        wbeta <- matrix(wbeta, nrow=2L)
+    .show_wbeta(wbeta, verbose)
+    if (verbose)
+    {
+        .cat("    MAF threshold", ifelse(length(maxMAF)>1L, "s", ""), ": ",
+            paste(maxMAF, collapse=", "))
+        .cat("    missing proportion threshold: ", .pretty_lt_eq(missing))
+        .cat("    genetic model: ", geno.model)
+    }
+
+    # initialize the internal model parameters
+    ii <- TRUE
+    mobj <- .init_nullmod(modobj, ii, 0, 0, missing, spa.pval, ER.mac,
+        var.ratio, 2L, modobj$Sigma_inv, modobj$chol_inv_X_Sigma,
+        maxMAF, wbeta, sz_wmax, collapse.mac, geno.model=geno.model)
+    i <- match(collapse.method, c("max", "sum"))
+    if (is.na(i)) stop("Internal error in 'collapse.method'.")
+    mobj$collapse.method <- i
+    # load package(s)
+    .load_skat(FALSE)
+
+    # initialize internally
+    .Call(saige_score_test_init, mobj)
+    # initialize SKAT
+    mobj$Sigma_inv_cg <- .sp_to_dgCMatrix(mobj$Sigma_inv)
+    .Call(saige_skat_test_init, mobj$Sigma_inv_cg, mobj$t_XVX_inv_XV,
+        mobj$Si_X, mobj$XVX_inv_XV_X_Si_X)
+    # finalize
+    on.exit(.Call(saige_skat_test_done), add=TRUE)
+
+    # scan all units
+    if (verbose)
+        cat("Calculating p-values:\n")
+    rv <- vector("list", length(gt_lst))
+    for (j in seq_along(gt_lst))
+    {
+        # convert numeric matrix to dgCMatrix for the C code
+        g <- gt_lst[[j]]
+        if (!inherits(g, "dgCMatrix"))
+            g <- methods::as(gt_lst[[j]], "CsparseMatrix")
+        rv[[j]] <- .Call(saige_acato_test_pval, g)
+    }
+
+    # output
+    ns <- vapply(rv, .ncol, 0L)
+    # build id column
+    if (!is.null(names(gt_lst)))
+    {
+        id <- rep(names(gt_lst), times=ns)
+    } else {
+        id <- rep(seq_along(gt_lst), times=ns)
+    }
+    ans <- data.frame(id=id, stringsAsFactors=FALSE)
+    ans$maxMAF <- .mapply(rv, 1L)
+    ans$numvar <- as.integer(.mapply(rv, 2L))
+    ans$macmin <- .mapply(rv, 3L)
+    ans$macmed <- .mapply(rv, 4L)
+    ans$macmax <- .mapply(rv, 5L)
+    ans$summac <- .mapply(rv, 6L)
+    # weight beta
+    v <- as.integer(.mapply(rv, 7L))
+    attr(v, "levels") <- c(sprintf("(%g,%g)", wbeta[1L,], wbeta[2L,]), "Cauchy")
+    attr(v, "class") <- "factor"
+    ans$weight <- v
+    ans$n_collapse <- as.integer(.mapply(rv, 8L))
+    ans$pval <- .mapply(rv, 9L)
+    ans$p.burden <- .mapply(rv, 10L)
+    ans$p.skat <- .mapply(rv, 11L)
+    ans$p.acatv <- .mapply(rv, 12L)
+    ans$burden.beta <- .mapply(rv, 13L)
+    ans$burden.se <- .mapply(rv, 14L)
+    ans
 }

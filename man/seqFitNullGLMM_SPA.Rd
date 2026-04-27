@@ -1,9 +1,10 @@
 \name{seqFitNullGLMM_SPA}
 \alias{seqFitNullGLMM_SPA}
-\title{Fit the null model with GRM}
+\alias{seqRefitNullGLMM}
+\title{Fit the null model for the SAIGE mixed model framework}
 \description{
-    Fit the null model in the mixed model framework with genetic relationship
-matrix (GRM).
+    Fit the null model in the mixed model framework with an optional genetic
+relationship matrix (GRM).
 }
 
 \usage{
@@ -15,8 +16,15 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     cateMAC.inc.maf=TRUE, cateMAC.simu=TRUE, use.offset=FALSE, X.transform=TRUE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, tau.init=c(0,0), traceCVcutoff=0.0025, ratioCVcutoff=0.001,
-    geno.sparse=TRUE, num.thread=1L, model.savefn="", seed=200L,
-    fork.loading, parallel.loading=FALSE, verbose=TRUE)
+    geno.sparse=TRUE, use.gpu=FALSE, save.packed.geno=FALSE, num.thread=1L,
+    model.savefn="", seed=200L, fork.loading, parallel.loading=FALSE,
+    verbose=TRUE)
+seqRefitNullGLMM(formula, data, model=NULL, sample.col="sample.id",
+    inv.norm=c("residuals", "quant", "none"), use.offset=FALSE,
+    X.transform=TRUE, tau.update=FALSE, recalcVR=FALSE,
+    tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
+    num.marker=30L, traceCVcutoff=0.0025, ratioCVcutoff=0.001,
+    num.thread=1L, seed=200L, use.gpu=FALSE, verbose=TRUE)
 }
 
 \arguments{
@@ -97,6 +105,9 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     \item{geno.sparse}{if \code{TRUE} (by default), store the sparse structure
         for genotypes; otherwise, save genotypes in a 2-bit dense matrix;
         see details}
+    \item{save.packed.geno}{if \code{TRUE}, save packed genotypes of GRM in the
+        output model object; it can be used for refitting the null model with
+        different fixed effects}
     \item{num.thread}{the number of threads, 1 by default}
     \item{model.savefn}{the filename of model output, R data file '.rda',
         '.RData', or '.rds'}
@@ -106,10 +117,29 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     \item{parallel.loading}{load genotypes via parallel or not; multiple
         processes can reduce loading time of genotypes, but may increase the
         memory usage}
+    \item{model}{a fitted null model object of class
+        \code{"ClassSAIGE_NullModel"} created by
+        \code{seqFitNullGLMM_SPA()} with \code{save.packed.geno=TRUE}}
+    \item{tau.update}{if \code{TRUE}, re-estimate the variance components
+        tau; otherwise use the tau values from the input model}
+    \item{recalcVR}{if \code{TRUE}, recalculate the variance ratio; otherwise
+        use the variance ratio from the input model}
+    \item{use.gpu}{if \code{TRUE}, attempt to use OpenCL GPU acceleration
+        for the GRM cross-product computation; falls back to CPU if no
+        compatible GPU or OpenCL runtime is found}
     \item{verbose}{if \code{TRUE}, show information}
 }
 
 \details{
+    \code{seqFitNullGLMM_SPA()} fits the null model from scratch using
+genotype data from a GDS file and/or a genetic relationship matrix (GRM).
+    \code{seqRefitNullGLMM()} refits the null model using packed genotypes
+saved from a previous call to \code{seqFitNullGLMM_SPA()} (with
+\code{save.packed.geno=TRUE}), allowing different fixed-effect covariates
+without reloading genotypes from the GDS file. By default, the variance
+components (tau) are kept from the input model (\code{tau.update=FALSE}) and
+the variance ratio is recalculated (\code{recalcVR=TRUE}).
+
     Utilizing the sparse structure of genotypes could significantly improve
 the computational efficiency of model fitting, but it also increases the memory
 usage.
@@ -125,9 +155,10 @@ usage.
     \item{fitted.values}{fitted values from objects returned by modeling
         functions using \code{glm.fit};}
     \item{residuals}{residuals;}
-    \item{cov}{covariance matrix of beta coefficients;}
     \item{converged}{whether the model is fitted or not;}
     \item{obj.noK}{internal use, returned object from the SPAtest package;}
+    \item{Sigma_inv}{optional inverse covariance matrix when a GRM is used;}
+    \item{chol_inv_X_Sigma}{optional projection matrix component when a GRM is used;}
     \item{var.ratio}{a data.frame with columns 'id' (variant.id), 'maf'
         (minor allele frequency), 'mac' (minor allele count),
         'var1' (the variance of score statistic),
@@ -153,7 +184,7 @@ in large biobanks and cohorts. Nat Genet. 2020; 52: 634-9.
 }
 \author{Xiuwen Zheng}
 \seealso{
-    \code{\link{seqAssocGLMM_SPA}}
+    \code{\link{seqAssocGLMM_SPA}}, \code{\link{seqFitSparseGRM}}
 }
 
 \examples{

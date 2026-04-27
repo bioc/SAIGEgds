@@ -1,6 +1,7 @@
 \name{seqAssocGLMM_ACAT_O}
 \alias{seqAssocGLMM_ACAT_O}
-\title{ACAT-V tests}
+\alias{seqAssocGLMM_ACAT_O_GT}
+\title{ACAT-O tests}
 \description{
     Set-based ACAT-O tests using mixed models.
 }
@@ -8,8 +9,15 @@
 \usage{
 seqAssocGLMM_ACAT_O(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
     missing=0.05, collapse.mac=10, collapse.method=c("max", "sum"),
-    ccimb.adj=TRUE, ER.mac=4.5, dsnode="", res.savefn="", res.compress="ZIP",
+    ccimb.adj=TRUE, ER.mac=4.5, dsnode="",
+    geno.model=c("additive", "dominant", "recessive"),
+    res.savefn="", res.compress="ZIP",
     parallel=FALSE, verbose=TRUE, verbose.maf=FALSE)
+seqAssocGLMM_ACAT_O_GT(gt_lst, modobj, maxMAF=0.01, wbeta=AggrParamBeta,
+    missing=0.05, collapse.mac=10, collapse.method=c("max", "sum"),
+    ccimb.adj=TRUE, ER.mac=4.5,
+    geno.model=c("additive", "dominant", "recessive"),
+    verbose=TRUE, verbose.maf=FALSE)
 }
 
 \arguments{
@@ -18,7 +26,8 @@ seqAssocGLMM_ACAT_O(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
     \item{units}{a list of units of selected variants, with S3 class
         \code{"SeqUnitListClass"} defined in the SeqArray package}
     \item{maxMAF}{a numeric vector for MAF thresholds, e.g.,
-        \code{c(0.01, 0.001)} for rare variants}
+        \code{c(0.01, 0.001)} for rare variants, or \code{c(0.5, 0.1, 0.01)}
+        for both common and rare variants}
     \item{wbeta}{weights for per-variant effect, using beta distribution
         \code{dbeta()} according to variant's MAF; a length-two vector, or a
         matrix with two rows for multiple beta parameters; by default, using
@@ -35,6 +44,10 @@ seqAssocGLMM_ACAT_O(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
         resampling p-values}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
+    \item{geno.model}{a character string for the genetic model: \code{"additive"}
+        (default), \code{"dominant"} or \code{"recessive"}; the dominant model
+        recodes dosages as \code{min(G, 1)}, and the recessive model recodes
+        as \code{max(G-1, 0)}}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
     \item{res.compress}{the compression method for the output file, it should
         be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none}
@@ -43,11 +56,20 @@ seqAssocGLMM_ACAT_O(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
         \code{parallel} is passed to the argument \code{cl} in
         \code{\link[SeqArray]{seqParallel}}, see
         \code{\link[SeqArray]{seqParallel}} for more details}
+    \item{gt_lst}{a list of numeric genotype matrices (sample by variant)
+        or \code{Matrix} objects, where rows correspond to the samples in
+        the model and columns to variants; each list element is a unit}
     \item{verbose}{if \code{TRUE}, show information}
     \item{verbose.maf}{if \code{TRUE}, show summary of MAFs in units}
 }
 
 \details{
+    \code{seqAssocGLMM_ACAT_O()} reads genotype data from a GDS file and
+supports parallel computation. \code{seqAssocGLMM_ACAT_O_GT()} takes a list
+of in-memory genotype matrices \code{gt_lst} directly, which is useful when
+genotypes are already loaded or constructed outside of the GDS framework.
+The rows of each matrix must match the samples used in the null model.
+
     \code{seqUnitFilterCond()} in the SeqArray package can be used to restrict
 the variant sets \code{units} to a range of MAC and/or MAF. ACAT-O combines
 the p-values from ACAT-V, burden and SKAT together to calculate the final
@@ -55,6 +77,14 @@ p-value via Cauchy distribution.
 
     For more details of the ACAT-O method, please refer to the ACAT paper
 [Liu et al. 2019] (see the reference section).
+
+    When \code{geno.model="dominant"}, the dosages are recoded as
+\code{min(G, 1)} after allele flipping to the minor allele, testing whether
+having at least one copy of the minor allele is associated with the trait.
+When \code{geno.model="recessive"}, dosages are recoded as \code{max(G-1, 0)},
+testing whether having two copies of the minor allele is associated.
+MAF/MAC filtering and the reported allele frequencies use the original
+(additive) genotype values regardless of the genetic model.
 }
 
 \value{

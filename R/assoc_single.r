@@ -6,7 +6,7 @@
 #     Scalable and accurate implementation of generalized mixed models
 # using GDS files
 #
-# Copyright (C) 2019-2025    Xiuwen Zheng / AbbVie-ComputationalGenomics
+# Copyright (C) 2019-2026    Xiuwen Zheng / AbbVie-ComputationalGenomics
 # License: GPL-3
 #
 
@@ -34,7 +34,8 @@
 # Internal model initialization
 .init_nullmod <- function(modobj, ii, maf, mac, missing, spa.pval, ER.mac,
     var.ratio, geno.ploidy, Sigma_inv, chol_inv_X_Sigma,
-    maxMAF=1, wbeta=double(), num_wbuf=0L, ultra_mac=10, collapse_method="max")
+    maxMAF=1, wbeta=double(), num_wbuf=0L, ultra_mac=10, collapse_method="max",
+    geno.model="additive")
 {
     # check
     if (!is.numeric(var.ratio) || anyNA(var.ratio))
@@ -67,13 +68,14 @@
     X1 <- modobj$obj.noK$X1[ii,, drop=FALSE]
     t_X1 <- t(X1)
     V <- modobj$obj.noK$V[ii]
-    n <- length(ii)  # Num of samples
+    n <- length(modobj$sample.id)  # Num of samples
     K <- ncol(X1)    # Num of fixed-effect coefficients
     cateMAC <- attr(var.ratio, "cateMAC")
     mobj <- list(
         trait = match(modobj$trait.type, .trait_list),
         maf = maf, mac = mac, missing = missing, spa.pval = spa.pval,
         ER.mac = ER.mac, geno.ploidy = geno.ploidy,
+        geno.model = match(geno.model, c("additive", "dominant", "recessive")),
         tau = modobj$tau,
         y = y, mu = mu, y_mu = y - mu,
         mu2 = mu * (1 - mu),
@@ -277,9 +279,29 @@ PVAL_METHOD_LEVELS <- c("Normal", "SPA", "ER")
     i
 }
 
+.scan_fc_sv_test <- function(f, dsnode, pverbose)
+{
+    seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
+        as.is="list", parallel=FALSE, .list_dup=FALSE, .useraw=NA,
+        .progress=SeqArray:::.process_verbose(pverbose))
+}
 
+.scan_fc_sv_test_gds <- function(f, dsnode, pverbose)
+{
+    v<- seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
+        as.is="list", parallel=FALSE, .list_dup=FALSE, .useraw=NA,
+        .progress=SeqArray:::.process_verbose(pverbose))
+    i <- seqGetData(f, "$variant_index")
+    x <- !vapply(v, is.null, FALSE)
+    list(id=i[x], rv=v[x])
+}
+
+
+# SAIGE single variant association test using a GDS file
 seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
-    spa=TRUE, ER.mac=4.5, dsnode="", geno.ploidy=2L, res.savefn="",
+    spa=TRUE, ER.mac=4.5, dsnode="",
+    geno.model=c("additive", "dominant", "recessive"), geno.ploidy=2L,
+    res.savefn="",
     res.compress="ZIP", parallel=FALSE, load.balancing=TRUE,
     verbose.pval=c(0, 5e-10, 5e-8, 5e-6, 5e-4, 1), verbose=TRUE)
 {
@@ -290,6 +312,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
     stopifnot(is.logical(spa), length(spa)==1L)
     stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
     stopifnot(is.character(dsnode), length(dsnode)==1L, !is.na(dsnode))
+    geno.model <- match.arg(geno.model)
     stopifnot(is.numeric(geno.ploidy) | is.na(geno.ploidy),
         length(geno.ploidy)==1L)
     if (is.numeric(geno.ploidy) && !is.na(geno.ploidy))
@@ -375,6 +398,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
             cat("    using a sparse matrix of Sigma (covariance)\n")
         if (!isTRUE(spa) && (modobj$trait.type=="binary"))
             cat("    no adjustment for case-control imbalance\n")
+        .cat("    genetic model: ", geno.model)
     }
 
     if (dm[2L] <= 0) stop("No sample in the genotypic data set!")
@@ -382,7 +406,8 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
 
     # initialize the internal model parameters
     mobj <- .init_nullmod(modobj, ii, maf, mac, missing, spa.pval, ER.mac,
-        var.ratio, geno.ploidy, modobj$Sigma_inv, modobj$chol_inv_X_Sigma)
+        var.ratio, geno.ploidy, modobj$Sigma_inv, modobj$chol_inv_X_Sigma,
+        geno.model=geno.model)
 
     # load package(s)
     if (ER.mac >= mac) .load_skat(verbose)
@@ -430,12 +455,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
     if (!isfn_gds)
     {
         combine_fun <- "unlist"
-        scan_fun <- function(f, dsnode, pverbose)
-        {
-            seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
-                as.is="list", parallel=FALSE, .list_dup=FALSE, .useraw=NA,
-                .progress=SeqArray:::.process_verbose(pverbose))
-        }
+        scan_fun <- .scan_fc_sv_test
     } else {
         # output to a GDS file
         Append <- function(nm, val)
@@ -463,15 +483,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
             }
             NULL
         }
-        scan_fun <- function(f, dsnode, pverbose)
-        {
-            v<- seqApply(f, dsnode, .cfunction("saige_score_test_pval"),
-                as.is="list", parallel=FALSE, .list_dup=FALSE, .useraw=NA,
-                .progress=SeqArray:::.process_verbose(pverbose))
-            i <- seqGetData(f, "$variant_index")
-            x <- !vapply(v, is.null, FALSE)
-            list(id=i[x], rv=v[x])
-        }
+        scan_fun <- .scan_fc_sv_test_gds
 
         if (verbose)
             .cat("Save to ", sQuote(res.savefn), " ...")
@@ -636,4 +648,118 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         }
         invisible()
     }
+}
+
+
+# SAIGE single variant association test with a genotype matrix input
+seqAssocGLMM_GT <- function(gt, modobj, spa=TRUE, ER.mac=4.5,
+    geno.model=c("additive", "dominant", "recessive"), geno.ploidy=2L,
+    verbose=TRUE)
+{
+    if (!(is.numeric(gt) && is.matrix(gt)) && !inherits(gt, "Matrix"))
+        stop("gt must be a numeric matrix or a Matrix object.")
+    stopifnot(is.logical(spa), length(spa)==1L)
+    stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
+    stopifnot(is.numeric(geno.ploidy) | is.na(geno.ploidy),
+        length(geno.ploidy)==1L)
+    if (is.numeric(geno.ploidy) && !is.na(geno.ploidy))
+        stopifnot(geno.ploidy >= 0L)
+    geno.model <- match.arg(geno.model)
+    stopifnot(is.logical(verbose), length(verbose)==1L)
+
+    if (verbose)
+    {
+        cat(.crayon_inverse(
+            "SAIGE association analysis (in-memory genotype matrix):\n"))
+        .cat(.crayon_underline(.tm()))
+    }
+
+    # check model
+    modobj <- .check_modobj(modobj, verbose)
+    var.ratio <- .get_var_ratio(modobj)
+    spa.pval <- if (isTRUE(spa)) NaN else -1
+    if (is.na(ER.mac)) ER.mac <- 0
+
+    # check sample dimension
+    n_samp <- length(modobj$sample.id)
+    n_var <- ncol(gt)
+    if (nrow(gt) != n_samp)
+        stop("nrow(gt) should match the number of samples in the model.")
+
+    if (verbose)
+    {
+        .cat("    trait type: ", modobj$trait.type)
+        .cat("    # of samples: ", .pretty(n_samp))
+        .cat("    # of variants: ", .pretty(n_var))
+        v <- var.ratio
+        if (isFALSE(attr(v, "cateMAC")))
+        {
+            .cat("    variance ratio for approximation: ", v)
+        } else {
+            cat("    variance ratios for approximation (MAC categories):\n")
+            attr(v, "cateMAC") <- NULL
+            print(v, width=1024L)
+        }
+        if (!isTRUE(spa) && (modobj$trait.type=="binary"))
+            cat("    no adjustment for case-control imbalance\n")
+        if (geno.model != "additive")
+            .cat("    genetic model: ", geno.model)
+    }
+
+    if (n_samp <= 0L) stop("No sample!")
+    if (n_var <= 0L) stop("No variant in the genotype matrix!")
+
+    # initialize the internal model parameters
+    maf <- NaN; mac <- 0; missing <- 1; ii <- TRUE
+    mobj <- .init_nullmod(modobj, ii, maf, mac, missing, spa.pval, ER.mac,
+        var.ratio, geno.ploidy, modobj$Sigma_inv, modobj$chol_inv_X_Sigma,
+        geno.model=geno.model)
+
+    # load package(s)
+    .load_skat(FALSE)
+
+    # initialize internally
+    .Call(saige_score_test_init, mobj)
+
+    # iterate over variants (columns of gt)
+    rv <- lapply(seq_len(n_var), function(j)
+            .Call(saige_score_test_pval, gt[, j]))
+
+    # filter out NULL results (variants that didn't pass maf/mac/missing)
+    x <- !vapply(rv, is.null, FALSE)
+    rv <- rv[x]
+
+    # build output data frame
+    is_binary <- modobj$trait.type == "binary"
+    vid <- which(x)
+    if (!is.null(colnames(gt)))
+        vid <- colnames(gt)[x]
+
+    ans <- data.frame(id=vid, stringsAsFactors=FALSE)
+    if (!is.na(geno.ploidy) && (geno.ploidy>0L))
+    {
+        ans$AF.alt <- vapply(rv, `[`, 0, i=1L)
+        ans$mac <- vapply(rv, `[`, 0, i=2L)
+    } else {
+        ans$mean <- vapply(rv, `[`, 0, i=1L)
+        ans$nnzero <- as.integer(vapply(rv, `[`, 0, i=2L))
+    }
+    ans$num  <- as.integer(vapply(rv, `[`, 0, i=3L))
+    ans$beta <- vapply(rv, `[`, 0, i=4L)
+    ans$SE   <- vapply(rv, `[`, 0, i=5L)
+    ans$pval <- vapply(rv, `[`, 0, i=6L)
+    ans$method <- .pval_method(vapply(rv, `[`, 0, i=7L))
+    if (is_binary)
+    {
+        ans$p.norm <- vapply(rv, `[`, 0, i=8L)
+        ans$converged <- vapply(rv, `[`, 0, i=9L)==1L
+    }
+
+    if (verbose)
+    {
+        .cat(.crayon_underline(.tm()))
+        .cat(.crayon_inverse("Done."))
+    }
+
+    ans
 }

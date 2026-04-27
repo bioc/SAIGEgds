@@ -10,11 +10,16 @@ GCC_FLAG=$(shell $(CC) -dM -E - < /dev/null |grep -Eo '__GNUC__|__clang__|ICC' \
 	|tr '\n' ' ' |grep GNUC |grep -v -e clang -e ICC)
 LIB_GCC=$(if ${GCC_FLAG},-lgcc)
 
-
 # to set flags for the linker
 PKG_LIBS = -lm $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS) \
 	$(shell ${R_HOME}/bin/Rscript -e "RcppParallel::RcppParallelLibs()") \
 	${LIB_GCC}
+
+# add -ldl for runtime OpenCL loading via dlopen (no-op on macOS)
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+    PKG_LIBS += -ldl
+endif
 
 all: $(SHLIB)
 

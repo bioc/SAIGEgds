@@ -27,6 +27,7 @@
 #include "vec_ext.h"
 #include <RcppArmadillo.h>
 #include "saige.h"
+#include "gpu_opencl.h"
 #include <climits>
 #include <vector>
 #include <algorithm>
@@ -143,6 +144,7 @@ static TypeGRM GRM;
 RcppExport SEXP saige_init_fit_grm()
 {
 	GRM.Reset();
+	gpu_free_buffers();
 	return R_NilValue;
 }
 
@@ -256,6 +258,13 @@ BEGIN_RCPP
 		}
 	}
 	f64_mul(GRM.NumSamp, 1.0 / GRM.NumVariant, GRM.buf_diag_grm);
+
+	// Upload 2-bit packed genotypes to GPU if available
+	if (gpu_opencl_available())
+	{
+		gpu_upload_2b_geno(GRM.PackedG, GRM.buf_std_geno,
+			GRM.NumSamp, GRM.NumVariant, GRM.PackedNumSamp);
+	}
 
 END_RCPP
 }
@@ -571,6 +580,11 @@ BEGIN_RCPP
 		for (size_t i=0; i < (size_t)GRM.NumSamp; i++)
 			GRM.buf_diag_grm[i] = GRM.ApproxDMat.val[i + i*GRM.NumSamp];
 	}
+
+	// Upload dense GRM to GPU if available
+	if (gpu_opencl_available())
+		gpu_upload_dense_grm(GRM.ApproxDMat.val, GRM.NumSamp);
+
 END_RCPP
 }
 
@@ -611,9 +625,29 @@ END_RCPP
 
 /// Cross-product of standardized genotypes (G) and a numeric vector
 /// Input: b (n_samp-length)
-/// Output: out_b (n_samp-length) = GRM * b = G' G b
+/// Output: out_b (n_samp-length) = GRM * b = G' G b / nvar
 static MATH_OFAST void get_crossprod_b_grm(const dcolvec &b, dvec &out_b)
 {
+	// GPU-accelerated path for dense 2-bit packed genotypes
+	if (gpu_opencl_available() && GRM.PackedG && !GRM.SparseG)
+	{
+		out_b.resize(GRM.NumSamp);
+		if (gpu_grm_crossprod_2b(&b[0], &out_b[0], GRM.NumSamp,
+			GRM.NumVariant, GRM.PackedNumSamp))
+			return;  // GPU succeeded
+		// fall through to CPU on failure
+	}
+
+	// GPU-accelerated path for user-defined dense GRM
+	if (gpu_opencl_available() && !GRM.SparseG && !GRM.PackedG
+		&& !GRM.ApproxDMat.empty())
+	{
+		out_b.resize(GRM.NumSamp);
+		if (gpu_grm_crossprod_dense(&b[0], &out_b[0], GRM.NumSamp))
+			return;  // GPU succeeded
+		// fall through to CPU on failure
+	}
+
 	// dense or sparse genotypes
 	if (GRM.SparseG || GRM.PackedG)
 	{
@@ -1192,7 +1226,30 @@ BEGIN_RCPP
 	int ntry_Sigma_E_zero=0;
 	int iter = 1;
 
-	if (verbose && !no_iteration)
+	if (no_iteration)
+	{
+		dvec re_Y, re_mu, re_alpha, re_eta, re_W, re_Sigma_iY;
+		dmat re_cov, re_Sigma_iX;
+		PARALLEL_THREAD_BLOCK
+		get_coeff(
+			// input variables
+			y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
+			tolPCG, verbose,
+			// output
+			re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX
+		);
+		PARALLEL_THREAD_BLOCK_END
+		return List::create(
+			_["coefficients"] = SEXP_VEC(re_alpha),
+			_["tau"] = SEXP_VEC(tau),
+			_["linear.predictors"] = SEXP_VEC(re_eta),
+			_["fitted.values"] = SEXP_VEC(re_mu),
+			_["residuals"] = SEXP_VEC(y - re_mu),
+			_["cov"] = re_cov,
+			_["converged"] = true);
+	}
+
+	if (verbose)
 	{
 		Rprintf(
 			"%sInitial variance component estimates, tau (Sigma_E, Sigma_G):\n",
@@ -1210,20 +1267,6 @@ BEGIN_RCPP
 		// output
 		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX
 	);
-
-/*
-	if (no_iteration)
-	{
-		return List::create(
-			_["coefficients"] = SEXP_VEC(re_alpha),
-			_["tau"] = SEXP_VEC(tau),
-			_["linear.predictors"] = SEXP_VEC(re_eta),
-			_["fitted.values"] = SEXP_VEC(re_mu),
-			_["residuals"] = SEXP_VEC(y - re_mu),
-			_["cov"] = re_cov,
-			_["converged"] = true);
-	}
-*/
 
 	double YPAPY[2], Trace[2];
 	switch (trait)

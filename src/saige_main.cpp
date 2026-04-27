@@ -130,6 +130,7 @@ static int mod_NCoeff = 0;  //< the number of beta coefficients
 static int mod_NCase = 0;   //< the number of cases
 
 static int mod_ploidy = 2;  //< ploidy or <=0 if it is not a genotype
+static int mod_geno_model = 1;  //< genetic model: 1=additive, 2=dominant, 3=recessive
 
                                          // K is # of beta coefficients
 static const double *mod_tau = NULL;     //< variance components: tau[0], tau[1]
@@ -215,6 +216,9 @@ BEGIN_RCPP
 	mod_NCoeff = NumericMatrix(wrap(M["XV"])).nrow();
 	mod_NCase = 0;
 	mod_ploidy = Rf_asInteger(M["geno.ploidy"]);
+	mod_geno_model = Rf_asInteger(M["geno.model"]);
+	if (mod_ploidy > 0 && (mod_geno_model < 1 || mod_geno_model > 3))
+		Rf_error("Invalid genetic model index: %d.", mod_geno_model);
 	mod_tau = REAL(M["tau"]);
 	mod_y = REAL(M["y"]);
 	mod_mu = REAL(M["mu"]);
@@ -698,9 +702,24 @@ static bool single_score_test(double G[],
 
 	if ((Num > 0) && b && (missing <= threshold_missing))
 	{
-		const bool minus = (mod_ploidy>0) ? (AF > 0.5) : false;
-		if (mod_ploidy>0 && minus)
-			f64_sub(mod_NSamp, mod_ploidy, &G[0]);
+		const bool minus = (mod_ploidy > 0) ? (AF > 0.5) : false;
+		if (mod_ploidy > 0)
+		{
+			if (minus)
+				f64_sub(mod_NSamp, mod_ploidy, &G[0]);  // allele flip
+			// recode dosages for genetic model (after allele flip)
+			if (mod_geno_model == 2)
+			{
+				// dominant: G[i] = min(G[i], 1)
+				for (int i=0; i < mod_NSamp; i++)
+					if (G[i] > 1) G[i] = 1;
+			} else if (mod_geno_model == 3)
+			{
+				// recessive: G[i] = max(G[i] - 1, 0)
+				for (int i=0; i < mod_NSamp; i++)
+					G[i] = (G[i] > 1) ? (G[i] - 1) : 0;
+			}
+		}
 		// MAC after mean imputation
 		const double mac_g = (Num < mod_NSamp) ? (2 * mod_NSamp * maf) : mac;
 		// output
@@ -806,6 +825,26 @@ static sp_mat get_G0_flipped_impute(SEXP dosage, double maf[], double mac[])
 	}
 }
 
+/// recode sparse genotype matrix for dominant/recessive genetic model
+static void recode_geno_model_sp(sp_mat &G0)
+{
+	if (mod_ploidy <= 0 || mod_geno_model == 1) return;  // additive or non-genotype
+	sp_mat::iterator it = G0.begin();
+	sp_mat::iterator ed = G0.end();
+	if (mod_geno_model == 2)
+	{
+		// dominant: cap at 1.0
+		for (; it != ed; ++it)
+			if ((*it) > 1.0) (*it) = 1.0;
+	} else if (mod_geno_model == 3)
+	{
+		// recessive: shift by -1, floor at 0
+		for (; it != ed; ++it)
+			(*it) = ((*it) > 1.0) ? ((*it) - 1.0) : 0.0;
+		G0.clean(0.0);  // drop explicit zeros from sparse storage
+	}
+}
+
 inline static void add_g_w(dvec &G, const sp_mat &GMat, int col_i, double w)
 {
 	sp_mat::const_iterator it = GMat.begin_col(col_i);
@@ -905,6 +944,7 @@ BEGIN_RCPP
 	NumericMatrix ans(AGGR_HEAD_LEN + (binary ? 6 : 4), ncol);
 	// get genotype matrix
 	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	recode_geno_model_sp(G0);
 	const int n_tot_snv = G0.n_cols;
 	int n_snv_old = -1;
 	// for-each maxMAF
@@ -1215,6 +1255,7 @@ BEGIN_RCPP
 	NumericMatrix ans(AGGR_HEAD_LEN + 4, ncol);
 	// get genotype matrix
 	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	recode_geno_model_sp(G0);
 	const int n_tot_snv = G0.n_cols;
 	int n_snv_old = -1;
 	// for-each maxMAF
@@ -1416,6 +1457,7 @@ BEGIN_RCPP
 	NumericMatrix ans(AGGR_HEAD_LEN + 3, ncol);
 	// get genotype matrix
 	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	recode_geno_model_sp(G0);
 	const int n_tot_snv = G0.n_cols;
 	int n_snv_old = -1;
 	// initialize single-variant pvals with NaN
@@ -1511,6 +1553,7 @@ BEGIN_RCPP
 	NumericMatrix ans(AGGR_HEAD_LEN + 7, ncol);
 	// get genotype matrix
 	sp_mat G0 = get_G0_flipped_impute(dosage, maf, mac);
+	recode_geno_model_sp(G0);
 	const int n_tot_snv = G0.n_cols;
 	int n_snv_old = -1;
 	// initialize single-variant pvals with NaN
@@ -1704,6 +1747,67 @@ RcppExport SEXP saige_acat_p(SEXP pval, SEXP weight)
 
 // ========================================================================= //
 
+/// R wrapper for get_G0_flipped_impute
+RcppExport SEXP saige_get_G0_flipped_impute(SEXP dosage, SEXP missing,
+	SEXP MaxMAF)
+{
+BEGIN_RCPP
+	threshold_missing = Rf_asReal(missing);
+	double maxMAF = Rf_asReal(MaxMAF);
+	// get number of variants
+	int n_snv = 0;
+	if (Rf_isMatrix(dosage))
+		n_snv = Rf_ncols(dosage);
+	else if (Rf_inherits(dosage, "dgCMatrix"))
+		n_snv = INTEGER(GET_SLOT(dosage, Rf_install("Dim")))[1];
+	else
+		Rf_error("dosage should be a matrix or dgCMatrix.");
+	// allocate maf and mac
+	std::vector<double> maf(n_snv), mac(n_snv);
+	ptrMaxMAF = &maxMAF;
+	// call internal function
+	sp_mat G0 = get_G0_flipped_impute(dosage, &maf[0], &mac[0]);
+	const int out_ncol = G0.n_cols;
+	// convert sp_mat to dgCMatrix
+	S4 sp("dgCMatrix");
+	{
+		IntegerVector dim(2);
+		dim[0] = G0.n_rows; dim[1] = out_ncol;
+		sp.slot("Dim") = dim;
+		IntegerVector p(out_ncol + 1);
+		for (int j=0; j <= out_ncol; j++)
+			p[j] = G0.col_ptrs[j];
+		sp.slot("p") = p;
+		const int nnz = G0.n_nonzero;
+		IntegerVector i_vec(nnz);
+		NumericVector x_vec(nnz);
+		for (int j=0; j < nnz; j++)
+		{
+			i_vec[j] = G0.row_indices[j];
+			x_vec[j] = G0.values[j];
+		}
+		sp.slot("i") = i_vec;
+		sp.slot("x") = x_vec;
+	}
+	// output maf and mac
+	NumericVector rv_maf(out_ncol), rv_mac(out_ncol);
+	for (int j=0; j < out_ncol; j++)
+	{
+		rv_maf[j] = maf[j];
+		rv_mac[j] = mac[j];
+	}
+	// return a list
+	return List::create(
+		Named("geno") = sp,
+		Named("maf") = rv_maf,
+		Named("mac") = rv_mac
+	);
+END_RCPP
+}
+
+
+// ========================================================================= //
+
 inline static const char *b2s(bool v) { return v ? "true" : "false"; }
 
 RcppExport SEXP saige_set_option(SEXP val, SEXP use_avx, SEXP Rverbose)
@@ -1760,9 +1864,12 @@ RcppExport SEXP saige_set_geno2b_raw(SEXP, SEXP, SEXP);
 RcppExport SEXP saige_calc_var_ratio(SEXP, SEXP, SEXP, SEXP);
 // forward declarations from saige_misc.cpp
 RcppExport SEXP saige_grm_sp_reraw(SEXP, SEXP, SEXP);
-RcppExport SEXP saige_grm_sp_calc(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-RcppExport SEXP saige_grm_sp_calc_ijx(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-RcppExport SEXP saige_grm_ds_calc(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_grm_sp_calc(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_grm_sp_calc_ijx(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_grm_ds_calc(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+// forward declarations from gpu_opencl.cpp
+extern "C" SEXP saige_gpu_init(SEXP);
+extern "C" SEXP saige_gpu_cleanup();
 // forward declarations from saige_permu.cpp
 RcppExport SEXP saige_init_skat_pkg();
 
@@ -1787,6 +1894,7 @@ RcppExport void R_init_SAIGEgds(DllInfo *info)
 		CALL(saige_acatv_test_pval, 1),
 		CALL(saige_acato_test_pval, 1),
 		CALL(saige_acat_p, 2),
+		CALL(saige_get_G0_flipped_impute, 3),
 		CALL(saige_set_option, 3),
 		// vectorization.cpp
 		CALL(saige_simd_version, 0),
@@ -1807,11 +1915,14 @@ RcppExport void R_init_SAIGEgds(DllInfo *info)
 		CALL(saige_calc_var_ratio, 4),
 		// saige_misc.cpp
 		CALL(saige_grm_sp_reraw, 3),
-		CALL(saige_grm_sp_calc, 7),
-		CALL(saige_grm_sp_calc_ijx, 8),
-		CALL(saige_grm_ds_calc, 7),
+		CALL(saige_grm_sp_calc, 8),
+		CALL(saige_grm_sp_calc_ijx, 9),
+		CALL(saige_grm_ds_calc, 8),
 		// saige_permu.cpp
 		CALL(saige_init_skat_pkg, 0),
+		// gpu_opencl.cpp
+		CALL(saige_gpu_init, 1),
+		CALL(saige_gpu_cleanup, 0),
 		{ NULL, NULL, 0 }
 	};
 

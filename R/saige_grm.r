@@ -234,7 +234,7 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 .simd_calc_cpuinfo <- function() .Call(saige_simd_sp_grm)
 
 .fit_calc_sp_grm <- function(gdsfile, nsnp.sub.random, maf, missing.rate,
-    rel.cutoff, num.thread, return.ID, verbose, verbose_progress)
+    rel.cutoff, num.thread, return.ID, use.gpu, verbose, verbose_progress)
 {
     dm <- seqSummary(gdsfile, "genotype", verbose=FALSE)$seldim
     nsamp <- dm[2L]
@@ -261,7 +261,8 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         .cat("    missing genotype threshold: <= ", missing.rate)
         .cat("    # of threads: ", num.thread)
         .cat("    relatedness threshold: ", rel.cutoff)
-        .cat("    using CPU capability: ", .simd_calc_cpuinfo())
+        if (!use.gpu)
+            .cat("    using CPU capability: ", .simd_calc_cpuinfo())
     }
     if (nsamp <= 0L || nvar <= 0L)
         stop("No selected sample or variant.")
@@ -279,11 +280,12 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     nr <- ceiling(nvar_tot / 4L)  # in bytes
     ext_nb <- ceiling(nr/4L)*4L - nr  # 32-bit aligned
     g_pack <- seqGet2bGeno(gdsfile, samp_by_var=FALSE, ext_nbyte=ext_nb,
-        verbose=verbose_progress)
+        parallel=num.thread, verbose=verbose_progress)
     g_pack2 <- g_pack
     if (verbose_progress)
     {
-        cat("    ", nrow(g_pack), " x ", ncol(g_pack), ": ", sep="")
+        cat("    ", nrow(g_pack), "x", ncol(g_pack), ": (32-bit aligned) ",
+            sep="")
         print(object.size(g_pack))
     }
     # randomly selected SNPs
@@ -305,22 +307,24 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 
     # initialize
     g_lookup <- matrix(NaN, nrow=8L, ncol=nrow(g_pack)*4L)
-    bl_size <- 256L
+    # don't change this value, optimized for CPU and GPU
+    bl_size <- if (!use.gpu) 256L else 2048L
     n <- ceiling(nsamp / bl_size)
     n <- n*(n+1L)/2L    # total number of blocks
 
     # calculation
     if (verbose_progress)
     {
+        cat("Calculating GRM ")
         if (nvar < nvar_tot)
-            .cat("Calculating GRM from the reduced SNP set (m=", nvar, "):")
-        else
-            cat("Calculating GRM:\n")
+            cat("from the reduced SNP set (m=", nvar, ")", sep="")
+        if (use.gpu) cat(" on GPU:\n") else cat(":\n")
     }
     prog_func <- SeqArray:::.seqProgForward
-    prog <- if (verbose_progress) SeqArray:::.seqProgress(n, 1L) else NULL
+    prog <- if (verbose) SeqArray:::.seqProgress(n, 1L) else NULL
+    # call the C function
     v <- .Call(saige_grm_sp_calc, nvar, g_pack2, g_lookup, rel.cutoff,
-        bl_size, prog, prog_func)
+        bl_size, use.gpu, prog, prog_func)
     remove(prog)
 
     # using the full set for non-zero entries
@@ -330,14 +334,14 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         .cat("# of non-zero entries in GRM: ", .pretty(n))
         cat(">>>>  Second step (sparse GRM)  <<<<\n")
         .cat("Calculating the non-zero entries using the full SNP set (m=",
-            nvar_tot, "):")
+            nvar_tot, ")", ifelse(use.gpu, " on GPU", ":"))
     }
     bl_size <- 1024L
     n <- ceiling(n/bl_size)
-    prog <- if (verbose_progress) SeqArray:::.seqProgress(n, 1L) else NULL
+    prog <- if (!use.gpu && verbose) SeqArray:::.seqProgress(n, 1L) else NULL
     # v$x will be updated
     v$x <- .Call(saige_grm_sp_calc_ijx, v$i, v$j, nvar_tot,
-        g_pack, g_lookup, bl_size, prog, prog_func)
+        g_pack, g_lookup, bl_size, use.gpu, prog, prog_func)
     remove(prog)
 
     # output
@@ -369,7 +373,7 @@ seqFitLDpruning <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 # create a sparse genetic relationship matrix
 seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     nsnp.sub.random=2000L, rel.cutoff=0.125, maf=0.01, missing.rate=0.005,
-    num.thread=1L, return.ID=FALSE, seed=200L, verbose=TRUE)
+    num.thread=1L, use.gpu=FALSE, return.ID=FALSE, seed=200L, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(nsnp.sub.random), length(nsnp.sub.random)==1L,
@@ -379,6 +383,7 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
     stopifnot(is.numeric(maf), length(maf) %in% c(1L,2L))
     stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
+    stopifnot(is.logical(use.gpu), length(use.gpu)==1L)
     stopifnot(is.logical(return.ID), length(return.ID)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
 
@@ -404,6 +409,16 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         on.exit(seqFilterPop(gdsfile))
     }
 
+    # initialize GPU if requested
+    if (isTRUE(use.gpu))
+    {
+        use.gpu <- .Call(saige_gpu_init, verbose)
+        if (!use.gpu && verbose)
+            cat("GPU not available, falling back to CPU.\n")
+        if (use.gpu)
+            on.exit(.Call(saige_gpu_cleanup), add=TRUE)
+    }
+
     # set the number of internal threads
     if (is.na(num.thread) || num.thread < 1L)
         num.thread <- 1L
@@ -421,7 +436,7 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 
     # calculating ...
     m <- .fit_calc_sp_grm(gdsfile, nsnp.sub.random, maf, missing.rate,
-        rel.cutoff, num.thread, return.ID, verbose, verbose)
+        rel.cutoff, num.thread, return.ID, use.gpu, verbose, verbose)
     # output
     if (verbose) .cat(.crayon_inverse("Done."))
     m
@@ -430,15 +445,16 @@ seqFitSparseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
 
 # create a dense genetic relationship matrix
 seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
-    maf=0.01, missing.rate=0.005, num.thread=1L, use.double=TRUE,
-    return.ID=FALSE, verbose=TRUE)
+    maf=0.01, missing.rate=0.005, num.thread=1L, use.gpu=FALSE,
+    use.double=TRUE, return.ID=FALSE, verbose=TRUE)
 {
     stopifnot(inherits(gdsfile, "SeqVarGDSClass") | is.character(gdsfile))
     stopifnot(is.numeric(maf), length(maf) %in% c(1L,2L))
     stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
     stopifnot(is.numeric(num.thread), length(num.thread)==1L)
-    stopifnot(is.logical(return.ID), length(return.ID)==1L)
+    stopifnot(is.logical(use.gpu), length(use.gpu)==1L)
     stopifnot(is.logical(use.double), length(use.double)==1L)
+    stopifnot(is.logical(return.ID), length(return.ID)==1L)
     stopifnot(is.logical(verbose), length(verbose)==1L)
     if (verbose)
         .cat(.crayon_inverse("Genetic Relationship Matrix (GRM):"))
@@ -454,6 +470,16 @@ seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         # save the filter on GDS file
         seqFilterPush(gdsfile)
         on.exit(seqFilterPop(gdsfile))
+    }
+
+    # initialize GPU if requested
+    if (isTRUE(use.gpu))
+    {
+        use.gpu <- .Call(saige_gpu_init, verbose)
+        if (!use.gpu && verbose)
+            cat("GPU not available, falling back to CPU.\n")
+        if (use.gpu)
+            on.exit(.Call(saige_gpu_cleanup), add=TRUE)
     }
 
     # set the number of internal threads
@@ -481,7 +507,8 @@ seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         .cat("    MAF threshold: >= ", maf)
         .cat("    missing genotype threshold: <= ", missing.rate)
         .cat("    # of threads: ", num.thread)
-        .cat("    using CPU capability: ", .simd_calc_cpuinfo())
+        if (!use.gpu)
+            .cat("    using CPU capability: ", .simd_calc_cpuinfo())
     }
     if (nsamp <= 0L || nvar <= 0L)
         stop("No selected sample or variant.")
@@ -495,23 +522,31 @@ seqFitDenseGRM <- function(gdsfile, sample.id=NULL, variant.id=NULL,
         verbose=verbose)
     if (verbose)
     {
-        cat("    ", nrow(g_pack), " x ", ncol(g_pack), ": ", sep="")
+        cat("    ", nrow(g_pack), "x", ncol(g_pack), ": (32-bit aligned) ",
+            sep="")
         print(object.size(g_pack))
     }
 
     # initialize
     g_lookup <- matrix(NaN, nrow=8L, ncol=nrow(g_pack)*4L)
-    bl_size <- 256L
+    # don't change this value, optimized for CPU and GPU
+    bl_size <- if (!use.gpu) 256L else 2048L
     n <- ceiling(nsamp / bl_size)
     n <- n*(n+1L)/2L    # total number of blocks
 
     # calculation
     if (verbose)
-        cat("Calculating dense GRM:\n")
+    {
+        if (!use.gpu)
+            cat("Calculating dense GRM:\n")
+        else
+            cat("Calculating dense GRM on GPU:\n")
+    }
     prog_func <- SeqArray:::.seqProgForward
     prog <- if (verbose) SeqArray:::.seqProgress(n, 1L) else NULL
+    # call the C function
     m <- .Call(saige_grm_ds_calc, nvar, g_pack, g_lookup, use.double, bl_size,
-        prog, prog_func)
+        use.gpu, prog, prog_func)
     remove(prog)
 
     # output

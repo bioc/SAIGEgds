@@ -8,7 +8,9 @@
 \usage{
 seqAssocGLMM_SKAT(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
     missing=0.05, collapse.mac=10, collapse.method=c("max", "sum"),
-    ccimb.adj=TRUE, ER.mac=4.5, dsnode="", res.savefn="", res.compress="ZIP",
+    ccimb.adj=TRUE, ER.mac=4.5, dsnode="",
+    geno.model=c("additive", "dominant", "recessive"),
+    res.savefn="", res.compress="ZIP",
     parallel=FALSE, verbose=TRUE, verbose.maf=FALSE)
 }
 
@@ -18,7 +20,8 @@ seqAssocGLMM_SKAT(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
     \item{units}{a list of units of selected variants, with S3 class
         \code{"SeqUnitListClass"} defined in the SeqArray package}
     \item{maxMAF}{a numeric vector for MAF thresholds, e.g.,
-        \code{c(0.01, 0.001)} for rare variants}
+        \code{c(0.01, 0.001)} for rare variants, or \code{c(0.5, 0.1, 0.01)}
+        for both common and rare variants}
     \item{wbeta}{weights for per-variant effect, using beta distribution
         \code{dbeta()} according to variant's MAF; a length-two vector, or a
         matrix with two rows for multiple beta parameters; by default, using
@@ -33,6 +36,10 @@ seqAssocGLMM_SKAT(gdsfile, modobj, units, maxMAF=0.01, wbeta=AggrParamBeta,
         resampling p-values}
     \item{dsnode}{"" for automatically searching the GDS nodes "genotype" and
         "annotation/format/DS", or use a user-defined GDS node in the file}
+    \item{geno.model}{a character string for the genetic model: \code{"additive"}
+        (default), \code{"dominant"} or \code{"recessive"}; the dominant model
+        recodes dosages as \code{min(G, 1)}, and the recessive model recodes
+        as \code{max(G-1, 0)}}
     \item{res.savefn}{an RData or GDS file name, "" for no saving}
     \item{res.compress}{the compression method for the output file, it should
         be one of LZMA, LZMA_RA, ZIP, ZIP_RA and none}
@@ -51,6 +58,14 @@ the variant sets \code{units} to a range of MAC and/or MAF.
 
     For more details of the SAIGE-GENE method, please refer to the SAIGE paper
 [Zhou et al. 2020] (see the reference section).
+
+    When \code{geno.model="dominant"}, the dosages are recoded as
+\code{min(G, 1)} after allele flipping to the minor allele, testing whether
+having at least one copy of the minor allele is associated with the trait.
+When \code{geno.model="recessive"}, dosages are recoded as \code{max(G-1, 0)},
+testing whether having two copies of the minor allele is associated.
+MAF/MAC filtering and the reported allele frequencies use the original
+(additive) genotype values regardless of the genetic model.
 }
 
 \value{

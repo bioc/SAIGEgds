@@ -194,6 +194,33 @@ unlink(c("grm_geno.gds", "assoc.gds"), force=TRUE)
 .
 
 
+# GPU Acceleration (Optional)
+
+SAIGEgds supports optional OpenCL-based GPU acceleration for the GRM cross-product computation during null model fitting. This can significantly speed up the `seqFitNullGLMM_SPA()` step for large sample sizes with dense genotypes.
+
+**Requirements:**
+
+* An OpenCL-compatible GPU (NVIDIA, AMD, Intel, or Apple)
+* OpenCL runtime library installed on the system (no compile-time dependency)
+
+To enable GPU acceleration, set `use.gpu=TRUE`:
+```R
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary", use.gpu=TRUE)
+```
+
+If no compatible GPU or OpenCL runtime is found, the function automatically falls back to CPU computation. Note that sparse genotype storage (`geno.sparse=TRUE`, the default) uses an optimized CPU-only code path; GPU acceleration applies to dense 2-bit packed genotypes (`geno.sparse=FALSE`).
+
+**GPU Memory Usage:**
+
+The GPU memory required depends on the operation and dataset size. SAIGEgds checks that the total allocation does not exceed 80% of device global memory, and falls back to CPU if it does.
+
+- **Cross-product (null model fitting):** $\lceil N/4 \rceil \times M$ (packed genotypes) + $4M \times 4$ bytes (standardized genotype lookup) + $N \times 4 \times 3$ bytes (input/output/dot vectors), where $N$ is the number of samples and $M$ is the number of variants. For example, $N$=400K samples and $M$=100K variants requires approximately 10 GB.
+- **Dense GRM GEMV:** $N^2 \times 4$ bytes (GRM matrix in single-precision) + $N \times 4 \times 2$ bytes (input/output vectors). For example, $N$=5K requires approximately 100 MB.
+- **GRM construction (sparse/dense):** $\lceil M/4 \rceil \times N$ (packed genotypes) + $4M \times 4$ bytes (standardized genotype lookup) + $256 \times 256 \times 4$ bytes (block output buffer). For $N$=400K and $M$=2K (the `nsnp.sub.random` subset), this is approximately 200 MB.
+
+All GPU buffers use single-precision (32-bit) floating point. Results are converted back to double precision on the host.
+
+
 # References
 
 1. Zheng X, Davis J.Wade. SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2021). Mar;37(5):728-730. [DOI: 10.1093/bioinformatics/btaa731](http://dx.doi.org/10.1093/bioinformatics/btaa731).
