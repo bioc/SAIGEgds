@@ -89,6 +89,11 @@ SIMD <- function()
     .Call(saige_simd_version)
 }
 
+.gpu_init <- function(verbose=TRUE)
+{
+    .Call(saige_gpu_init, verbose)
+}
+
 .rank_norm <- function(y, m=0, s=1)
 {
     if (anyNA(y))

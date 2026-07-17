@@ -19,7 +19,7 @@ glmmHeritability(modobj, adjust=TRUE)
     In SAIGE, penalized quasi-likelihood (PQL) is used to estimate the variance
 component parameter tau. It is known to produce biased estimate of the variance
 component tau using PQL. If \code{adjust=TRUE} for binary outcomes, tau is
-adjusted based prevalence and observed tau using the data in Supplementary
+adjusted based on prevalence and observed tau using the data in Supplementary
 Table 7 (Zhou et al. 2018) to reduce the bias of PQL estimate of variance
 component.
 }

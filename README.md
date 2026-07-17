@@ -7,9 +7,9 @@ SAIGEgds: Scalable Implementation of Generalized mixed models in PheWAS using GD
 
 ## Features
 
-Scalable implementation of generalized mixed mode with the support of Genomic Data Structure ([GDS](https://github.com/zhengxwen/SeqArray)) files and highly optimized C++ implementation. It is designed for single variant tests in large-scale phenome-wide association studies (PheWAS) with millions of variants and hundreds of thousands of samples (e.g., [UK Biobank genotype data](https://www.ukbiobank.ac.uk/scientists-3/genetic-data)), controlling for case-control imbalance and sample structure in single variant association studies.
+Scalable implementation of generalized mixed models with the support of Genomic Data Structure ([GDS](https://github.com/zhengxwen/SeqArray)) files and highly optimized C++ implementation. It is designed for single variant tests in large-scale phenome-wide association studies (PheWAS) with millions of variants and hundreds of thousands of samples (e.g., [UK Biobank genotype data](https://www.ukbiobank.ac.uk/scientists-3/genetic-data)), controlling for case-control imbalance and sample structure in single variant association studies.
 
-The implementation of SAIGEgds is based on the original [SAIGE](https://github.com/weizhouUMICH/SAIGE) R package (v0.29.4.4) [Zhou et al. 2018]. It is implemented with optimized C++ codes taking advantage of sparse structure of genotypes. All of the calculation with single-precision floating-point numbers in [SAIGE](https://github.com/weizhouUMICH/SAIGE) are replaced by the double-precision calculation in SAIGEgds. SAIGEgds also implements some of the [SPAtest](https://cran.r-project.org/web/packages/SPAtest/index.html) functions in C to speed up the calculation of Saddlepoint approximation.
+The implementation of SAIGEgds is based on the original [SAIGE](https://github.com/weizhouUMICH/SAIGE) R package (v0.29.4.4) [Zhou et al. 2018]. It is implemented with optimized C++ codes taking advantage of sparse structure of genotypes. All of the calculations with single-precision floating-point numbers in [SAIGE](https://github.com/weizhouUMICH/SAIGE) are replaced by the double-precision calculation in SAIGEgds. SAIGEgds also implements some of the [SPAtest](https://cran.r-project.org/web/packages/SPAtest/index.html) functions in C to speed up the calculation of Saddlepoint approximation.
 
 Benchmarks using the UK Biobank White British genotype data (N=430K) with coronary heart disease and simulated cases, show that SAIGEgds is 5 to 6 times faster than the SAIGE R package in the steps of fitting null models and p-value calculations. When used in conjunction with high-performance computing (HPC) clusters and/or cloud resources, SAIGEgds provides an efficient analysis pipeline for biobank-scale PheWAS.
 
@@ -25,7 +25,7 @@ Release Version: v2.12.0 ([http://www.bioconductor.org/packages/SAIGEgds](http:/
 
 ## Package Maintainer
 
-[Xiuwen Zheng](xiuwen.zheng@abbvie.com)
+[Xiuwen Zheng](mailto:xiuwen.zheng@abbvie.com)
 
 
 ## Installation
@@ -51,7 +51,7 @@ install_github("AbbVie-ComputationalGenomics/SAIGEgds")
 
 ## Package vignette
 
-If the package is installed from Bioconductor repository or package rebuilding, users can start R and enter to view documentation:
+If the package is installed from the Bioconductor repository or built from source, users can start R and enter to view documentation:
 ```R
 browseVignettes("SAIGEgds")
 ```

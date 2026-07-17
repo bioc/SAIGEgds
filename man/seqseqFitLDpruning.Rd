@@ -14,7 +14,7 @@ seqFitLDpruning(gdsfile, sample.id=NULL, variant.id=NULL,
 
 \arguments{
     \item{gdsfile}{a SeqArray GDS file name, a GDS object for genotypes, or
-        a character vector for a list of GDS file names when genotyeps are
+        a character vector for a list of GDS file names when genotypes are
         split by chromosomes}
     \item{sample.id}{NULL for all samples, or sample IDs in GRM}
     \item{variant.id}{a list of variant IDs, used to construct GRM}

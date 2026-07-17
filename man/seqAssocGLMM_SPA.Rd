@@ -53,9 +53,9 @@ seqAssocGLMM_GT(gt, modobj, spa=TRUE, ER.mac=4.5,
         \code{\link[SeqArray]{seqParallel}} for more details}
     \item{load.balancing}{load balancing for the calculation in parallel
         if \code{TRUE}}
-    \item{gt}{a numeric genotype matrix (sample by variant) or a Matrix
-        object, where rows correspond to the samples in the model and columns
-        to variants}
+    \item{gt}{a numeric genotype vector (for a single variant), a numeric
+        matrix (sample by variant), or a Matrix object; rows correspond to
+        the samples in the model and columns to variants}
     \item{verbose.pval}{\code{NULL} or a numeric vector for dividing p-values
         into the intervals and show the corresponding counts}
     \item{verbose}{if \code{TRUE}, show information}
@@ -64,9 +64,10 @@ seqAssocGLMM_GT(gt, modobj, spa=TRUE, ER.mac=4.5,
 \details{
     \code{seqAssocGLMM_SPA()} reads genotype data from a GDS file and
 supports parallel computation. \code{seqAssocGLMM_GT()} takes an in-memory
-numeric matrix \code{gt} (sample by variant) directly, which is useful when
-genotypes are already loaded or generated outside of the GDS framework.
-The rows of \code{gt} must match the samples used in the null model.
+numeric vector (for a single variant) or matrix \code{gt} (sample by variant)
+directly, which is useful when genotypes are already loaded or generated
+outside of the GDS framework. The rows of \code{gt} (or the length of the
+vector) must match the samples used in the null model.
 
     For more details of SAIGE algorithm, please refer to the SAIGE paper
 [Zhou et al. 2018] (see the reference section).

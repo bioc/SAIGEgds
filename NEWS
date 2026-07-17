@@ -1,7 +1,20 @@
+CHANGES IN VERSION 2.13.1
+-------------------------
+
+    o SPA root-finding hardening in `SPATest.cpp`: the saddlepoint equation
+      solvers `Saddle_Prob()` and `Saddle_Prob_Fast()` now use a bracketed
+      safeguarded Newton (rtsafe) fallback for `getroot_K1()` /
+      `getroot_K1_fast()`. Since K1_adj is strictly increasing (dK1/dt = K2 > 0)
+      the root is unique and bracketable, so the bisection safeguard guarantees
+      convergence. The fallback is hybrid: the existing fast Newton runs first
+      and rtsafe is invoked only when it reports non-convergence, so there is no
+      added cost on the common path. This removes the rare non-convergence that
+      silently reverts the variant to the anticonservative normal approximation
+
 CHANGES IN VERSION 2.12.0
 -------------------------
 
-    o fix a C++ error that 'span' is ambiguous
+    o fix a C++ error where 'span' is ambiguous
 
     o new functions `seqRefitNullGLMM()`, `seqAssocGLMM_GT()` and
       `seqAssocGLMM_ACAT_O_GT()`
@@ -28,7 +41,7 @@ CHANGES IN VERSION 2.10.2
 CHANGES IN VERSION 2.9.2
 -------------------------
 
-    o improve the work load balancing in `seqAssocGLMM_SPA()` according to
+    o improve the workload balancing in `seqAssocGLMM_SPA()` according to
       SeqArray_1.49.6
 
     o new option 'verbose.pval' to improve the display in `seqAssocGLMM_SPA()`
@@ -69,7 +82,7 @@ CHANGES IN VERSION 2.0.0
 
 NEW FEATURES
 
-    o New features to use sparse genetic relationship matrix in generalized
+    o New features to use a sparse genetic relationship matrix in generalized
       linear mixed models (GLMMs) according to the SAIGE-GENE paper
       (Zhou et al., 2020)
 
@@ -150,7 +163,7 @@ CHANGES IN VERSION 1.0.1
 
     o change the output column 'AC.alt' to 'mac' in `seqAssocGLMM_SPA()`
 
-    o retry model fitting at least 10 times if matrix is singular or not
+    o retry model fitting at least 10 times if the matrix is singular or not
       positive definite, or large variance is observed
 
 

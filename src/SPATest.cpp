@@ -2,7 +2,7 @@
 //
 // SPATest.cpp: C implementation of part of the R SPATest package
 //
-// Copyright (C) 2019-2022    Xiuwen Zheng / AbbVie-ComputationalGenomics
+// Copyright (C) 2019-2026    Xiuwen Zheng / AbbVie-ComputationalGenomics
 //
 // This file is part of SAIGEgds. It was created based on the R codes in the
 // SPAtest package with the reference:
@@ -184,6 +184,104 @@ inline static void COREARRAY_TARGET_CLONES
 }
 
 
+/// K1_adj for the partially-normal-approx (fast) CGF
+inline static COREARRAY_TARGET_CLONES
+	double K1_adj_fast(double t, size_t nnzero, const double mu[],
+		const double g[], double q, double NAmu, double NAsigma)
+{
+	return K1_adj(t, nnzero, mu, g, q) + NAmu + NAsigma * t;
+}
+
+
+/// Bracketed safeguarded Newton (rtsafe) fallback for getroot_K1().
+/// K1_adj is strictly increasing (dK1/dt = K2 > 0): the root is unique and
+/// bracketable, and the bisection safeguard guarantees convergence. Called
+/// only when the primary getroot_K1() reports non-convergence (hybrid).
+inline static void COREARRAY_TARGET_CLONES
+	getroot_K1_bracketed(double &root, bool &converged, size_t n_g,
+		const double mu[], const double g[], double q, double tol=root_tol,
+		int maxiter=MaxNumIter)
+{
+	const double TMAX = 1e7;
+	double f0 = K1_adj(0, n_g, mu, g, q);
+	if (fabs(f0) < tol) { root = 0; converged = true; return; }
+	double lo, hi, delta = 1;
+	if (f0 < 0)
+	{
+		lo = 0; hi = delta;
+		while (K1_adj(hi, n_g, mu, g, q) < 0)
+		{
+			lo = hi; delta *= 2; hi = delta;
+			if (hi > TMAX) { root = R_PosInf; converged = true; return; }
+		}
+	} else {
+		hi = 0; lo = -delta;
+		while (K1_adj(lo, n_g, mu, g, q) > 0)
+		{
+			hi = lo; delta *= 2; lo = -delta;
+			if (lo < -TMAX) { root = R_PosInf; converged = true; return; }
+		}
+	}
+	double t = 0.5*(lo+hi);
+	converged = false;
+	for (int i=1; i <= maxiter; i++)
+	{
+		double ff = K1_adj(t, n_g, mu, g, q);
+		if (ff < 0) lo = t; else hi = t;
+		if ((hi - lo) < tol*(fabs(t)+1)) { converged = true; break; }
+		double tnew = t - ff / K2(t, n_g, mu, g);
+		if (!R_FINITE(tnew) || tnew <= lo || tnew >= hi)
+			tnew = 0.5*(lo + hi);  // bisection safeguard
+		if (fabs(tnew - t) < tol*(fabs(t)+1)) { t = tnew; converged = true; break; }
+		t = tnew;
+	}
+	root = t;
+}
+
+
+/// Bracketed safeguarded Newton (rtsafe) fallback for getroot_K1_fast().
+inline static void COREARRAY_TARGET_CLONES
+	getroot_K1_fast_bracketed(double &root, bool &converged, size_t nnzero,
+		const double mu[], const double g[], double q, double NAmu,
+		double NAsigma, double tol=root_tol, int maxiter=MaxNumIter)
+{
+	const double TMAX = 1e7;
+	double f0 = K1_adj_fast(0, nnzero, mu, g, q, NAmu, NAsigma);
+	if (fabs(f0) < tol) { root = 0; converged = true; return; }
+	double lo, hi, delta = 1;
+	if (f0 < 0)
+	{
+		lo = 0; hi = delta;
+		while (K1_adj_fast(hi, nnzero, mu, g, q, NAmu, NAsigma) < 0)
+		{
+			lo = hi; delta *= 2; hi = delta;
+			if (hi > TMAX) { root = R_PosInf; converged = true; return; }
+		}
+	} else {
+		hi = 0; lo = -delta;
+		while (K1_adj_fast(lo, nnzero, mu, g, q, NAmu, NAsigma) > 0)
+		{
+			hi = lo; delta *= 2; lo = -delta;
+			if (lo < -TMAX) { root = R_PosInf; converged = true; return; }
+		}
+	}
+	double t = 0.5*(lo+hi);
+	converged = false;
+	for (int i=1; i <= maxiter; i++)
+	{
+		double ff = K1_adj_fast(t, nnzero, mu, g, q, NAmu, NAsigma);
+		if (ff < 0) lo = t; else hi = t;
+		if ((hi - lo) < tol*(fabs(t)+1)) { converged = true; break; }
+		double tnew = t - ff / (K2(t, nnzero, mu, g) + NAsigma);
+		if (!R_FINITE(tnew) || tnew <= lo || tnew >= hi)
+			tnew = 0.5*(lo + hi);
+		if (fabs(tnew - t) < tol*(fabs(t)+1)) { t = tnew; converged = true; break; }
+		t = tnew;
+	}
+	root = t;
+}
+
+
 /// Get a p-value from a full saddle-point method
 inline static double COREARRAY_TARGET_CLONES
 	get_saddle_prob(double t, size_t n_g, const double mu[], const double g[],
@@ -193,15 +291,19 @@ inline static double COREARRAY_TARGET_CLONES
 	double K  = Korg(t, n_g, mu, g);
 	double k2 = K2(t, n_g, mu, g);
 	double pval = 0;
-	if (R_FINITE(K) && R_FINITE(k2))
+	double temp1 = t * q - K;
+	if (R_FINITE(K) && R_FINITE(k2) && temp1 >= 0 && k2 >= 0)
 	{
-		double w = sign(t) * sqrt(2 * (t * q - K));
+		double w = sign(t) * sqrt(2 * temp1);
 		double v = t * sqrt(k2);
-		double z = w + log(v/w) / w;
-		if (z > 0)
-			pval = ::Rf_pnorm5(z, 0, 1, FALSE, FALSE);
-		else
-			pval = - ::Rf_pnorm5(z, 0, 1, TRUE, FALSE);
+		if (w != 0)
+		{
+			double z = w + log(v/w) / w;
+			if (z > 0)
+				pval = ::Rf_pnorm5(z, 0, 1, FALSE, FALSE);
+			else
+				pval = - ::Rf_pnorm5(z, 0, 1, TRUE, FALSE);
+		}
 	}
 	return pval;
 }
@@ -216,15 +318,19 @@ inline static double COREARRAY_TARGET_CLONES
 	double K  = Korg(t, nnzero, mu, g) + NAmu * t + 0.5 * NAsigma * t * t;
 	double k2 = K2(t, nnzero, mu, g) + NAsigma;
 	double pval = 0;
-	if (R_FINITE(K) && R_FINITE(k2))
+	double temp1 = t * q - K;
+	if (R_FINITE(K) && R_FINITE(k2) && temp1 >= 0 && k2 >= 0)
 	{
-		double w = sign(t) * sqrt(2 * (t * q - K));
+		double w = sign(t) * sqrt(2 * temp1);
 		double v = t * sqrt(k2);
-		double z = w + log(v/w) / w;
-		if (z > 0)
-			pval = ::Rf_pnorm5(z, 0, 1, FALSE, FALSE);
-		else
-			pval = - ::Rf_pnorm5(z, 0, 1, TRUE, FALSE);
+		if (w != 0)
+		{
+			double z = w + log(v/w) / w;
+			if (z > 0)
+				pval = ::Rf_pnorm5(z, 0, 1, FALSE, FALSE);
+			else
+				pval = - ::Rf_pnorm5(z, 0, 1, TRUE, FALSE);
+		}
 	}
 	return pval;
 }
@@ -271,11 +377,15 @@ extern "C" double COREARRAY_TARGET_CLONES
 			bool conv1, conv2;    // whether the algorithm converges or not
 			getroot_K1(g_pos, g_neg, root1, ni1, conv1,  0, n_g, mu, g, q);
 			getroot_K1(g_pos, g_neg, root2, ni2, conv2,  0, n_g, mu, g, qinv);
+			// hybrid: bracketed rtsafe fallback only if the primary Newton fails
+			if (!conv1) getroot_K1_bracketed(root1, conv1, n_g, mu, g, q);
+			if (!conv2) getroot_K1_bracketed(root2, conv2, n_g, mu, g, qinv);
 			if (conv1 && conv2)
 			{
 				double p1 = get_saddle_prob(root1, n_g, mu, g, q);
 				double p2 = get_saddle_prob(root2, n_g, mu, g, qinv);
 				pval = fabs(p1) + fabs(p2);
+				if (!R_FINITE(pval)) { pval = pval_noadj; converged = false; }
 			} else {
 				pval = pval_noadj;
 				converged = false;
@@ -341,6 +451,7 @@ extern "C" double COREARRAY_TARGET_CLONES
 					NAmu -= g_k * mu_k;
 					NAsigma -= g_k * g_k * mu_k * (1 - mu_k);
 				}
+				if (NAsigma < 0) NAsigma = 0;  // guard big-number cancellation
 				g = &buf_spa[0]; mu = &buf_spa[nnzero];
 			}
 			//
@@ -351,6 +462,11 @@ extern "C" double COREARRAY_TARGET_CLONES
 				0, nnzero, mu, g, q, NAmu, NAsigma);
 			getroot_K1_fast(g_pos, g_neg, root2, ni2, conv2,
 				0, nnzero, mu, g, qinv, NAmu, NAsigma);
+			// hybrid: bracketed rtsafe fallback only if the primary Newton fails
+			if (!conv1)
+				getroot_K1_fast_bracketed(root1, conv1, nnzero, mu, g, q, NAmu, NAsigma);
+			if (!conv2)
+				getroot_K1_fast_bracketed(root2, conv2, nnzero, mu, g, qinv, NAmu, NAsigma);
 			if (conv1 && conv2)
 			{
 				double p1 = get_saddle_prob_fast(root1, nnzero, mu, g, q,
@@ -358,6 +474,7 @@ extern "C" double COREARRAY_TARGET_CLONES
 				double p2 = get_saddle_prob_fast(root2, nnzero, mu, g, qinv,
 					NAmu, NAsigma);
 				pval = fabs(p1) + fabs(p2);
+				if (!R_FINITE(pval)) { pval = pval_noadj; converged = false; }
 			} else {
 				pval = pval_noadj;
 				converged = false;

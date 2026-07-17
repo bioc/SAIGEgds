@@ -5,7 +5,7 @@
 \title{Scalable Implementation of Generalized mixed models in Phenome-Wide
     Association Studies using GDS files}
 \description{
-    Scalable and accurate implementation of generalized mixed mode with the
+    Scalable and accurate implementation of generalized mixed model with the
 support of Genomic Data Structure (GDS) files and highly optimized C++
 implementation. It is designed for single variant tests in large-scale
 phenome-wide association studies (PheWAS) with millions of variants and hundreds
@@ -16,7 +16,7 @@ studies.
     The implementation of SAIGEgds is based on the original SAIGE R package
 (v0.29.4.4) [Zhou et al. 2018]
 \url{https://github.com/weizhouUMICH/SAIGE/releases/tag/v0.29.4.4}. All of the
-calculation with single-precision floating-point numbers in SAIGE are replaced
+calculations with single-precision floating-point numbers in SAIGE are replaced
 by the double-precision calculation in SAIGEgds. SAIGEgds also implements some
 of the SPAtest functions in C to speed up the calculation of Saddlepoint
 Approximation.

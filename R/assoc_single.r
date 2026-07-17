@@ -656,8 +656,11 @@ seqAssocGLMM_GT <- function(gt, modobj, spa=TRUE, ER.mac=4.5,
     geno.model=c("additive", "dominant", "recessive"), geno.ploidy=2L,
     verbose=TRUE)
 {
+    # allow gt to be a vector for a single variant
+    if (is.numeric(gt) && !is.matrix(gt) && is.null(dim(gt)))
+        gt <- matrix(gt, ncol=1L)
     if (!(is.numeric(gt) && is.matrix(gt)) && !inherits(gt, "Matrix"))
-        stop("gt must be a numeric matrix or a Matrix object.")
+        stop("gt must be a numeric vector, matrix, or a Matrix object.")
     stopifnot(is.logical(spa), length(spa)==1L)
     stopifnot(is.numeric(ER.mac), length(ER.mac)==1L)
     stopifnot(is.numeric(geno.ploidy) | is.na(geno.ploidy),

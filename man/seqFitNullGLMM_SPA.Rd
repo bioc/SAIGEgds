@@ -70,7 +70,7 @@ seqRefitNullGLMM(formula, data, model=NULL, sample.col="sample.id",
         MAF=\code{maf}, or a numeric vector for MAF; only applicable if
         \code{use.cateMAC} is not \code{FALSE}}
     \item{cateMAC.simu}{\code{TRUE} for using simulated independent
-        genotypes under Hardy-Weinberg equilibrium if there are no enough
+        genotypes under Hardy-Weinberg equilibrium if there are not enough
         SNP markers in the MAC category; only applicable if \code{use.cateMAC}
         is not \code{FALSE}}
     \item{inv.norm}{\code{"residuals"} (by default), perform the inverse normal
@@ -93,8 +93,8 @@ seqRefitNullGLMM(formula, data, model=NULL, sample.col="sample.id",
     \item{maxiterPCG}{the maximum number of PCG iterations}
     \item{num.marker}{the number of SNPs used to calculate the variance ratio}
     \item{tau.init}{a 2-length numeric vector, the initial values for variance
-        components, tau; for binary traits, the first element is always be set
-        to 1. if \code{tau.init} is not specified, the second element will be
+        components, tau; for binary traits, the first element is always set
+        to 1; if \code{tau.init} is not specified, the second element will be
         0.5 for binary traits}
     \item{traceCVcutoff}{the threshold for coefficient of variation (CV) for
         the trace estimator, and the number of runs for trace estimation will
