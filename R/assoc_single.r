@@ -17,7 +17,7 @@
 .load_lib <- quote(
     suppressPackageStartupMessages(library("SAIGEgds", quietly=TRUE)))
 
-.trait_list <- c("quantitative", "binary")
+.trait_list <- c("quantitative", "binary", "survival")
 
 .load_skat <- function(verbose=TRUE)
 {
@@ -78,7 +78,8 @@
         geno.model = match(geno.model, c("additive", "dominant", "recessive")),
         tau = modobj$tau,
         y = y, mu = mu, y_mu = y - mu,
-        mu2 = mu * (1 - mu),
+        # Poisson variance V=mu for survival, else binomial mu(1-mu)
+        mu2 = if (modobj$trait.type == "survival") mu else mu * (1 - mu),
         # K x n_samp (K << n_samp, more efficient)
         t_XXVX_inv = t(modobj$obj.noK$XXVX_inv[ii,, drop=FALSE]),
         XV = modobj$obj.noK$XV[, ii, drop=FALSE],  # K x n_samp
@@ -105,7 +106,7 @@
         stop("Invalid 'modobj$trait.type'.")
 
     # additional design matrix
-    if (modobj$trait.type == "binary")
+    if (modobj$trait.type == "binary" || modobj$trait.type == "survival")
     {
         mobj$XVX <- t(X1) %*% (X1 * mobj$mu2)  # a matrix: K x K
         mobj$S_a <- colSums(X1 * mobj$y_mu)    # a vector of size K
@@ -476,7 +477,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
             Append("SE", vapply(v$rv, `[`, 0, i=5L))
             Append("pval", vapply(v$rv, `[`, 0, i=6L))
             Append("method", as.integer(vapply(v$rv, `[`, 0, i=7L)))
-            if (modobj$trait.type == "binary")
+            if (modobj$trait.type %in% c("binary", "survival"))
             {
                 Append("p.norm", vapply(v$rv, `[`, 0, i=8L))
                 Append("converged", vapply(v$rv, `[`, 0, i=9L)==1L)
@@ -516,7 +517,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         n <- add.gdsn(outf, "method", integer())
         put.attr.gdsn(n, "R.class", "factor")
         put.attr.gdsn(n, "R.levels", PVAL_METHOD_LEVELS)
-        if (modobj$trait.type == "binary")
+        if (modobj$trait.type %in% c("binary", "survival"))
         {
             add.gdsn(outf, "p.norm", double())
             add.gdsn(outf, "converged", logical())
@@ -577,7 +578,7 @@ seqAssocGLMM_SPA <- function(gdsfile, modobj, maf=NaN, mac=10, missing=0.05,
         ans$SE   <- vapply(rv, `[`, 0, i=5L)
         ans$pval <- vapply(rv, `[`, 0, i=6L)
         ans$method <- .pval_method(vapply(rv, `[`, 0, i=7L))
-        if (modobj$trait.type == "binary")
+        if (modobj$trait.type %in% c("binary", "survival"))
         {
             ans$p.norm <- vapply(rv, `[`, 0, i=8L)
             ans$converged <- vapply(rv, `[`, 0, i=9L)==1L
@@ -733,7 +734,7 @@ seqAssocGLMM_GT <- function(gt, modobj, spa=TRUE, ER.mac=4.5,
     rv <- rv[x]
 
     # build output data frame
-    is_binary <- modobj$trait.type == "binary"
+    is_binary <- modobj$trait.type %in% c("binary", "survival")
     vid <- which(x)
     if (!is.null(colnames(gt)))
         vid <- colnames(gt)[x]

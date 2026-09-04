@@ -231,6 +231,97 @@
 }
 
 
+# survival (time-to-event) outcome: Cox proportional-hazards frailty model
+# fitted via the Breslow Cox<->Poisson equivalence (cf. GATE).
+.fit_survival <- function(verbose, X.transform, phenovar, data, formula, param,
+    tau.init, gdsfile, grm.mat, seed, n_var, calc_vr=TRUE)
+{
+    # event status must be 0 (censored) / 1 (event)
+    ystatus <- data[[phenovar]]
+    uy <- sort(unique(ystatus))
+    if (length(uy)!=2L || !all(uy %in% c(0, 1)))
+        stop("The event status (response) should be 0 (censored) or 1 (event).")
+    if (verbose)
+    {
+        ev <- sum(ystatus==1)
+        .cat("Survival outcome (event status): ", phenovar)
+        .cat("    # of events: ", ev, " (",
+            sprintf("%.2f%%", 100*ev/length(ystatus)), "), # censored: ",
+            sum(ystatus==0))
+    }
+    if (is.null(gdsfile) && is.null(grm.mat))
+        stop("Survival analysis requires a GRM (via 'gdsfile' or 'grm.mat').")
+
+    # initial fixed-effect coefficients via logistic regression
+    # (no covariate offset for survival: use.offset is forced FALSE)
+    fit0 <- glm(formula, data=data, family=binomial)
+    if (verbose)
+    {
+        cat("Initial fixed-effect coefficients:\n")
+        v <- as.data.frame(t(fit0$coefficients))
+        rownames(v) <- "   "
+        print(v, width=128L)
+    }
+
+    # design matrix WITHOUT the intercept (Cox baseline absorbs it)
+    cn <- colnames(model.matrix(fit0))
+    X <- unname(model.matrix(fit0))
+    attr(X, "assign") <- attr(X, "contrasts") <- NULL
+    icpt <- which(cn == "(Intercept)")
+    if (length(icpt))
+    {
+        X <- X[, -icpt, drop=FALSE]
+        coef0 <- fit0$coefficients[-icpt]
+    } else
+        coef0 <- fit0$coefficients
+    if (NCOL(X) < 1L)
+        stop("Survival analysis needs at least one covariate (besides the ",
+            "intercept).")
+    # coefficients passed to the C++ fitter must match X (no intercept term)
+    fit0$coefficients <- coef0
+
+    # initial tau: Sigma_E fixed at 1 (Poisson), estimate Sigma_G
+    if (isTRUE(param$no_iteration))
+        tau <- tau.init
+    else {
+        tau <- c(1, 0.1)
+        if (sum(tau.init[2L]) != 0) tau[2L] <- tau.init[2L]
+    }
+    # iterate the null model (Cox-via-Poisson IRLS + AI-REML for tau)
+    glmm <- .Call(saige_fit_AI_PCG, fit0, X, tau, param)
+
+    # score-test null object with Poisson variance V = mu.
+    # The intercept was dropped for *fitting* (absorbed by the baseline hazard),
+    # but the score-test projection must use the intercept-augmented design
+    # Xa = [X, 1] (GATE/SAIGE's X1_fg = cbind(X1, 1)). Projecting the genotype
+    # on [X, 1] makes the adjusted genotype g_tilde orthogonal (in the V=mu
+    # metric) to the baseline-hazard direction too, so that m1 = sum(mu*g_t) = 0.
+    # This is required for the correct score variance var2 = sum(mu*g_tilde^2)
+    # AND for the Poisson-SPA CGF: sum(y-mu)=0 makes the *score* invariant to a
+    # constant shift of g_tilde, but var2 and the CGF are not -- the intercept
+    # column removes the baseline direction that estimating Lambda0 accounts for.
+    if (!is.null(param$Xmat)) X <- param$Xmat
+    mu <- glmm$fitted.values
+    Xa <- cbind(X, 1)              # intercept-augmented projection design
+    V <- mu
+    XV <- t(Xa * V)
+    XVX_inv <- solve(crossprod(Xa, Xa * V))
+    XXVX_inv <- Xa %*% XVX_inv
+    obj.noK <- list(y=unname(fit0$y), mu=mu, V=V, X1=Xa, XV=XV,
+        XXVX_inv=XXVX_inv)
+    # no Sigma_inv: the frailty correction is captured by the variance ratio
+    # (computed from the GRM via PCG in saige_calc_var_ratio).
+    obj.noK$Sigma_inv <- FALSE
+    glmm$obj.noK <- obj.noK
+
+    # calculate the variance ratio
+    if (calc_vr)
+        .calcVR(gdsfile, seed, fit0, glmm, obj.noK, param, verbose)
+    else
+        glmm
+}
+
+
 # quantitative outcome
 .fit_quant <- function(verbose, X.transform, phenovar, data, inv.norm, formula,
     param, tau.init, gdsfile, grm.mat, seed, n_var, calc_vr=TRUE)
@@ -696,7 +787,8 @@
 
 # fit the null model
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
-    trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.01,
+    trait.type=c("binary", "quantitative", "survival"), event.time=NULL,
+    sample.col="sample.id", maf=0.01,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
     variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
     inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
@@ -713,6 +805,23 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     stopifnot(is.null(gdsfile) || inherits(gdsfile, "SeqVarGDSClass") ||
             is.character(gdsfile))
     trait.type <- match.arg(trait.type)
+    if (trait.type == "survival")
+    {
+        if (is.null(event.time) || !is.character(event.time) ||
+                length(event.time)!=1L || is.na(event.time))
+            stop("'event.time' should be a column name in 'data' giving the ",
+                "event/censoring time for survival analysis.")
+        if (!(event.time %in% colnames(data)))
+            stop(sprintf("'%s' should be one of the columns in 'data'.",
+                event.time))
+        # the Cox baseline hazard absorbs the intercept, which is therefore
+        # non-identifiable: disable the QR transform and covariate offset so
+        # the intercept can be removed explicitly (as in GATE)
+        X.transform <- FALSE
+        use.offset <- FALSE
+    } else {
+        event.time <- NULL
+    }
     stopifnot(is.character(sample.col), length(sample.col)==1L,
         !is.na(sample.col))
     stopifnot(is.numeric(maf), length(maf)==1L)
@@ -837,7 +946,14 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         stop(sprintf("'%s' in data should be unique.", sample.col))
 
     # remove missing values
-    data <- data[, c(sample.col, vars)]
+    if (!is.null(event.time))
+    {
+        if (event.time %in% vars)
+            stop("'event.time' should not be in the formula.")
+        data <- data[, c(sample.col, vars, event.time)]
+    } else {
+        data <- data[, c(sample.col, vars)]
+    }
     data <- na.omit(data)
     data <- droplevels(data)
     sid <- NULL
@@ -861,6 +977,33 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     data <- data[i, ]
     if (nrow(data) <= 0L)
         stop("No common sample.id between 'data' and the GDS file.")
+    # survival: drop subjects censored before the first event time -- they
+    # carry no risk-set information (Lambda0 = mu = 0). GATE removes these
+    # before fitting; do it here, before the sample set (GDS filter, GRM subset,
+    # n_samp) is finalized, so all downstream buffers stay aligned.
+    if (!is.null(event.time))
+    {
+        st <- data[[phenovar]]
+        st <- if (is.factor(st)) as.numeric(as.character(st)) else
+            as.numeric(st)
+        tm <- data[[event.time]]
+        ev1 <- which(st == 1)
+        if (length(ev1) > 0L)
+        {
+            rm_i <- which(st == 0 & tm < min(tm[ev1]))
+            if (length(rm_i) > 0L)
+            {
+                if (verbose)
+                    .cat("    survival: removing ", length(rm_i), " subject",
+                        if (length(rm_i)>1L) "s" else "",
+                        " censored before the first event time")
+                data <- data[-rm_i, ]
+                if (nrow(data) <= 0L)
+                    stop("No samples remain after removing early-censored ",
+                        "subjects for survival analysis.")
+            }
+        }
+    }
     if (!is.null(gdsfile))
         seqSetFilter(gdsfile, sample.id=data[[sample.col]], verbose=FALSE)
     sid <- data[[sample.col]]
@@ -912,6 +1055,18 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     {
         i <- match(sid, colnames(grm.mat))
         grm.mat <- grm.mat[i, i]
+    }
+
+    # extract the event time aligned to the final sample order (survival),
+    # before any X.transform rebuild of 'data' drops the column
+    evtime <- NULL
+    if (!is.null(event.time))
+    {
+        evtime <- data[[event.time]]
+        if (!is.numeric(evtime))
+            stop("'event.time' column should be numeric.")
+        if (anyNA(evtime) || any(evtime < 0))
+            stop("'event.time' values should be non-negative and non-missing.")
     }
 
     X <- model.matrix(formula, data)
@@ -1056,6 +1211,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         nrun = nrun, num.marker = num.marker,
         traceCVcutoff = traceCVcutoff, ratioCVcutoff = ratioCVcutoff,
         verbose = verbose,
+        eventTime = evtime,
         indent = ""
     )
 
@@ -1073,6 +1229,11 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
         # linear regression
         glmm <- .fit_quant(verbose, X.transform, phenovar, data, inv.norm,
             formula, param, tau.init, gdsfile, grm.mat, seed, n_var)
+    } else if (trait.type == "survival")
+    {
+        # Cox proportional-hazards frailty model (Cox-via-Poisson)
+        glmm <- .fit_survival(verbose, X.transform, phenovar, data, formula,
+            param, tau.init, gdsfile, grm.mat, seed, n_var)
     } else
         stop("Invalid 'trait.type'.")
 
@@ -1168,7 +1329,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
 
 
 # refit the null model
-seqRefitNullGLMM <- function(formula, data, model=NULL,
+seqRefitNullGLMM <- function(formula, data, model=NULL, event.time=NULL,
     sample.col="sample.id", inv.norm=c("residuals", "quant", "none"),
     use.offset=FALSE, X.transform=TRUE, tau.update=FALSE, recalcVR=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
@@ -1228,6 +1389,25 @@ seqRefitNullGLMM <- function(formula, data, model=NULL,
     use.cateMAC <- model$use.cateMAC
     geno.sparse <- is.list(packed.geno)
 
+    # survival: the saved model does not carry the event time, so it must be
+    # re-supplied via 'event.time' (a column of the new 'data'). The intercept
+    # is absorbed by the baseline hazard, so -- as in seqFitNullGLMM_SPA -- the
+    # QR transform and covariate offset are disabled for survival.
+    if (trait.type == "survival")
+    {
+        if (is.null(event.time) || !is.character(event.time) ||
+                length(event.time)!=1L || is.na(event.time))
+            stop("'event.time' should be a column name in 'data' giving the ",
+                "event/censoring time when refitting a survival model.")
+        if (!(event.time %in% colnames(data)))
+            stop(sprintf("'%s' should be one of the columns in 'data'.",
+                event.time))
+        X.transform <- FALSE
+        use.offset <- FALSE
+    } else {
+        event.time <- NULL
+    }
+
     # show warnings immediately
     saveopt <- options(warn=1L)
     on.exit(options(warn=saveopt$warn), add=TRUE)
@@ -1260,7 +1440,14 @@ seqRefitNullGLMM <- function(formula, data, model=NULL,
         stop(sprintf("'%s' in data should be unique.", sample.col))
 
     # remove missing values and match samples to model
-    data <- data[, c(sample.col, vars)]
+    if (!is.null(event.time))
+    {
+        if (event.time %in% vars)
+            stop("'event.time' should not be in the formula.")
+        data <- data[, c(sample.col, vars, event.time)]
+    } else {
+        data <- data[, c(sample.col, vars)]
+    }
     data <- na.omit(data)
     data <- droplevels(data)
     sid <- model$sample.id
@@ -1269,6 +1456,20 @@ seqRefitNullGLMM <- function(formula, data, model=NULL,
         stop("All samples in the model must be present in the new data.")
     data <- data[i, ]
     n_samp <- length(sid)
+
+    # event time aligned to the model's sample order (survival). The saved
+    # model's sample set already excludes subjects censored before the first
+    # event, so no further removal is done here -- the model's sample.id is
+    # used verbatim (and the packed genotypes are aligned to it).
+    evtime <- NULL
+    if (!is.null(event.time))
+    {
+        evtime <- data[[event.time]]
+        if (!is.numeric(evtime))
+            stop("'event.time' column should be numeric.")
+        if (anyNA(evtime) || any(evtime < 0))
+            stop("'event.time' values should be non-negative and non-missing.")
+    }
 
     # number of variants from saved model
     n_var <- length(model$variant.id)
@@ -1415,6 +1616,7 @@ seqRefitNullGLMM <- function(formula, data, model=NULL,
         nrun = nrun, num.marker = num.marker,
         traceCVcutoff = traceCVcutoff, ratioCVcutoff = ratioCVcutoff,
         verbose = verbose,
+        eventTime = evtime,
         indent = ""
     )
 
@@ -1434,6 +1636,11 @@ seqRefitNullGLMM <- function(formula, data, model=NULL,
     {
         glmm <- .fit_quant(verbose, X.transform, phenovar, data, inv.norm,
             formula, param, tau.init, has.geno, grm.mat, seed, n_var,
+            calc_vr=isTRUE(recalcVR))
+    } else if (trait.type == "survival")
+    {
+        glmm <- .fit_survival(verbose, X.transform, phenovar, data, formula,
+            param, tau.init, has.geno, grm.mat, seed, n_var,
             calc_vr=isTRUE(recalcVR))
     } else
         stop("Invalid 'trait.type'.")

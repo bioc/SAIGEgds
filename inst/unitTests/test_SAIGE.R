@@ -184,3 +184,91 @@ test.saige_gpu_fallback <- function()
 	checkEquals(glmm_cpu$coefficients, glmm_gpu$coefficients,
 		"GPU fallback: coefficients should match CPU", tolerance=1e-6)
 }
+
+
+test.saige_survival <- function()
+{
+	tryCatch(suppressWarnings(RNGkind("Mersenne-Twister", "Inversion",
+		"Rounding")), error=function(e) FALSE)
+
+	# open a GDS file
+	fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds")
+	gdsfile <- seqOpen(fn)
+	on.exit(seqClose(gdsfile))
+
+	# load phenotype and simulate a survival outcome (null wrt the SNPs)
+	phenofn <- system.file("extdata", "pheno.txt.gz", package="SAIGEgds")
+	pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
+	set.seed(100)
+	n <- nrow(pheno)
+	eta <- 0.3*pheno$x1 - 0.2*pheno$x2
+	ftime <- rexp(n, rate=exp(eta)*0.05)
+	ctime <- rexp(n, rate=0.03)
+	pheno$status <- as.integer(ftime <= ctime)
+	pheno$atime  <- pmin(ftime, ctime)
+
+	# fit the survival null model
+	glmm <- seqFitNullGLMM_SPA(status ~ x1 + x2, pheno, gdsfile,
+		trait.type="survival", event.time="atime", verbose=FALSE)
+	checkEquals("survival", glmm$trait.type, "survival trait type")
+	checkTrue(glmm$converged, "survival null model converged")
+	# martingale residuals sum to ~0
+	checkEqualsNumeric(0, sum(glmm$residuals), "martingale residuals sum to 0",
+		tolerance=1e-6)
+	checkTrue(all(glmm$fitted.values > 0), "all Poisson means are positive")
+
+	# fixed effects should be close to coxph (Breslow ties); the frailty model
+	# coefficients differ slightly when the estimated frailty variance > 0
+	if (requireNamespace("survival", quietly=TRUE))
+	{
+		cx <- survival::coxph(survival::Surv(pheno$atime, pheno$status) ~
+			pheno$x1 + pheno$x2, ties="breslow")
+		checkEqualsNumeric(unname(coef(cx)), unname(glmm$coefficients),
+			"survival fixed effects close to coxph(Breslow)", tolerance=0.05)
+	}
+
+	# single-variant association with the Poisson saddlepoint approximation
+	assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=4, verbose=FALSE)
+	checkTrue(all(c("beta","SE","pval","p.norm","converged") %in%
+		colnames(assoc)), "survival output columns")
+	p <- assoc$pval[is.finite(assoc$pval) & assoc$pval > 0]
+	checkTrue(all(p >= 0 & p <= 1), "p-values in [0,1]")
+	# the SPA should engage for some variants
+	checkTrue(any(assoc$method == "SPA"), "Poisson SPA engaged")
+	# well calibrated under the null (genomic inflation near 1)
+	lambda <- median(qchisq(p, 1, lower.tail=FALSE)) / qchisq(0.5, 1)
+	checkTrue(lambda > 0.85 && lambda < 1.15,
+		"genomic inflation factor near 1")
+
+	# aggregate tests: burden & ACAT-V support survival, SKAT & ACAT-O reject
+	units <- SeqArray::seqUnitSlidingWindows(gdsfile, win.size=5000,
+		win.shift=5000)
+	bd <- seqAssocGLMM_Burden(gdsfile, glmm, units, verbose=FALSE)
+	checkTrue(all(bd$pval[is.finite(bd$pval)] >= 0 &
+		bd$pval[is.finite(bd$pval)] <= 1), "survival burden p-values in [0,1]")
+	checkTrue(all(c("p.norm","converged") %in% colnames(bd)),
+		"survival burden output columns")
+	av <- seqAssocGLMM_ACAT_V(gdsfile, glmm, units, verbose=FALSE)
+	checkTrue(all(av$pval[is.finite(av$pval)] >= 0 &
+		av$pval[is.finite(av$pval)] <= 1), "survival ACAT-V p-values in [0,1]")
+	checkException(seqAssocGLMM_SKAT(gdsfile, glmm, units, verbose=FALSE),
+		"SKAT should reject survival", silent=TRUE)
+	checkException(seqAssocGLMM_ACAT_O(gdsfile, glmm, units, verbose=FALSE),
+		"ACAT-O should reject survival", silent=TRUE)
+
+	# refit the survival null model (event.time must be re-supplied)
+	glmm2 <- seqFitNullGLMM_SPA(status ~ x1 + x2, pheno, gdsfile,
+		trait.type="survival", event.time="atime", save.packed.geno=TRUE,
+		verbose=FALSE)
+	rf <- seqRefitNullGLMM(status ~ x1 + x2, pheno, glmm2, event.time="atime",
+		verbose=FALSE)
+	checkEquals("survival", rf$trait.type, "refit survival trait type")
+	checkTrue(rf$converged, "refit survival converged")
+	# with tau fixed (default), refit reproduces the original coefficients to
+	# the inner IRLS tolerance (tol_coef = 1e-4)
+	checkEqualsNumeric(unname(glmm2$coefficients), unname(rf$coefficients),
+		"refit reproduces survival coefficients", tolerance=1e-3)
+	# event.time is required for a survival refit
+	checkException(seqRefitNullGLMM(status ~ x1 + x2, pheno, glmm2,
+		verbose=FALSE), "refit needs event.time", silent=TRUE)
+}

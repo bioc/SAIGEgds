@@ -195,7 +195,8 @@ BEGIN_RCPP
 
 	// trait
 	mod_trait = (TTrait)Rf_asInteger(M["trait"]);
-	if (mod_trait!=TTrait::Quant && mod_trait!=TTrait::Binary)
+	if (mod_trait!=TTrait::Quant && mod_trait!=TTrait::Binary &&
+			mod_trait!=TTrait::Surv)
 		Rf_error("Invalid trait index: %d.", (int)mod_trait);
 
 	// threshold setting
@@ -496,6 +497,13 @@ double SKATExactBin_Work(arma::mat &Z, arma::vec &res, arma::vec &pi1,
 	arma::mat &res_out, int NResampling, int ExactMax, double epsilon,
 	int test_type);
 
+// survival (Cox-via-Poisson) saddlepoint approximation (saige_surv.cpp)
+namespace SAIGE_SURV
+{
+	double Saddle_Prob_Poisson(double Score, double pval_noadj, size_t n,
+		const double mu[], const double g[], bool &converged);
+}
+
 static const int PVAl_METHOD_NORMAL = 1;  // Normal approximation
 static const int PVAL_METHOD_SPA    = 2;  // Saddlepoint approximation
 static const int PVAL_METHOD_ER     = 3;  // Efficient Resampling
@@ -560,10 +568,10 @@ static size_t g_score_test(const double G[], double mac,
 		// t(buf_coeff) %*% XVX %*% buf_coeff
 		var2 = f64_sum_mat_vec(mod_NCoeff, mod_XVX, buf_coeff);
 		// no user-defined GRM
-		if (mod_trait == TTrait::Binary)
+		if (mod_trait == TTrait::Binary || mod_trait == TTrait::Surv)
 		{
 			// var2 = t(buf_coeff) %*% XVX %*% buf_coeff - sum(B^2 .* mu2) +
-			//        sum(g_tilde^2 .* mu2)
+			//        sum(g_tilde^2 .* mu2)   (mu2 = mu for survival)
 			for (size_t i=0; i < nnzero; i++)
 				var2 += (sq(buf_g_tilde[i]) - sq(buf_B[i])) * mod_mu2[IDX_i];
 		} else {
@@ -583,13 +591,36 @@ static size_t g_score_test(const double G[], double mac,
 	}
 	const double var2_u_grm = var2;
 	const double var1 = var2 * c_varRatio;
-	double beta = (mod_trait == TTrait::Binary) ?
-		(S / var1) : (S / var1 * mod_tau[0]);
+	double beta = (mod_trait == TTrait::Quant) ?
+		(S / var1 * mod_tau[0]) : (S / var1);
 
 	double pval_noadj = ::Rf_pchisq(S*S/var1, 1, FALSE, FALSE);
 	double pval = pval_noadj;
 	bool converged = R_FINITE(pval_noadj) != 0;
 	int p_method = PVAl_METHOD_NORMAL;
+
+	// survival (Cox-via-Poisson): saddlepoint approximation on the score
+	if ((mod_trait == TTrait::Surv) &&
+		converged && (pval_noadj <= threshold_pval_spa))
+	{
+		// adjusted genotype over all samples: adj_g = G - XXVX_inv * (XV * G)
+		f64_mul_mat_vec_sp(nnzero, buf_index, mod_NCoeff, mod_XV, &G[0],
+			buf_coeff);
+		f64_sub_mul_mat_vec(mod_NSamp, mod_NCoeff, &G[0], mod_t_XXVX_inv,
+			buf_coeff, buf_adj_g);
+		// Score rescaled by 1/sqrt(varRatio) for the SPA (cf. GATE 0.39)
+		const double score_spa = S * c_varRatioInvSqrt;
+		bool conv_spa = false;
+		double pv = SAIGE_SURV::Saddle_Prob_Poisson(score_spa, pval_noadj,
+			mod_NSamp, mod_mu, buf_adj_g, conv_spa);
+		if (conv_spa && pv > 0)
+		{
+			pval = pv;
+			p_method = PVAL_METHOD_SPA;
+		} else {
+			converged = false;
+		}
+	}
 
 	// need further SPAtest or not, if binary outcome
 	if ((mod_trait == TTrait::Binary) &&
@@ -763,14 +794,16 @@ BEGIN_RCPP
 	if (single_score_test(G, AF, mac, num, beta, SE, pval, pval_noadj,
 		converged, p_method))
 	{
-		const bool binary = (mod_trait == TTrait::Binary);
+		// survival reports pval_noadj + converged like binary (SPA may apply)
+		const bool extra = (mod_trait == TTrait::Binary) ||
+			(mod_trait == TTrait::Surv);
 		// output
-		SEXP rv_ans = NEW_NUMERIC(binary ? 9 : 7);
+		SEXP rv_ans = NEW_NUMERIC(extra ? 9 : 7);
 		double *ans = REAL(rv_ans);
 		ans[0] = AF;    ans[1] = mac;   ans[2] = num;
 		ans[3] = beta;  ans[4] = SE;    ans[5] = pval;
 		ans[6] = p_method;
-		if (binary)
+		if (extra)
 		{
 			ans[7] = pval_noadj;
 			ans[8] = converged ? 1 : 0;
@@ -922,7 +955,8 @@ static void gmat_burden_test(const sp_mat &G0, double beta1, double beta2,
 	out_ans[1] = beta; out_ans[2] = SE;
 	out_ans[3] = pval;
 	out_ans[4] = p_method;
-	if (mod_trait == TTrait::Binary)
+	// survival reports pval_noadj + converged like binary (Poisson SPA may apply)
+	if (mod_trait == TTrait::Binary || mod_trait == TTrait::Surv)
 	{
 		out_ans[5] = pval_noadj;
 		out_ans[6] = converged ? 1 : 0;
@@ -938,8 +972,8 @@ BEGIN_RCPP
 	double *maf = buf_unitsz;
 	double *mac = buf_unitsz + num_unitsz;
 	double *weight = buf_unitsz + 2*num_unitsz;
-	// output object
-	const bool binary = (mod_trait == TTrait::Binary);
+	// output object (survival carries p.norm/converged like binary)
+	const bool binary = (mod_trait == TTrait::Binary || mod_trait == TTrait::Surv);
 	const int ncol = numMaxMAF * num_wbeta + 1;
 	NumericMatrix ans(AGGR_HEAD_LEN + (binary ? 6 : 4), ncol);
 	// get genotype matrix
@@ -1872,6 +1906,9 @@ extern "C" SEXP saige_gpu_init(SEXP);
 extern "C" SEXP saige_gpu_cleanup();
 // forward declarations from saige_permu.cpp
 RcppExport SEXP saige_init_skat_pkg();
+RcppExport SEXP saige_surv_lambda0(SEXP, SEXP, SEXP);
+RcppExport SEXP saige_surv_spa_poisson(SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_surv_wminusU_inv(SEXP, SEXP, SEXP, SEXP, SEXP);
 
 /// initialize the package
 RcppExport void R_init_SAIGEgds(DllInfo *info)
@@ -1923,6 +1960,10 @@ RcppExport void R_init_SAIGEgds(DllInfo *info)
 		// gpu_opencl.cpp
 		CALL(saige_gpu_init, 1),
 		CALL(saige_gpu_cleanup, 0),
+		// saige_surv.cpp
+		CALL(saige_surv_lambda0, 3),
+		CALL(saige_surv_spa_poisson, 4),
+		CALL(saige_surv_wminusU_inv, 5),
 		{ NULL, NULL, 0 }
 	};
 

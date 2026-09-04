@@ -1,4 +1,4 @@
-CHANGES IN VERSION 2.13.1
+CHANGES IN VERSION 2.14.0
 -------------------------
 
     o SPA root-finding hardening in `SPATest.cpp`: the saddlepoint equation
@@ -10,6 +10,15 @@ CHANGES IN VERSION 2.13.1
       and rtsafe is invoked only when it reports non-convergence, so there is no
       added cost on the common path. This removes the rare non-convergence that
       silently reverts the variant to the anticonservative normal approximation
+
+    o `seqFitNullGLMM_SPA()` and `seqAssocGLMM_SPA()` support time-to-event
+      (survival) outcomes via `trait.type="survival"` and a new `event.time`
+      argument, fitting a Cox proportional-hazards frailty model through the
+      Breslow Cox-Poisson equivalence and applying a Poisson saddlepoint
+      approximation in the single-variant score test (the GATE method, Bi et
+      al. 2020); the Cox risk-set information correction (W - U) is used in the
+      variance-ratio estimation via a Woodbury identity
+
 
 CHANGES IN VERSION 2.12.0
 -------------------------

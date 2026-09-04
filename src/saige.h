@@ -107,7 +107,8 @@ namespace SAIGE
 	{
 		Unknown = 0,  //< used for the initial value
 		Quant   = 1,  //< continuous outcomes
-		Binary  = 2   //< binary outcomes, e.g., case-control study
+		Binary  = 2,  //< binary outcomes, e.g., case-control study
+		Surv    = 3   //< time-to-event (survival) outcomes, Cox-via-Poisson
 	};
 
 	/// the number of threads used in the SAIGEgds package

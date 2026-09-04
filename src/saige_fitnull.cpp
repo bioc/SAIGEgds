@@ -39,6 +39,9 @@ using namespace RcppParallel;
 using namespace vectorization;
 using namespace SAIGE;
 
+// survival support (Breslow hazard, Poisson SPA, W-U covariance operator)
+#include "saige_surv.h"
+
 
 // ========================================================================= //
 /// SPAtest
@@ -847,6 +850,57 @@ static dvec PCG_diag_sigma(const dvec &w, const dvec &tau, const dvec &b,
 }
 
 
+/// Survival crossprod: Sigma*b = tau[0]*(W-U)^{-1} b + tau[1]*GRM b
+/// where (W-U)^{-1} is the Cox risk-set covariance applied via Woodbury.
+static dvec get_crossprod_surv(const dcolvec &b, const SAIGE_SURV::WminusU &op,
+	const dvec &tau)
+{
+	const double tau0 = tau[0], tau1 = tau[1];
+	dvec wu = op.apply_inv(b);
+	if (tau1 == 0)
+		return(tau0 * wu);
+	dvec out_b;
+	get_crossprod_b_grm(b, out_b);
+	return(tau0 * wu + tau1 * out_b);
+}
+
+/// PCG for the survival Sigma = tau[0]*(W-U)^{-1} + tau[1]*GRM.
+/// The preconditioner uses the diagonal tau[0]/W + tau[1]*diag(GRM) (the
+/// U-correction is omitted from the preconditioner only; it affects the number
+/// of iterations, not the solution).
+static dvec PCG_surv_sigma(const SAIGE_SURV::WminusU &op, const dvec &w,
+	const dvec &tau, const dvec &b, int maxiterPCG, double tolPCG)
+{
+	dvec r = b, r1, minv;
+	get_diag_sigma(w, tau, minv);
+	minv = 1 / minv;
+
+	dvec z = minv % r, z1;
+	dvec p = z;
+	dvec x;
+	x.zeros(GRM.NumSamp);
+
+	int iter = 0;
+	while ((iter < maxiterPCG) && (sum(r % r) > tolPCG))
+	{
+		iter = iter + 1;
+		dvec Ap = get_crossprod_surv(p, op, tau);
+		double a = sum(r % z) / sum(p % Ap);
+		x += a * p;
+		r1 = r - a * Ap;
+		z1 = minv % r1;
+
+		double bet = sum(z1 % r1) / sum(z % r);
+		p = z1 + bet*p;
+		z = z1;
+		r = r1;
+	}
+	if (iter >= maxiterPCG)
+		Rprintf("PCG (survival) does not converge (may need to increase 'maxiter').\n");
+	return(x);
+}
+
+
 /// Calculate the coefficient of variation for mean of a vector
 inline static double calcCV(const dvec &x)
 {
@@ -1016,23 +1070,66 @@ static dmat get_sigma_X(dvec &w, dvec &tau, dmat &X, int maxiterPCG,
 /// Calculate fixed and random effect coefficients given Y, X, tau
 /// Input:  Y, X, tau, ...
 /// Output: alpha, eta, W, ...
+// Survival (Cox-via-Poisson) working response: given eta, compute the Breslow
+// baseline cumulative hazard, Poisson mean mu = Lambda0*exp(eta), the IRLS
+// working response Y = eta - offset + (y-mu)/mu and weight W = mu.
+// 'surv_status' is the integer event indicator (= y) and 'surv_time' the event
+// time vector; both are NULL/empty for non-survival traits.
+static void surv_working_response(const dvec &y, const dvec &eta,
+	const dvec &offset, const int surv_status[], const double surv_time[],
+	dvec &mu, dvec &Y, dvec &W)
+{
+	const size_t n = y.size();
+	dvec Lambda0(n);
+	SAIGE_SURV::breslow_lambda0(n, eta.memptr(), surv_time, surv_status,
+		Lambda0.memptr());
+	mu = Lambda0 % exp(eta);
+	// Subjects censored before the first event have Lambda0 = mu = 0 and carry
+	// no event information; guard the working response (0/0) and weight (1/W ->
+	// Inf) with a small floor (cf. GATE's W0 = W + 1e-4).
+	Y.set_size(n); W.set_size(n);
+	const double w_floor = 1e-4;
+	for (size_t i=0; i < n; i++)
+	{
+		if (mu[i] > w_floor)
+		{
+			Y[i] = eta[i] - offset[i] + (y[i] - mu[i]) / mu[i];
+			W[i] = mu[i];
+		} else {
+			Y[i] = eta[i] - offset[i];  // no information contribution
+			W[i] = w_floor;
+		}
+	}
+}
+
 static void get_coeff(const dvec &y, const dmat &X, const dvec &tau,
 	const List &family, const dvec &alpha0, const dvec &eta0,
 	const dvec &offset, int maxiterPCG, int maxiter, double tolPCG,
 	bool verbose,
 	dvec &Y, dvec &mu, dvec &alpha, dvec &eta, dvec &W, dmat &cov,
-	dvec &Sigma_iY, dmat &Sigma_iX)
+	dvec &Sigma_iY, dmat &Sigma_iX,
+	int trait=TTrait::Unknown, const int *surv_status=NULL,
+	const double *surv_time=NULL)
 {
 	// initialize
-	const double tol_coef = 0.1;
+	const bool is_surv = (trait == TTrait::Surv);
+	// survival (Cox-via-Poisson) converges to the exact Cox MLE, so iterate the
+	// inner IRLS tighter than the GLMM default (0.1) for accurate residuals
+	const double tol_coef = is_surv ? 1e-4 : 0.1;
 	Function fc_linkinv = wrap(family["linkinv"]);
 	Function fc_mu_eta = wrap(family["mu.eta"]);
 	Function fc_variance = wrap(family["variance"]);
 
-	mu = as<dvec>(fc_linkinv(eta0));
-	dvec mu_eta = as<dvec>(fc_mu_eta(eta0));
-	Y = eta0 - offset + (y - mu)/mu_eta;
-	W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+	dvec mu_eta;
+	if (is_surv)
+	{
+		surv_working_response(y, eta0, offset, surv_status, surv_time, mu, Y, W);
+	} else {
+		mu = as<dvec>(fc_linkinv(eta0));
+		mu_eta = as<dvec>(fc_mu_eta(eta0));
+		Y = eta0 - offset + (y - mu)/mu_eta;
+		W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+	}
 
 	// iterate ...
 	dvec a0 = alpha0;
@@ -1045,10 +1142,16 @@ static void get_coeff(const dvec &y, const dmat &X, const dvec &tau,
 		);
 
 		eta += offset;
-		mu = as<dvec>(fc_linkinv(eta));
-		mu_eta = as<dvec>(fc_mu_eta(eta));
-		Y = eta - offset + (y - mu)/mu_eta;
-		W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+		if (is_surv)
+		{
+			surv_working_response(y, eta, offset, surv_status, surv_time,
+				mu, Y, W);
+		} else {
+			mu = as<dvec>(fc_linkinv(eta));
+			mu_eta = as<dvec>(fc_mu_eta(eta));
+			Y = eta - offset + (y - mu)/mu_eta;
+			W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+		}
 
 		if (max(abs(alpha - a0)/(abs(alpha) + abs(a0) + tol_coef)) < tol_coef)
 			break;
@@ -1210,13 +1313,29 @@ BEGIN_RCPP
 	else
 		offset = as<dvec>(fit0["offset"]);
 
+	// survival (time-to-event): event time + integer status (= y)
+	const double *surv_time = NULL;
+	std::vector<int> surv_status;
+	if (trait == TTrait::Surv)
+	{
+		if (Rf_isNull(param["eventTime"]))
+			Rf_error("'eventTime' is required for survival trait.");
+		SEXP et = param["eventTime"];
+		if (Rf_length(et) != n)
+			Rf_error("Length of 'eventTime' does not match the sample size.");
+		surv_time = REAL(et);
+		surv_status.resize(n);
+		for (int i=0; i < n; i++) surv_status[i] = (int)lround(y[i]);
+	}
+	const int *surv_st = surv_status.empty() ? NULL : &surv_status[0];
+
 	List family = fit0["family"];
 	Function fc_mu_eta = wrap(family["mu.eta"]);
 	dvec eta = as<dvec>(fit0["linear.predictors"]);
 	dvec eta0 = eta;
 	dvec mu = as<dvec>(fit0["fitted.values"]);
-	dvec mu_eta = as<dvec>(fc_mu_eta(eta0));
-	dvec Y = eta - offset + (y - mu) / mu_eta;
+	dvec mu_eta = (trait==TTrait::Surv) ? eta0 : as<dvec>(fc_mu_eta(eta0));
+	dvec Y = (trait==TTrait::Surv) ? eta : (eta - offset + (y - mu) / mu_eta);
 	dvec alpha0 = as<dvec>(fit0["coefficients"]);
 	dvec alpha = alpha0;
 	dmat cov;
@@ -1236,7 +1355,8 @@ BEGIN_RCPP
 			y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
 			tolPCG, verbose,
 			// output
-			re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX
+			re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX,
+			trait, surv_st, surv_time
 		);
 		PARALLEL_THREAD_BLOCK_END
 		return List::create(
@@ -1265,7 +1385,8 @@ BEGIN_RCPP
 		y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
 		tolPCG, verbose,
 		// output
-		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX
+		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX,
+		trait, surv_st, surv_time
 	);
 
 	double YPAPY[2], Trace[2];
@@ -1286,6 +1407,7 @@ BEGIN_RCPP
 			break;
 		}
 	case TTrait::Binary:
+	case TTrait::Surv:
 		{
 			double AI;
 			get_AI_score(
@@ -1319,7 +1441,8 @@ BEGIN_RCPP
 				y, X, tau0, family, alpha0, eta0, offset, maxiterPCG, maxiter,
 				tolPCG, verbose,
 				// output
-				re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX
+				re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX,
+				trait, surv_st, surv_time
 			);
 			// update tau
 			switch (trait)
@@ -1330,6 +1453,7 @@ BEGIN_RCPP
 					traceCVcutoff, seed);
 				break;
 			case TTrait::Binary:
+			case TTrait::Surv:
 				tau = fitglmmaiRPCG(re_Y, X, re_W, tau0, re_Sigma_iY,
 					re_Sigma_iX, re_cov, nrun, maxiterPCG, tolPCG, tol,
 					traceCVcutoff, seed);
@@ -1387,7 +1511,7 @@ BEGIN_RCPP
 				throw std::overflow_error("Sigma_E = 0, model not converged!");
 			}
 		}
-		if (trait==TTrait::Binary && tau[1]==0)
+		if ((trait==TTrait::Binary || trait==TTrait::Surv) && tau[1]==0)
 			break;
 		if (max(abs(tau-tau0) / (abs(tau)+abs(tau0)+tol)) < tol)
 			break;
@@ -1398,7 +1522,8 @@ BEGIN_RCPP
 		y, X, tau, family, alpha0, eta0, offset, maxiterPCG, maxiter,
 		tolPCG, false,
 		// output
-		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX
+		re_Y, re_mu, re_alpha, re_eta, re_W, re_cov, re_Sigma_iY, re_Sigma_iX,
+		trait, surv_st, surv_time
 	);
 	cov = re_cov; alpha = re_alpha; eta = re_eta;
 	Y = re_Y; mu = re_mu;
@@ -1520,13 +1645,41 @@ BEGIN_RCPP
 
 	dvec eta = as<dvec>(glmm["linear.predictors"]);
 	dvec mu = as<dvec>(glmm["fitted.values"]);
-	dvec mu_eta = as<dvec>(fc_mu_eta(eta));
-	dvec W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+	dvec W;
+	if (trait == TTrait::Surv)
+	{
+		W = mu;  // Poisson working weight (Cox-via-Poisson)
+	} else {
+		dvec mu_eta = as<dvec>(fc_mu_eta(eta));
+		W = (mu_eta % mu_eta) / as<dvec>(fc_variance(mu));
+	}
 	dvec tau = as<dvec>(glmm["tau"]);
 	dmat X1 = as<dmat>(obj_noK["X1"]);
-	dmat Sigma_iX = get_sigma_X(W, tau, X1, maxiterPCG, tolPCG);
-
 	dvec y = as<dvec>(fit0["y"]);
+
+	// survival: build the Cox risk-set covariance operator (W-U) once
+	SAIGE_SURV::WminusU surv_op;
+	const bool is_surv = (trait == TTrait::Surv);
+	if (is_surv)
+	{
+		if (Rf_isNull(param["eventTime"]))
+			Rf_error("'eventTime' is required for the survival variance ratio.");
+		std::vector<int> st(y.size());
+		for (size_t i=0; i < y.size(); i++) st[i] = (int)lround(y[i]);
+		surv_op.build(y.size(), eta.memptr(), REAL(param["eventTime"]),
+			&st[0], mu.memptr());
+	}
+
+	dmat Sigma_iX(X1.n_rows, X1.n_cols);
+	if (is_surv)
+	{
+		for (unsigned i=0; i < X1.n_cols; i++)
+			Sigma_iX.col(i) = PCG_surv_sigma(surv_op, W, tau, X1.col(i),
+				maxiterPCG, tolPCG);
+	} else {
+		Sigma_iX = get_sigma_X(W, tau, X1, maxiterPCG, tolPCG);
+	}
+
 	dmat noK_XXVX_inv = as<dmat>(obj_noK["XXVX_inv"]);
 	dmat noK_XV = as<dmat>(obj_noK["XV"]);
 
@@ -1580,7 +1733,9 @@ BEGIN_RCPP
 
 				// adjusted genotypes
 				dvec G = G0 - noK_XXVX_inv * (noK_XV * G0);
-				dvec Sigma_iG = PCG_diag_sigma(W, tau, G, maxiterPCG, tolPCG);
+				dvec Sigma_iG = is_surv ?
+					PCG_surv_sigma(surv_op, W, tau, G, maxiterPCG, tolPCG) :
+					PCG_diag_sigma(W, tau, G, maxiterPCG, tolPCG);
 				dvec adjG = Sigma_iX * mat_inv(X1.t() * Sigma_iX) * X1.t() * Sigma_iG;
 
 				// variance ratio
@@ -1599,6 +1754,8 @@ BEGIN_RCPP
 							var2 = sum(G % G) / tau[0]; break;
 						case TTrait::Binary:
 							var2 = sum(mu % (1 - mu) % G % G); break;
+						case TTrait::Surv:
+							var2 = sum(mu % G % G); break;  // Poisson variance V=mu
 						default:
 							throw std::invalid_argument("Invalid trait.");
 					}

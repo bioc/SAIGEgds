@@ -167,6 +167,25 @@ AggrParamBeta <- structure(c(1,1,1,25), dim=c(2L,2L),
 # SAIGE burden tests
 #
 
+# .check_modobj() plus a survival veto, for SKAT / ACAT-O. The GATE
+# method (Bi et al. 2020) defines the Cox-via-Poisson score test + saddlepoint
+# approximation only for single-variant statistics; this carries over to the
+# burden test (a weighted collapse tested as one score) and to ACAT-V (a Cauchy
+# combination of single-variant p-values), but NOT to the SKAT variance-
+# component test, which has no published Poisson/Cox analogue. ACAT-O combines
+# Burden + ACAT-V + SKAT, so it is unavailable for survival as well.
+.check_modobj_no_surv <- function(modobj, verbose)
+{
+    modobj <- .check_modobj(modobj, verbose)
+    if (!is.null(modobj$trait.type) && modobj$trait.type == "survival")
+        stop("SKAT and ACAT-O do not support trait.type='survival': the GATE ",
+            "method defines the score/saddlepoint test only for single-variant ",
+            "and burden-style collapsing, and the SKAT variance-component test ",
+            "has no Poisson/Cox analogue. Use seqAssocGLMM_Burden() or ",
+            "seqAssocGLMM_ACAT_V() for survival outcomes.")
+    modobj
+}
+
 .scan_fc_aggr_burden <- function(g, maxMAF)
     .Call(saige_burden_test_pval, g, maxMAF)
 
@@ -192,7 +211,7 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
     if (verbose)
         .cat(.crayon_inverse("SAIGE burden analysis:"))
 
-    # check model
+    # check model (survival supported: burden = single collapsed score test)
     modobj <- .check_modobj(modobj, verbose)
     var.ratio <- .get_var_ratio(modobj)
     if (!length(maxMAF)) maxMAF <- 1
@@ -304,7 +323,7 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
         Add("SE", .mapply(rv, 9L))
         Add("pval", .mapply(rv, 10L))
         Add("method", .pval_method(.mapply(rv, 11L)))
-        if (modobj$trait.type == "binary")
+        if (modobj$trait.type %in% c("binary", "survival"))
         {
             Add("p.norm", .mapply(rv, 12L))
             Add("converged", .mapply(rv, 13L)==1L)
@@ -320,7 +339,7 @@ seqAssocGLMM_Burden <- function(gdsfile, modobj, units, maxMAF=0.01,
         ans$SE <- .mapply(rv, 9L)
         ans$pval <- .mapply(rv, 10L)
         ans$method <- .pval_method(.mapply(rv, 11L))
-        if (modobj$trait.type == "binary")
+        if (modobj$trait.type %in% c("binary", "survival"))
         {
             ans$p.norm <- .mapply(rv, 12L)
             ans$converged <- .mapply(rv, 13L)==1L
@@ -397,7 +416,7 @@ seqAssocGLMM_SKAT <- function(gdsfile, modobj, units, maxMAF=0.01,
         .cat(.crayon_inverse("SAIGE SKAT analysis:"))
 
     # check model
-    modobj <- .check_modobj(modobj, verbose)
+    modobj <- .check_modobj_no_surv(modobj, verbose)
     if (is.null(modobj$Sigma_inv) || is.null(modobj$chol_inv_X_Sigma))
     {
         stop("A (sparse) genetic relationship matrix 'grm.mat' should be ",
@@ -596,7 +615,7 @@ seqAssocGLMM_ACAT_V <- function(gdsfile, modobj, units, maxMAF=0.01,
     if (verbose)
         .cat(.crayon_inverse("SAIGE ACAT-V analysis:"))
 
-    # check model
+    # check model (survival supported: ACAT-V = Cauchy combination of p-values)
     modobj <- .check_modobj(modobj, verbose)
     var.ratio <- .get_var_ratio(modobj)
     if (!length(maxMAF)) maxMAF <- 1
@@ -769,7 +788,7 @@ seqAssocGLMM_ACAT_O <- function(gdsfile, modobj, units, maxMAF=0.01,
         .cat(.crayon_inverse("SAIGE ACAT-O analysis:"))
 
     # check model
-    modobj <- .check_modobj(modobj, verbose)
+    modobj <- .check_modobj_no_surv(modobj, verbose)
     if (is.null(modobj$Sigma_inv) || is.null(modobj$chol_inv_X_Sigma))
     {
         stop("A (sparse) genetic relationship matrix 'grm.mat' should be ",
@@ -979,7 +998,7 @@ seqAssocGLMM_ACAT_O_GT <- function(gt_lst, modobj, maxMAF=0.01,
         .cat(.crayon_inverse("SAIGE ACAT-O analysis (in-memory):"))
 
     # check model
-    modobj <- .check_modobj(modobj, verbose)
+    modobj <- .check_modobj_no_surv(modobj, verbose)
     if (is.null(modobj$Sigma_inv) || is.null(modobj$chol_inv_X_Sigma))
     {
         stop("A (sparse) genetic relationship matrix 'grm.mat' should be ",

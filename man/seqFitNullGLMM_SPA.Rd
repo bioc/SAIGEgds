@@ -9,7 +9,8 @@ relationship matrix (GRM).
 
 \usage{
 seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
-    trait.type=c("binary", "quantitative"), sample.col="sample.id", maf=0.01,
+    trait.type=c("binary", "quantitative", "survival"), event.time=NULL,
+    sample.col="sample.id", maf=0.01,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
     variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
     inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
@@ -19,7 +20,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     geno.sparse=TRUE, use.gpu=FALSE, save.packed.geno=FALSE, num.thread=1L,
     model.savefn="", seed=200L, fork.loading, parallel.loading=FALSE,
     verbose=TRUE)
-seqRefitNullGLMM(formula, data, model=NULL, sample.col="sample.id",
+seqRefitNullGLMM(formula, data, model=NULL, event.time=NULL,
+    sample.col="sample.id",
     inv.norm=c("residuals", "quant", "none"), use.offset=FALSE,
     X.transform=TRUE, tau.update=FALSE, recalcVR=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
@@ -41,7 +43,18 @@ seqRefitNullGLMM(formula, data, model=NULL, sample.col="sample.id",
         or \code{TRUE}, call \code{seqFitSparseGRM()} to get a sparse GRM;
         see details}
     \item{trait.type}{"binary" for binary outcomes, "quantitative" for
-        continuous outcomes}
+        continuous outcomes, or "survival" for time-to-event outcomes fitted
+        with a Cox proportional-hazards frailty model (via the Breslow
+        Cox-Poisson equivalence, cf. the GATE method); for "survival" the
+        response in \code{formula} is the 0/1 event status (1=event,
+        0=censored) and \code{event.time} gives the follow-up time}
+    \item{event.time}{only used when \code{trait.type="survival"}: a column
+        name in \code{data} giving the non-negative event/censoring time; the
+        intercept is removed (absorbed by the baseline hazard) so a GRM (via
+        \code{gdsfile} or \code{grm.mat}) is required and \code{X.transform}/
+        \code{use.offset} are forced to \code{FALSE}. For
+        \code{seqRefitNullGLMM()} the event time is not stored in \code{model}
+        and must be re-supplied here (as a column of the new \code{data})}
     \item{sample.col}{the column name of sample IDs corresponding to the GDS
         file}
     \item{maf}{minor allele frequency threshold for genotypes in \code{gdsfile}
@@ -165,7 +178,7 @@ usage.
         'var2' (a variance estimate without accounting for estimated random
         effects) and 'ratio' (var1/var2, estimated variance ratio for variance
         approximation);}
-    \item{trait.type}{either "binary" or "quantitative";}
+    \item{trait.type}{"binary", "quantitative" or "survival";}
     \item{sample.id}{the sample IDs used in the model fitting;}
     \item{variant.id}{the variant IDs used in the model fitting.}
 }
@@ -181,6 +194,11 @@ large-scale genetic association studies. Nat Genet (2018). Sep;50(9):1335-1341.
 Gabrielsen ME, Daly MJ, Neale BM, Hveem K, Abecasis GR, Willer CJ, et al.
 Scalable generalized linear mixed model for region-based association tests
 in large biobanks and cohorts. Nat Genet. 2020; 52: 634-9.
+
+    Bi W, Fritsche LG, Mukherjee B, Kim S, Lee S. A fast and accurate method
+for genome-wide time-to-event data analysis and its application to UK Biobank.
+Am J Hum Genet. 2020; 107(2): 222-233. (the GATE method, used for
+\code{trait.type="survival"})
 }
 \author{Xiuwen Zheng}
 \seealso{
@@ -200,6 +218,15 @@ head(pheno)
 # fit the null model
 glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary")
 glmm
+
+# fit a survival null model (Cox frailty via the GATE method):
+# the response is the 0/1 event status and 'event.time' the follow-up time
+set.seed(100)
+pheno$status <- rbinom(nrow(pheno), 1, 0.5)         # event indicator
+pheno$atime  <- rexp(nrow(pheno), exp(0.3*pheno$x1))  # event/censoring time
+survmod <- seqFitNullGLMM_SPA(status ~ x1 + x2, pheno, gdsfile,
+    trait.type="survival", event.time="atime")
+survmod
 
 # close the GDS file
 seqClose(gdsfile)
