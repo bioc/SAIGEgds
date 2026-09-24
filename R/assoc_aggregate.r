@@ -168,7 +168,7 @@ AggrParamBeta <- structure(c(1,1,1,25), dim=c(2L,2L),
 #
 
 # .check_modobj() plus a survival veto, for SKAT / ACAT-O. The GATE
-# method (Bi et al. 2020) defines the Cox-via-Poisson score test + saddlepoint
+# method (Dey et al. 2022) defines the Cox-via-Poisson score test + saddlepoint
 # approximation only for single-variant statistics; this carries over to the
 # burden test (a weighted collapse tested as one score) and to ACAT-V (a Cauchy
 # combination of single-variant p-values), but NOT to the SKAT variance-

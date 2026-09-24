@@ -1,0 +1,292 @@
+---
+title: "Set-based Rare-Variant Association Analysis in SAIGEgds"
+author: "Xiuwen Zheng"
+date: "Sep, 2026"
+header-includes:
+    - \usepackage{array}
+output:
+    BiocStyle::html_document:
+        toc: true
+        toc_float: true
+        number_sections: true
+    BiocStyle::pdf_document:
+        toc: true
+        toc_depth: 3
+vignette: >
+    %\VignetteIndexEntry{SAIGEgds Tutorial (set-based rare-variant tests)}
+    %\VignetteDepends{SAIGEgds}
+    %\VignetteKeywords{rare variants, set-based tests, SAIGE-GENE, sparse GRM}
+    %\VignetteEngine{knitr::rmarkdown}
+    %\VignetteEncoding{UTF-8}
+---
+
+# Introduction
+
+Set-based tests aggregate rare variants within a gene or genomic region. They can
+gain power over single-variant tests when several variants in the set affect the
+same phenotype, but low minor allele counts make the tests particularly sensitive
+to sample relatedness. SAIGEgds implements Burden, SKAT, ACAT-V and ACAT-O tests in
+the SAIGE/SAIGE-GENE framework [1,2].
+
+For set-based analysis, two complementary genetic relationship matrices (GRMs) are
+used in the same null model:
+
+* the **full GRM**, represented by a set of common, preferably LD-pruned markers,
+  models the genome-wide polygenic effect and population/sample structure during
+  null-model fitting;
+* the **sparse GRM** retains the diagonal and related sample pairs above a chosen
+  relatedness threshold. It supplies the covariance projection needed by SKAT and
+  ACAT-O and improves the calibration of rare-variant statistics in samples that
+  include relatives.
+
+The sparse GRM supplements rather than replaces the full GRM. Its main benefit is
+more accurate modeling of rare-variant score covariance; it does not guarantee a
+power increase for every phenotype or variant set.
+
+This vignette demonstrates a binary-trait workflow. Quantitative traits use the
+same functions with `trait.type="quantitative"`. For survival outcomes, only
+Burden and ACAT-V are currently available; see the companion survival vignette.
+
+# Input data
+
+Three inputs are kept separate in production analyses:
+
+1. phenotype and covariate data with one row per sample;
+2. common, LD-pruned markers for the full and sparse GRMs;
+3. rare variants to be grouped and tested, usually from exome or whole-genome
+   sequencing data.
+
+The sample IDs must be shared across these inputs. Their original orders do not
+need to match because SAIGEgds matches samples by ID.
+
+```{r message=FALSE}
+library(Matrix)
+library(SeqArray)
+library(SAIGEgds)
+
+# Common markers used by the GRMs: 1,000 samples and 10,000 SNPs
+grm.fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds")
+
+# For this compact example, variants to group and test use the same file.
+# Production analyses should use a separate exome or whole-genome GDS file.
+assoc.fn <- grm.fn
+
+# Binary phenotype and covariates
+pheno.fn <- system.file("extdata", "pheno.txt.gz", package="SAIGEgds")
+pheno <- read.table(pheno.fn, header=TRUE, as.is=TRUE)
+head(pheno)
+table(pheno$y)
+```
+
+# Constructing the two GRMs
+
+## Full GRM
+
+The full GRM does not need to be materialized as an $N \times N$ matrix. Passing
+`grm.fn` to `seqFitNullGLMM_SPA()` loads the standardized marker genotypes and
+computes full-GRM matrix-vector products internally. In a real analysis, the GRM
+marker file should contain high-quality common variants pruned for linkage
+disequilibrium across the genome.
+
+## Sparse GRM
+
+`seqFitSparseGRM()` first uses a random marker subset to identify potentially
+related pairs and then recalculates those entries using the full candidate marker
+set. With the default `rel.cutoff=0.125`, entries below the threshold are omitted
+apart from the diagonal.
+
+```{r eval=FALSE}
+grm.gds <- seqOpen(grm.fn)
+sp.grm <- seqFitSparseGRM(grm.gds, sample.id=pheno$sample.id,
+    nsnp.sub.random=2000, rel.cutoff=0.125, num.thread=2)
+seqClose(grm.gds)
+
+# Save once and reuse for phenotypes measured in the same cohort
+saveRDS(sp.grm, "sparse_grm.rds")
+```
+
+The package includes a sparse GRM precomputed by this workflow so the vignette
+does not rebuild it each time.
+
+```{r}
+sp.grm.fn <- system.file("extdata", "grm1k_10k_sp_grm.rds",
+    package="SAIGEgds")
+sp.grm <- readRDS(sp.grm.fn)
+
+dim(sp.grm)
+class(sp.grm)
+nnzero(sp.grm)
+nnzero(sp.grm) / prod(dim(sp.grm))
+stopifnot(setequal(colnames(sp.grm), pheno$sample.id))
+```
+
+For a one-step analysis, `grm.mat=TRUE` in `seqFitNullGLMM_SPA()` calls
+`seqFitSparseGRM()` internally. Constructing the sparse GRM explicitly is usually
+preferable when many phenotypes share the same samples because the matrix can be
+saved and reused.
+
+# Fitting the null model
+
+Supply both GRMs in one call: `gdsfile=grm.fn` provides the full GRM and
+`grm.mat=sp.grm` provides the sparse GRM. `use.cateMAC=TRUE` estimates variance
+ratios by minor allele count (MAC) category instead of applying one global ratio;
+this is useful when the tested variants span ultra-rare through low-frequency
+categories.
+
+```{r}
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno,
+    gdsfile=grm.fn, grm.mat=sp.grm,
+    trait.type="binary", sample.col="sample.id",
+    use.cateMAC=TRUE, num.thread=2, verbose=FALSE)
+```
+
+Check convergence and confirm that the sparse-GRM projection components were
+stored. SKAT and ACAT-O require these components.
+
+```{r}
+glmm$converged
+glmm$tau
+head(glmm$var.ratio)
+c(Sigma_inv = !is.null(glmm$Sigma_inv),
+    chol_inv_X_Sigma = !is.null(glmm$chol_inv_X_Sigma))
+```
+
+The equivalent one-step call below derives the sparse GRM from the full-GRM marker
+file during fitting:
+
+```{r eval=FALSE}
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno,
+    gdsfile=grm.fn, grm.mat=TRUE,
+    trait.type="binary", sample.col="sample.id",
+    use.cateMAC=TRUE, nsnp.sub.random=2000, rel.cutoff=0.125)
+```
+
+# Defining variant sets
+
+The aggregate-test functions take a `SeqUnitListClass` object. Here, sliding
+windows over the bundled genotype file provide a compact reproducible example. In
+a gene-based analysis, use a separate exome or whole-genome association GDS file
+and create the same type of object from gene boundaries and functional
+annotations, with one unit per gene or annotation mask.
+
+```{r}
+assoc.gds <- seqOpen(assoc.fn)
+units <- seqUnitSlidingWindows(assoc.gds, win.size=5000, win.shift=5000)
+units
+```
+
+Variants are filtered within each set by the `maxMAF` and `missing` arguments of
+the association functions. Multiple MAF thresholds can be tested in one call.
+The default beta weights include Beta(1,1) and Beta(1,25), the latter upweighting
+rarer variants. Variants with `MAC <= collapse.mac` are collapsed before SKAT,
+ACAT-V and ACAT-O calculations.
+
+# Set-based association tests
+
+## Burden
+
+The burden test collapses variants into a single weighted genotype score. It is
+most powerful when most causal effects in a set point in the same direction.
+
+```{r}
+burden <- seqAssocGLMM_Burden(assoc.gds, glmm, units,
+    maxMAF=c(0.01, 0.005), parallel=1, verbose=FALSE)
+burden
+```
+
+## SKAT
+
+SKAT is a variance-component test that allows effect directions and magnitudes to
+vary. The sparse-GRM projection in the null model is required to construct the
+within-set covariance matrix while accounting for related samples.
+
+```{r}
+skat <- seqAssocGLMM_SKAT(assoc.gds, glmm, units,
+    maxMAF=c(0.01, 0.005), collapse.mac=10, parallel=1, verbose=FALSE)
+skat
+```
+
+## ACAT-V
+
+ACAT-V combines variant-level p-values using a Cauchy combination. It can be
+effective when only a small fraction of variants in a set are causal.
+
+```{r}
+acatv <- seqAssocGLMM_ACAT_V(assoc.gds, glmm, units,
+    maxMAF=c(0.01, 0.005), collapse.mac=10, parallel=1, verbose=FALSE)
+acatv
+```
+
+## ACAT-O
+
+ACAT-O combines Burden, SKAT and ACAT-V results, providing an omnibus test that is
+robust to different genetic architectures. Because SKAT is one of its components,
+ACAT-O also requires the sparse GRM in the fitted null model.
+
+```{r}
+acato <- seqAssocGLMM_ACAT_O(assoc.gds, glmm, units,
+    maxMAF=c(0.01, 0.005), collapse.mac=10, parallel=1, verbose=FALSE)
+acato
+```
+
+```{r echo=FALSE}
+seqClose(assoc.gds)
+```
+
+# Choosing a test
+
+| Test | Alternative captured well | Sparse GRM required |
+|:--|:--|:--:|
+| Burden | many effects in the same direction | no |
+| SKAT | effects vary in direction or magnitude | yes |
+| ACAT-V | a small fraction of variants drive the signal | no |
+| ACAT-O | unknown architecture; omnibus combination | yes |
+
+: Comparison of set-based tests.
+
+Although Burden and ACAT-V can run without a sparse GRM, using the same full +
+sparse null model for all four tests gives a consistent relatedness adjustment.
+Report the tested annotation mask, MAF threshold, weight, ultra-rare collapsing
+threshold and test name together with each p-value.
+
+# Practical recommendations
+
+* Build the full and sparse GRMs from common, high-quality, LD-pruned markers, not
+  from the rare variants being tested.
+* Reuse one sparse GRM only when the analyzed sample cohort is the same. SAIGEgds
+  subsets and reorders a named matrix, but its row and column names must be sample
+  IDs.
+* Inspect the sparse matrix density. A very low cutoff can make it nearly dense,
+  increasing memory and factorization time; a very high cutoff can omit meaningful
+  relatedness.
+* Use category-specific variance ratios (`use.cateMAC=TRUE`) when the analysis
+  includes very low MAC variants, and retain the default simulated markers for MAC
+  categories with too few observed GRM markers.
+* Define biologically motivated masks before association testing. Common choices
+  include loss-of-function alone and loss-of-function plus damaging missense
+  variants.
+* Save large results directly with `res.savefn` and distribute units with the
+  `parallel` argument in production runs.
+
+# Session Information
+
+```{r}
+sessionInfo()
+```
+
+# References
+
+1. Zhou W, Nielsen JB, Fritsche LG, et al. Efficiently controlling for case-control imbalance and sample relatedness in large-scale genetic association studies. *Nat Genet* (2018). 50:1335-1341. [DOI: 10.1038/s41588-018-0184-y](https://doi.org/10.1038/s41588-018-0184-y).
+2. Zhou W, Zhao Z, Nielsen JB, et al. Scalable generalized linear mixed model for region-based association tests in large biobanks and cohorts. *Nat Genet* (2020). 52:634-639. [DOI: 10.1038/s41588-020-0621-6](https://doi.org/10.1038/s41588-020-0621-6).
+3. Liu Y, Chen S, Li Z, Morrison AC, Boerwinkle E, Lin X. ACAT: A fast and powerful p value combination method for rare-variant analysis in sequencing studies. *Am J Hum Genet* (2019). 104:410-421. [DOI: 10.1016/j.ajhg.2019.01.002](https://doi.org/10.1016/j.ajhg.2019.01.002).
+
+# See also
+
+Single-variant tests are covered in *SAIGEgds Tutorial (single variant tests)*
+(`vignette("SAIGEgds", package="SAIGEgds")`). Time-to-event outcomes are covered
+in *SAIGEgds Tutorial (time-to-event outcomes)*
+(`vignette("SAIGEgds_surv", package="SAIGEgds")`).
+
+[SeqArray](https://www.bioconductor.org/packages/SeqArray): Data Management of Large-scale Whole-genome Sequence Variant Calls
+
+[SNPRelate](https://www.bioconductor.org/packages/SNPRelate): Parallel Computing Toolset for Relatedness and Principal Component Analysis of SNP Data

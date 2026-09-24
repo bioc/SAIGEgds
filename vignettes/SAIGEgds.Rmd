@@ -1,13 +1,15 @@
 ---
 title: "Scalable Generalized Mixed Models in PheWAS using SAIGEgds"
-author: "Xiuwen Zheng (Genomics Research Center, AbbVie, North Chicago, US)"
-date: "Mar, 2020"
+author: "Xiuwen Zheng"
+date: "Sep, 2026"
+header-includes:
+    - \usepackage{array}
 output:
-    html_document:
-        theme: spacelab
+    BiocStyle::html_document:
         toc: true
+        toc_float: true
         number_sections: true
-    pdf_document:
+    BiocStyle::pdf_document:
         toc: true
         toc_depth: 3
 vignette: >
@@ -18,19 +20,13 @@ vignette: >
     %\VignetteEncoding{UTF-8}
 ---
 
-.
+# Introduction
 
-.
+A phenome-wide association study (PheWAS) is a powerful tool for the discovery and replication of genetic associations across many phenotypes. Large biobanks provide deep genomic and phenotypic data, but testing thousands of traits against whole-genome variants remains computationally demanding. SAIGE (scalable and accurate implementation of generalized mixed models [2]) addresses case-control imbalance and sample relatedness in association studies.
 
-```{r echo=FALSE}
-options(width=110)
-```
+SAIGEgds is a high-performance implementation of the SAIGE framework using Genomic Data Structure (GDS) files [1,3]. Its optimized C++ code takes advantage of sparse genotype dosages and supports integer genotypes and numeric imputed dosages. SAIGEgds supports binary, quantitative and time-to-event outcomes, as well as single-variant and set-based association tests. This vignette focuses on the binary-trait, single-variant workflow; time-to-event outcomes are covered in the companion survival vignette.
 
-A phenome-wide association study (PheWAS) is known to be a powerful tool in discovery and replication of genetic association studies. The recent development in the UK Biobank resource with deep genomic and phenotyping data has provided unparalleled research opportunities. To reduce the computational complexity and cost of PheWAS, the SAIGE (scalable and accurate implementation of generalized mixed model [2]) method was proposed recently, controlling for case-control imbalance and sample structure in single variant association studies. However, it is still computationally challenging to analyze the associations of thousands of phenotypes with whole-genome variant data, especially for disease diagnoses using the ICD-10 codes of deep phenotyping.
-
-Here we develop a new high-performance statistical package (SAIGEgds) for large-scale PheWAS using mixed models [1]. In this package, the SAIGE method is implemented with optimized C++ codes taking advantage of sparse structure of genotype dosages. SAIGEgds supports efficient genomic data structure (GDS) files [3] including both integer genotypes and numeric imputed dosages. Benchmarks using the UK Biobank White British genotype data (N=430K) with coronary heart disease and simulated cases, show that SAIGEgds is 5 to 6 times faster than the SAIGE R package in the steps of fitting null models and p-value calculations. When used in conjunction with high-performance computing (HPC) clusters and/or cloud resources, SAIGEgds provides an efficient analysis pipeline for biobank-scale PheWAS.
-
-.
+Benchmarks using UK Biobank White British genotype data ($N=430\mathrm{K}$) with coronary heart disease and simulated case-control outcomes showed that SAIGEgds was 5 to 6 times faster than the SAIGE R package for null-model fitting and p-value calculation. Together with high-performance computing (HPC) clusters or cloud resources, it provides an efficient pipeline for biobank-scale PheWAS.
 
 # Installation
 
@@ -41,13 +37,9 @@ if (!requireNamespace("BiocManager", quietly=TRUE))
     install.packages("BiocManager")
 BiocManager::install("SAIGEgds")
 ```
-The `BiocManager::install()` approach may require that you build from source, i.e. `make` and compilers must be installed on your system -- see the [R FAQ](http://cran.r-project.org/faqs.html) for your operating system; you may also need to install dependencies manually.
+The `BiocManager::install()` approach may build the package from source. In that case, `make` and a suitable compiler toolchain must be installed; see the [R FAQ](https://cran.r-project.org/faqs.html) for platform-specific instructions.
 
-.
-
-.
-
-# Examples
+# Workflow
 
 ```{r message=FALSE}
 library(SeqArray)
@@ -57,14 +49,14 @@ library(SAIGEgds)
 (geno_fn <- seqExampleFileName("KG_Phase1"))
 ```
 
-## Preparing SNP data for genetic relationship matrix
+## Preparing SNP data for the genetic relationship matrix
 
 ```{r}
 # open a SeqArray file in the package (1000 Genomes Phase1, chromosome 22)
 gds <- seqOpen(geno_fn)
 ```
 
-The LD pruning is provided by [snpgdsLDpruning()](https://rdrr.io/bioc/SNPRelate/man/snpgdsLDpruning.html) in the package [SNPRelate](http://bioconductor.org/packages/SNPRelate):
+The LD pruning is provided by [snpgdsLDpruning()](https://rdrr.io/bioc/SNPRelate/man/snpgdsLDpruning.html) in the package [SNPRelate](https://bioconductor.org/packages/SNPRelate):
 ```{r}
 library(SNPRelate)
 
@@ -76,7 +68,7 @@ snpset.id <- unlist(snpset, use.names=FALSE)  # get the variant IDs of a LD-prun
 head(snpset.id)
 ```
 
-Create a genotype file for genetic relationship matrix (GRM) using the LD-pruned SNP set:
+Create a genotype file for the genetic relationship matrix (GRM) using the LD-pruned SNP set:
 ```{r}
 grm_fn <- "grm_geno.gds"
 seqSetFilter(gds, variant.id=snpset.id)
@@ -92,11 +84,9 @@ If genotypes are split by chromosomes, `seqMerge()` in the SeqArray package can 
 seqClose(gds)
 ```
 
-.
-
 ## Fitting the null model
 
-A simulated phenotype data is used to demonstrate the model fitting:
+A simulated phenotype data set is used to demonstrate model fitting. `sample.col` identifies the phenotype column that is matched to sample IDs in the GDS file; samples without complete model variables or without matching genotypes are excluded.
 ```{r}
 set.seed(1000)
 sampid <- seqGetData(grm_fn, "sample.id")  # sample IDs in the genotype file
@@ -112,39 +102,65 @@ head(pheno)
 grm_fn
 ```
 
-```R
+Null-model fitting is the computationally intensive step. The call is shown below but is not run while building this vignette:
+
+```{r eval=FALSE}
 # null model fitting using GRM from grm_fn
 glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_fn, trait.type="binary", sample.col="sample.id")
 ```
+
+For a fast and reproducible vignette build, the package includes a model precomputed with the same workflow:
 
 ```{r echo=FALSE}
 glmm <- readRDS(system.file("extdata", "v_glmm.rds", package="SAIGEgds"))
 ```
 
+Check the sample count, convergence status and estimated variance components before running association tests:
 
-.
+```{r}
+length(glmm$sample.id)
+glmm$converged
+glmm$tau
+```
+
+Note what the components of a binary null model mean:
+
+| Component | Meaning for `trait.type="binary"` |
+|:--|:--|
+| `coefficients` | fixed effects on the **log-odds** scale, including the intercept |
+| `tau` | `Sigma_E` is fixed at 1, and `Sigma_G` is the variance of the genetic random effect on the log-odds scale |
+| `fitted.values` | $\mu_i = \Pr(y_i=1)$, the fitted probability of the outcome |
+| `residuals` | $y_i - \mu_i$, the raw residuals |
+| `var.ratio` | variance ratio(s) used to approximate the score-statistic variance in association tests |
+
+: Components of a binary null model.
 
 ## P-value calculations
 
 ```{r}
 # genetic variants stored in the file geno_fn
 geno_fn
-# calculate, using 2 processes
-assoc <- seqAssocGLMM_SPA(geno_fn, glmm, mac=10, parallel=2)
+# use parallel > 1 in production to distribute variants across processes
+assoc <- seqAssocGLMM_SPA(geno_fn, glmm, mac=10, parallel=1)
 
 head(assoc)
+
+# basic result checks
+c(n.variant=nrow(assoc), n.finite.p=sum(is.finite(assoc$pval)))
 
 # filtering based on p-value
 assoc[assoc$pval < 5e-4, ]
 ```
 
-The output could be directly saved to an R object file or a GDS file:
+The main result columns report the variant location and allele frequency, effect estimate (`beta`), standard error (`SE`) and p-value (`pval`). The `method` and `converged` columns indicate which p-value approximation was used and whether its numerical calculation converged.
+
+The output can also be saved directly to an R object file or a GDS file:
 ```{r}
 # save to 'assoc.gds'
-seqAssocGLMM_SPA(geno_fn, glmm, mac=10, parallel=2, res.savefn="assoc.gds")
+seqAssocGLMM_SPA(geno_fn, glmm, mac=10, parallel=1, res.savefn="assoc.gds")
 ```
 
-Open the output GDS file using the functions in the [gdsfmt](http://www.bioconductor.org/packages/gdsfmt) package:
+Open the output GDS file using the functions in the [gdsfmt](https://www.bioconductor.org/packages/gdsfmt) package:
 ```{r}
 # open the GDS file
 (f <- openfn.gds("assoc.gds"))
@@ -160,8 +176,6 @@ res <- seqSAIGE_LoadPval("assoc.gds")
 head(res)
 ```
 
-.
-
 ## Manhattan and QQ plots for p-values
 
 ```{r fig.width=6, fig.height=3, fig.align='center'}
@@ -176,27 +190,10 @@ g
 # QQ plot
 qqunif(assoc$pval)
 ```
-.
-
-.
-
-
-# Session Information
-
-```{r}
-sessionInfo()
-```
-
-```{r echo=FALSE}
-unlink(c("grm_geno.gds", "assoc.gds"), force=TRUE)
-```
-
-.
-
 
 # GPU Acceleration (Optional)
 
-SAIGEgds supports optional OpenCL-based GPU acceleration for the GRM cross-product computation during null model fitting. This can significantly speed up the `seqFitNullGLMM_SPA()` step for large sample sizes with dense genotypes.
+SAIGEgds supports optional OpenCL-based GPU acceleration for the GRM cross-product computation during null-model fitting. This can significantly speed up `seqFitNullGLMM_SPA()` for large sample sizes with dense genotypes.
 
 **Requirements:**
 
@@ -205,33 +202,45 @@ SAIGEgds supports optional OpenCL-based GPU acceleration for the GRM cross-produ
 
 To enable GPU acceleration, set `use.gpu=TRUE`:
 ```R
-glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, gdsfile, trait.type="binary", use.gpu=TRUE)
+glmm <- seqFitNullGLMM_SPA(y ~ x1 + x2, pheno, grm_fn,
+    trait.type="binary", sample.col="sample.id", use.gpu=TRUE)
 ```
 
-If no compatible GPU or OpenCL runtime is found, the function automatically falls back to CPU computation. Note that sparse genotype storage (`geno.sparse=TRUE`, the default) uses an optimized CPU-only code path; GPU acceleration applies to dense 2-bit packed genotypes (`geno.sparse=FALSE`).
+If no compatible GPU or OpenCL runtime is found, the function automatically falls back to CPU computation. When GPU initialization succeeds, `use.gpu=TRUE` automatically selects dense 2-bit packed genotype storage; users do not need to set `geno.sparse=FALSE` separately. The default sparse genotype path remains CPU-only and may be preferable when genotypes are sparse.
 
 **GPU Memory Usage:**
 
 The GPU memory required depends on the operation and dataset size. SAIGEgds checks that the total allocation does not exceed 80% of device global memory, and falls back to CPU if it does.
 
-- **Cross-product (null model fitting):** $\lceil N/4 \rceil \times M$ (packed genotypes) + $4M \times 4$ bytes (standardized genotype lookup) + $N \times 4 \times 3$ bytes (input/output/dot vectors), where $N$ is the number of samples and $M$ is the number of variants. For example, $N$=400K samples and $M$=100K variants requires approximately 10 GB.
-- **Dense GRM GEMV:** $N^2 \times 4$ bytes (GRM matrix in single-precision) + $N \times 4 \times 2$ bytes (input/output vectors). For example, $N$=5K requires approximately 100 MB.
-- **GRM construction (sparse/dense):** $\lceil M/4 \rceil \times N$ (packed genotypes) + $4M \times 4$ bytes (standardized genotype lookup) + $256 \times 256 \times 4$ bytes (block output buffer). For $N$=400K and $M$=2K (the `nsnp.sub.random` subset), this is approximately 200 MB.
+- **Cross-product (null-model fitting):** $\lceil N/4 \rceil M$ bytes (packed genotypes) + $16M$ bytes (standardized genotype lookup) + $8N + 4M$ bytes (input, output and dot-product vectors), where $N$ is the number of samples and $M$ is the number of variants. For example, $N=400\mathrm{K}$ and $M=100\mathrm{K}$ requires approximately 10 GB.
+- **Dense GRM GEMV:** $4N^2$ bytes (GRM matrix in single precision) + $8N$ bytes (input/output vectors). For example, $N=5\mathrm{K}$ requires approximately 100 MB.
+- **GRM construction (sparse/dense):** $\lceil M/4 \rceil N$ bytes (packed genotypes) + $16M$ bytes (standardized genotype lookup) + $4B^2$ bytes (an implementation-defined block output buffer of width $B$). For $N=400\mathrm{K}$ and $M=2\mathrm{K}$ (the default `nsnp.sub.random` subset), the packed genotypes require approximately 200 MB.
 
-All GPU buffers use single-precision (32-bit) floating point. Results are converted back to double precision on the host.
+GPU compute buffers use single-precision (32-bit) floating point. Results are converted back to double precision on the host.
+
+
+# Session Information
+
+```{r echo=FALSE}
+unlink(c("grm_geno.gds", "assoc.gds"), force=TRUE)
+```
+
+```{r}
+sessionInfo()
+```
 
 
 # References
 
-1. Zheng X, Davis J.Wade. SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2021). Mar;37(5):728-730. [DOI: 10.1093/bioinformatics/btaa731](http://dx.doi.org/10.1093/bioinformatics/btaa731).
+1. Zheng X, Davis JW. SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2021). Mar;37(5):728-730. [DOI: 10.1093/bioinformatics/btaa731](https://doi.org/10.1093/bioinformatics/btaa731).
 2. Zhou W, Nielsen JB, Fritsche LG, Dey R, Gabrielsen ME, Wolford BN, LeFaive J, VandeHaar P, Gagliano SA, Gifford A, Bastarache LA, Wei WQ, Denny JC, Lin M, Hveem K, Kang HM, Abecasis GR, Willer CJ, Lee S. Efficiently controlling for case-control imbalance and sample relatedness in large-scale genetic association studies. *Nat Genet* (2018). Sep;50(9):1335-1341. [DOI: 10.1038/s41588-018-0184-y](https://doi.org/10.1038/s41588-018-0184-y)
-3. Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D. SeqArray -- A storage-efficient high-performance data format for WGS variant calls. *Bioinformatics* (2017). [DOI: 10.1093/bioinformatics/btx145](http://dx.doi.org/10.1093/bioinformatics/btx145).
-
-.
+3. Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D. SeqArray -- A storage-efficient high-performance data format for WGS variant calls. *Bioinformatics* (2017). [DOI: 10.1093/bioinformatics/btx145](https://doi.org/10.1093/bioinformatics/btx145).
 
 
 # See also
 
-[SeqArray](http://www.bioconductor.org/packages/SeqArray): Data Management of Large-scale Whole-genome Sequence Variant Calls
+Time-to-event outcomes are covered in *Time-to-event (survival) analysis in SAIGEgds* (`vignette("SAIGEgds_surv", package="SAIGEgds")`). Rare-variant set-based tests using full and sparse GRMs are covered in *Set-based Rare-Variant Association Analysis in SAIGEgds* (`vignette("SAIGEgds_set-aggr", package="SAIGEgds")`).
 
-[SNPRelate](http://www.bioconductor.org/packages/SNPRelate): Parallel Computing Toolset for Relatedness and Principal Component Analysis of SNP Data
+[SeqArray](https://www.bioconductor.org/packages/SeqArray): Data Management of Large-scale Whole-genome Sequence Variant Calls
+
+[SNPRelate](https://www.bioconductor.org/packages/SNPRelate): Parallel Computing Toolset for Relatedness and Principal Component Analysis of SNP Data

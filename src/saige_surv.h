@@ -25,6 +25,11 @@ void breslow_lambda0(size_t n, const double eta[], const double time[],
 double Saddle_Prob_Poisson(double Score, double pval_noadj, size_t n,
 	const double mu[], const double g[], bool &converged);
 
+// Cox model without random effects, Cox-via-Poisson iteration (saige_surv.cpp)
+bool fit_cox_noRE(const arma::vec &y, const arma::mat &X, const double time[],
+	arma::vec &alpha, int maxiter, int &n_iter, arma::vec &eta, arma::vec &mu,
+	arma::mat &cov);
+
 
 // Cox risk-set covariance operator  W - U,  with U = N R D R' N.
 // (W - U)^{-1} applied via Woodbury; the hot operators are inline here,

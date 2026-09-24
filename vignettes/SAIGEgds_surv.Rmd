@@ -1,0 +1,296 @@
+---
+title: "Time-to-event (survival) analysis in SAIGEgds"
+author: "Xiuwen Zheng"
+date: "Sep, 2026"
+header-includes:
+    - \usepackage{array}
+output:
+    BiocStyle::html_document:
+        toc: true
+        toc_float: true
+        number_sections: true
+    BiocStyle::pdf_document:
+        toc: true
+        toc_depth: 3
+vignette: >
+    %\VignetteIndexEntry{SAIGEgds Tutorial (time-to-event outcomes)}
+    %\VignetteDepends{SAIGEgds}
+    %\VignetteKeywords{GWAS, PheWAS, survival, time-to-event, Cox model}
+    %\VignetteEngine{knitr::rmarkdown}
+    %\VignetteEncoding{UTF-8}
+---
+
+# Introduction
+
+Many phenotypes in biobanks are naturally time-to-event outcomes: age at diagnosis,
+time from enrollment to a first event, or time to death. Analyzing such a phenotype
+as a binary case/control indicator throws away the follow-up time and the censoring
+pattern, and it loses power when the event is rare. SAIGEgds therefore supports
+time-to-event outcomes directly, via `trait.type="survival"` in
+`seqFitNullGLMM_SPA()` together with the new `event.time` argument.
+
+The implementation follows the GATE method [2]. The model is a Cox
+proportional-hazards frailty model:
+
+$$\lambda_i(t) \;=\; \lambda_0(t)\,\exp(X_i\beta + b_i), \qquad
+  b \sim N(0,\ \tau_G \cdot \mathrm{GRM})$$
+
+where $\lambda_0(t)$ is an unspecified baseline hazard, $X_i$ the fixed-effect
+covariates and $b$ a random effect ("frailty") with covariance proportional to the
+genetic relationship matrix (GRM), which accounts for sample relatedness and
+population structure exactly as in the binary and quantitative traits.
+
+Two ingredients make this scalable:
+
+* **Cox fitted as a Poisson model.** With the Breslow estimator of the baseline
+cumulative hazard $\Lambda_0$, the Cox score equations are identical to those of a
+Poisson model with mean $\mu_i = \Lambda_0(t_i)\exp(\eta_i)$ and "count"
+$y_i = $ event status. SAIGEgds exploits this equivalence and reuses the same
+IRLS + AI-REML machinery (with PCG and the same sparse genotype storage) that is used
+for the other trait types, so no risk-set expansion of the data is needed.
+* **A Poisson saddlepoint approximation (SPA).** For rare variants combined with a
+low event rate, the score statistic is far from normal and the usual normal
+approximation gives anticonservative p-values. The single-variant score test therefore
+switches to a saddlepoint approximation of the Poisson score whenever the normal
+p-value is below the threshold (0.0455 by default), equivalent to `abs(z) > 2`,
+where `z` is the standardized score statistic under the null hypothesis.
+
+This vignette shows the workflow: fitting the null model, single-variant tests and
+set-based tests. It assumes familiarity with the main vignette
+("SAIGEgds Tutorial (single variant tests)"), which covers GDS files, LD pruning and
+the GRM in more detail.
+
+# Input data requirements
+
+For `trait.type="survival"`:
+
+* The **response in the formula is the 0/1 event status** (1 = event, 0 = censored),
+not the time. `event.time` names a separate column of `data` holding the
+follow-up time (time to event or to censoring). It must be numeric, non-negative and
+non-missing.
+* A **GRM is optional**, supplied either as genotypes (`gdsfile`) or as a
+user-defined dense/sparse GRM (`grm.mat`). If neither is given, the frailty term is
+dropped and a standard Cox proportional-hazards model is fitted, assuming independent
+samples; the Poisson saddlepoint approximation is still applied in the association
+tests.
+* At least **one covariate** besides the intercept is needed. The intercept is not
+identifiable in a Cox model -- it is absorbed by the baseline hazard -- so it is
+removed from the design matrix. For the same reason, `X.transform` and `use.offset`
+are forced to `FALSE` for survival, whatever the user passes.
+* Subjects **censored before the first observed event time** are dropped before
+fitting: they contribute no risk-set information ($\Lambda_0 = \mu = 0$). The number
+of removed subjects is reported when `verbose=TRUE`.
+* Ties in the event times are handled by the Breslow approximation.
+
+# Example
+
+```{r message=FALSE}
+library(SeqArray)
+library(SAIGEgds)
+
+# the example GDS file: 1,000 samples and 10,000 SNPs
+(fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds"))
+gdsfile <- seqOpen(fn)
+```
+
+The package ships a small phenotype table; here a time-to-event outcome is simulated
+from an exponential model with an independent exponential censoring time, so that the
+outcome depends on the covariates `x1` and `x2` but not on any SNP (i.e. the global
+null hypothesis holds).
+
+```{r}
+phenofn <- system.file("extdata", "pheno.txt.gz", package="SAIGEgds")
+pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
+
+set.seed(1000)
+n <- nrow(pheno)
+ftime <- rexp(n, rate=exp(0.3*pheno$x1 - 0.2*pheno$x2) * 0.05)  # time to event
+ctime <- rexp(n, rate=0.03)                                     # censoring time
+
+pheno$status <- as.integer(ftime <= ctime)  # 0/1 event status, the response
+pheno$atime  <- pmin(ftime, ctime)          # observed follow-up time
+
+head(pheno)
+table(pheno$status)  # 1: event, 0: censored
+```
+
+## Fitting the null model
+
+```{r}
+glmm <- seqFitNullGLMM_SPA(status ~ x1 + x2, pheno, gdsfile,
+    trait.type="survival", event.time="atime", sample.col="sample.id")
+```
+
+The log reports the number of events and censored subjects, the AI-REML iterations
+for the frailty variance, and the variance ratio used to approximate the score
+variance for the association tests.
+
+```{r}
+glmm$coefficients   # log hazard ratios for x1 and x2 (no intercept)
+glmm$tau            # (Sigma_E, Sigma_G); Sigma_G is the frailty variance
+glmm$converged
+```
+
+Note what the components of a survival null model mean:
+
+| Component | Meaning for `trait.type="survival"` |
+|:--|:--|
+| `coefficients` | fixed effects on the **log hazard** scale; no intercept |
+| `tau` | `Sigma_E` is fixed at 1 (Poisson scale), `Sigma_G` is the frailty variance on the log-hazard scale |
+| `fitted.values` | $\mu_i = \hat\Lambda_0(t_i)\exp(\hat\eta_i)$, the expected number of events |
+| `residuals` | $y_i - \mu_i$, the **martingale residuals** (summing to zero) |
+| `var.ratio` | variance ratio(s) for the score test, computed with the Cox risk-set information correction |
+
+: Components of a survival null model.
+
+```{r}
+summary(glmm$fitted.values)   # expected numbers of events
+sum(glmm$residuals)           # martingale residuals sum to ~0
+head(glmm$var.ratio)
+```
+
+## Sanity check against `coxph()`
+
+Without a GRM (neither `gdsfile` nor `grm.mat`), `seqFitNullGLMM_SPA()` fits a
+standard Cox proportional-hazards model without random effects, and its coefficients
+reproduce `coxph()` with Breslow ties. With the GRM the fixed effects are close but
+not identical: the frailty model estimates conditional (subject-specific) log hazard
+ratios, which are typically slightly larger in magnitude than the marginal estimates
+when the frailty variance is positive.
+
+```{r}
+# the same model without a GRM (no random effects)
+glmm0 <- seqFitNullGLMM_SPA(status ~ x1 + x2, pheno, trait.type="survival",
+    event.time="atime", verbose=FALSE)
+
+cf <- rbind(SAIGEgds.GRM=glmm$coefficients, SAIGEgds.noGRM=glmm0$coefficients)
+if (requireNamespace("survival", quietly=TRUE))
+{
+    cx <- survival::coxph(survival::Surv(atime, status) ~ x1 + x2, pheno,
+        ties="breslow")
+    cf <- rbind(coxph=coef(cx), cf)
+}
+cf
+```
+
+## Single-variant association tests
+
+`seqAssocGLMM_SPA()` is called exactly as for a binary trait; it detects the trait
+type from the model object and switches to the Poisson score test with the
+saddlepoint approximation.
+
+```{r}
+assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=10)
+head(assoc)
+```
+
+The output columns specific to this test:
+
+* `beta`, `SE`: the estimated **log hazard ratio** per copy of the alternative allele
+and its standard error;
+* `pval`: the reported p-value, from the Poisson SPA when it was applied;
+* `method`: `Normal` if the normal approximation was used, `SPA` if the saddlepoint
+approximation was applied (the `ER` method is used for binary traits only);
+* `p.norm`: the normal-approximation p-value, always kept for reference;
+* `converged`: whether the saddlepoint equation converged; if `FALSE`, treat the
+p-value with caution.
+
+```{r}
+table(assoc$method)
+```
+
+### Kaplan-Meier curve for the top variant
+
+The following code selects the variant with the smallest finite p-value and plots
+the unadjusted Kaplan-Meier estimate by alternative-allele dosage. The sample order
+is matched to the fitted null model before joining the genotypes to the phenotype
+data.
+
+```{r top-variant-km, fig.width=6, fig.height=4, fig.align='center'}
+top <- assoc[which.min(replace(assoc$pval, !is.finite(assoc$pval), Inf)), ]
+top[c("id", "chr", "pos", "ref", "alt", "AF.alt", "pval")]
+
+seqFilterPush(gdsfile)
+seqSetFilter(gdsfile, sample.id=glmm$sample.id, variant.id=top$id,
+    verbose=FALSE)
+sample.id <- seqGetData(gdsfile, "sample.id")
+dosage <- drop(seqGetData(gdsfile, "$dosage_alt2"))
+seqFilterPop(gdsfile)
+
+ii <- match(sample.id, pheno$sample.id)
+plot.data <- data.frame(
+    time = pheno$atime[ii],
+    status = pheno$status[ii],
+    genotype = factor(dosage))
+plot.data <- plot.data[is.finite(dosage), ]
+levels(plot.data$genotype) <- paste0("ALT dosage = ", levels(plot.data$genotype))
+
+km <- survival::survfit(survival::Surv(time, status) ~ genotype, data=plot.data)
+cols <- seq_along(km$strata)
+plot(km, col=cols, lwd=2, mark.time=TRUE,
+    xlab="Follow-up time", ylab="Survival probability")
+legend("bottomleft", sub("^genotype=", "", names(km$strata)),
+    col=cols, lwd=2, bty="n")
+```
+
+Because the variant was selected using the same association results, this curve is
+descriptive and should not be interpreted as an independent significance test. It
+is also unadjusted for the covariates and relatedness accounted for by the model.
+
+Since no SNP affects the simulated outcome, the p-values should be uniform; the
+genomic inflation factor is close to 1:
+
+```{r fig.width=4, fig.height=4, fig.align='center'}
+p <- assoc$pval[is.finite(assoc$pval)]
+median(qchisq(p, 1, lower.tail=FALSE)) / qchisq(0.5, 1)   # lambda_GC
+
+# QQ plot
+plot(-log10(ppoints(length(p))), -log10(sort(p)), pch=20, cex=0.6,
+    xlab=expression(Expected~~-log[10](italic(p))),
+    ylab=expression(Observed~~-log[10](italic(p))))
+abline(0, 1, col="red")
+```
+
+## Set-based (aggregate) tests
+
+Burden and ACAT-V tests support survival outcomes: a burden test is a single score
+test on the collapsed genotype, and ACAT-V is a Cauchy combination of single-variant
+p-values, so both inherit the Cox-via-Poisson score test.
+
+```{r}
+units <- seqUnitSlidingWindows(gdsfile, win.size=500, win.shift=250)
+
+burden <- seqAssocGLMM_Burden(gdsfile, glmm, units, verbose=FALSE)
+head(burden)
+
+acatv <- seqAssocGLMM_ACAT_V(gdsfile, glmm, units, verbose=FALSE)
+head(acatv)
+```
+
+SKAT and ACAT-O are **not** available for survival outcomes: the GATE method defines
+the score/saddlepoint test for single-variant and burden-style statistics only, and
+the SKAT variance-component test has no Poisson/Cox analogue. ACAT-O combines
+burden + ACAT-V + SKAT and is therefore unavailable as well. Both functions stop with
+an informative error instead of returning a questionable p-value.
+
+```{r}
+seqClose(gdsfile)
+```
+
+# Session Information
+
+```{r}
+sessionInfo()
+```
+
+# References
+
+1. Zheng X, Davis J.Wade. SAIGEgds -- an efficient statistical tool for large-scale PheWAS with mixed models. *Bioinformatics* (2021). Mar;37(5):728-730. [DOI: 10.1093/bioinformatics/btaa731](http://dx.doi.org/10.1093/bioinformatics/btaa731).
+2. Dey R, Zhou W, Kiiskinen T, Havulinna A, Elliott A, Karjalainen J, Kurki M, Qin A, FinnGen, Lee S, Palotie A, Neale B, Daly M, Lin X. Efficient and accurate frailty model approach for genome-wide survival association analysis in large-scale biobanks. *Nat Commun* (2022). 13:5437. [DOI: 10.1038/s41467-022-32885-x](https://doi.org/10.1038/s41467-022-32885-x) (the GATE method)
+3. Breslow NE. Covariance analysis of censored survival data. *Biometrics* (1974). 30(1):89-99.
+
+# See also
+
+[SeqArray](http://www.bioconductor.org/packages/SeqArray): Data Management of Large-scale Whole-genome Sequence Variant Calls
+
+[SNPRelate](http://www.bioconductor.org/packages/SNPRelate): Parallel Computing Toolset for Relatedness and Principal Component Analysis of SNP Data

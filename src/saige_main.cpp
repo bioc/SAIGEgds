@@ -1909,6 +1909,7 @@ RcppExport SEXP saige_init_skat_pkg();
 RcppExport SEXP saige_surv_lambda0(SEXP, SEXP, SEXP);
 RcppExport SEXP saige_surv_spa_poisson(SEXP, SEXP, SEXP, SEXP);
 RcppExport SEXP saige_surv_wminusU_inv(SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP saige_surv_fit_noRE(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 
 /// initialize the package
 RcppExport void R_init_SAIGEgds(DllInfo *info)
@@ -1964,6 +1965,7 @@ RcppExport void R_init_SAIGEgds(DllInfo *info)
 		CALL(saige_surv_lambda0, 3),
 		CALL(saige_surv_spa_poisson, 4),
 		CALL(saige_surv_wminusU_inv, 5),
+		CALL(saige_surv_fit_noRE, 6),
 		{ NULL, NULL, 0 }
 	};
 

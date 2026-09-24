@@ -9,8 +9,8 @@ relationship matrix (GRM).
 
 \usage{
 seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
-    trait.type=c("binary", "quantitative", "survival"), event.time=NULL,
-    sample.col="sample.id", maf=0.01,
+    trait.type=c("binary", "quantitative", "survival"),
+    sample.col="sample.id", event.time=NULL, maf=0.01,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
     variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
     inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
@@ -20,8 +20,8 @@ seqFitNullGLMM_SPA(formula, data, gdsfile=NULL, grm.mat=NULL,
     geno.sparse=TRUE, use.gpu=FALSE, save.packed.geno=FALSE, num.thread=1L,
     model.savefn="", seed=200L, fork.loading, parallel.loading=FALSE,
     verbose=TRUE)
-seqRefitNullGLMM(formula, data, model=NULL, event.time=NULL,
-    sample.col="sample.id",
+seqRefitNullGLMM(formula, data, model=NULL,
+    sample.col="sample.id", event.time=NULL,
     inv.norm=c("residuals", "quant", "none"), use.offset=FALSE,
     X.transform=TRUE, tau.update=FALSE, recalcVR=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
@@ -48,15 +48,18 @@ seqRefitNullGLMM(formula, data, model=NULL, event.time=NULL,
         Cox-Poisson equivalence, cf. the GATE method); for "survival" the
         response in \code{formula} is the 0/1 event status (1=event,
         0=censored) and \code{event.time} gives the follow-up time}
-    \item{event.time}{only used when \code{trait.type="survival"}: a column
-        name in \code{data} giving the non-negative event/censoring time; the
-        intercept is removed (absorbed by the baseline hazard) so a GRM (via
-        \code{gdsfile} or \code{grm.mat}) is required and \code{X.transform}/
-        \code{use.offset} are forced to \code{FALSE}. For
-        \code{seqRefitNullGLMM()} the event time is not stored in \code{model}
-        and must be re-supplied here (as a column of the new \code{data})}
     \item{sample.col}{the column name of sample IDs corresponding to the GDS
         file}
+    \item{event.time}{only used when \code{trait.type="survival"}: a column
+        name in \code{data} giving the non-negative event/censoring time; the
+        intercept is removed (absorbed by the baseline hazard) and
+        \code{X.transform}/\code{use.offset} are forced to \code{FALSE}. If
+        neither \code{gdsfile} nor \code{grm.mat} is given, a Cox
+        proportional-hazards model without random effects is fitted (assuming
+        independent samples) and the Poisson saddlepoint approximation is still
+        applied in the association tests. For \code{seqRefitNullGLMM()} the
+        event time is not stored in \code{model} and must be re-supplied here
+        (as a column of the new \code{data})}
     \item{maf}{minor allele frequency threshold for genotypes in \code{gdsfile}
         (checking >= maf), if \code{variant.id=NULL}; \code{NaN} for no filter}
     \item{missing.rate}{threshold of missing rate (checking <= missing.rate),
@@ -195,9 +198,10 @@ Gabrielsen ME, Daly MJ, Neale BM, Hveem K, Abecasis GR, Willer CJ, et al.
 Scalable generalized linear mixed model for region-based association tests
 in large biobanks and cohorts. Nat Genet. 2020; 52: 634-9.
 
-    Bi W, Fritsche LG, Mukherjee B, Kim S, Lee S. A fast and accurate method
-for genome-wide time-to-event data analysis and its application to UK Biobank.
-Am J Hum Genet. 2020; 107(2): 222-233. (the GATE method, used for
+    Dey R, Zhou W, Kiiskinen T, Havulinna A, Elliott A, Karjalainen J,
+Kurki M, Qin A, FinnGen, Lee S, Palotie A, Neale B, Daly M, Lin X. Efficient and
+accurate frailty model approach for genome-wide survival association analysis in
+large-scale biobanks. Nat Commun. 2022; 13: 5437. (the GATE method, used for
 \code{trait.type="survival"})
 }
 \author{Xiuwen Zheng}

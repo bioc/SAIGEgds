@@ -232,7 +232,8 @@
 
 
 # survival (time-to-event) outcome: Cox proportional-hazards frailty model
-# fitted via the Breslow Cox<->Poisson equivalence (cf. GATE).
+# fitted via the Breslow Cox<->Poisson equivalence (cf. GATE); without a GRM
+# (gdsfile=NULL and grm.mat=NULL) the Cox model without random effects
 .fit_survival <- function(verbose, X.transform, phenovar, data, formula, param,
     tau.init, gdsfile, grm.mat, seed, n_var, calc_vr=TRUE)
 {
@@ -249,9 +250,6 @@
             sprintf("%.2f%%", 100*ev/length(ystatus)), "), # censored: ",
             sum(ystatus==0))
     }
-    if (is.null(gdsfile) && is.null(grm.mat))
-        stop("Survival analysis requires a GRM (via 'gdsfile' or 'grm.mat').")
-
     # initial fixed-effect coefficients via logistic regression
     # (no covariate offset for survival: use.offset is forced FALSE)
     fit0 <- glm(formula, data=data, family=binomial)
@@ -280,15 +278,30 @@
     # coefficients passed to the C++ fitter must match X (no intercept term)
     fit0$coefficients <- coef0
 
-    # initial tau: Sigma_E fixed at 1 (Poisson), estimate Sigma_G
-    if (isTRUE(param$no_iteration))
-        tau <- tau.init
-    else {
-        tau <- c(1, 0.1)
-        if (sum(tau.init[2L]) != 0) tau[2L] <- tau.init[2L]
+    if (!is.null(gdsfile) || !is.null(grm.mat))
+    {
+        # initial tau: Sigma_E fixed at 1 (Poisson), estimate Sigma_G
+        if (isTRUE(param$no_iteration))
+            tau <- tau.init
+        else {
+            tau <- c(1, 0.1)
+            if (sum(tau.init[2L]) != 0) tau[2L] <- tau.init[2L]
+        }
+        # iterate the null model (Cox-via-Poisson IRLS + AI-REML for tau)
+        glmm <- .Call(saige_fit_AI_PCG, fit0, X, tau, param)
+    } else {
+        # no random effect: Cox model for independent samples, fitted in C++
+        # by the Cox-via-Poisson iteration (saige_surv.cpp); it converges
+        # linearly, so the cap is fixed rather than 'maxiter' of AI-REML
+        glmm <- .Call(saige_surv_fit_noRE, unname(fit0$y), X, param$eventTime,
+            coef0, 200L, verbose)
+        if (!glmm$converged)
+        {
+            warning("The Cox model (no random effects) does not converge ",
+                "after 200 iterations.", call.=FALSE, immediate.=TRUE)
+        }
     }
-    # iterate the null model (Cox-via-Poisson IRLS + AI-REML for tau)
-    glmm <- .Call(saige_fit_AI_PCG, fit0, X, tau, param)
+    names(glmm$coefficients) <- if (length(icpt)) cn[-icpt] else cn
 
     # score-test null object with Poisson variance V = mu.
     # The intercept was dropped for *fitting* (absorbed by the baseline hazard),
@@ -310,7 +323,7 @@
     obj.noK <- list(y=unname(fit0$y), mu=mu, V=V, X1=Xa, XV=XV,
         XXVX_inv=XXVX_inv)
     # no Sigma_inv: the frailty correction is captured by the variance ratio
-    # (computed from the GRM via PCG in saige_calc_var_ratio).
+    # (computed from the GRM via PCG in saige_calc_var_ratio; 1 without a GRM).
     obj.noK$Sigma_inv <- FALSE
     glmm$obj.noK <- obj.noK
 
@@ -787,8 +800,8 @@
 
 # fit the null model
 seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
-    trait.type=c("binary", "quantitative", "survival"), event.time=NULL,
-    sample.col="sample.id", maf=0.01,
+    trait.type=c("binary", "quantitative", "survival"),
+    sample.col="sample.id", event.time=NULL, maf=0.01,
     missing.rate=0.01, max.num.snp=1000000L, variant.id=NULL,
     variant.id.varratio=NULL, nsnp.sub.random=2000L, rel.cutoff=0.125,
     inv.norm=c("residuals", "quant", "none"), use.cateMAC=FALSE,
@@ -804,6 +817,8 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     stopifnot(is.data.frame(data))
     stopifnot(is.null(gdsfile) || inherits(gdsfile, "SeqVarGDSClass") ||
             is.character(gdsfile))
+    stopifnot(is.character(sample.col), length(sample.col)==1L,
+        !is.na(sample.col))
     trait.type <- match.arg(trait.type)
     if (trait.type == "survival")
     {
@@ -822,8 +837,6 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     } else {
         event.time <- NULL
     }
-    stopifnot(is.character(sample.col), length(sample.col)==1L,
-        !is.na(sample.col))
     stopifnot(is.numeric(maf), length(maf)==1L)
     stopifnot(is.numeric(missing.rate), length(missing.rate)==1L)
     stopifnot(is.numeric(max.num.snp), length(max.num.snp)==1L)
@@ -1067,6 +1080,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
             stop("'event.time' column should be numeric.")
         if (anyNA(evtime) || any(evtime < 0))
             stop("'event.time' values should be non-negative and non-missing.")
+        evtime <- as.double(evtime)
     }
 
     X <- model.matrix(formula, data)
@@ -1274,7 +1288,7 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
     {
         if (isTRUE(use.offset))
             names(glmm$coefficients) <- "(Offset)"
-        else
+        else if (!is.null(colnames(glmm$obj.noK$X1)))
             names(glmm$coefficients) <- colnames(glmm$obj.noK$X1)
     } else {
         coef <- solve(X_qrr, glmm$coefficients * sqrt(nrow(data)))
@@ -1329,8 +1343,9 @@ seqFitNullGLMM_SPA <- function(formula, data, gdsfile=NULL, grm.mat=NULL,
 
 
 # refit the null model
-seqRefitNullGLMM <- function(formula, data, model=NULL, event.time=NULL,
-    sample.col="sample.id", inv.norm=c("residuals", "quant", "none"),
+seqRefitNullGLMM <- function(formula, data, model=NULL,
+    sample.col="sample.id", event.time=NULL,
+    inv.norm=c("residuals", "quant", "none"),
     use.offset=FALSE, X.transform=TRUE, tau.update=FALSE, recalcVR=FALSE,
     tol=0.02, maxiter=20L, nrun=30L, tolPCG=1e-5, maxiterPCG=500L,
     num.marker=30L, traceCVcutoff=0.0025, ratioCVcutoff=0.001,
@@ -1469,6 +1484,7 @@ seqRefitNullGLMM <- function(formula, data, model=NULL, event.time=NULL,
             stop("'event.time' column should be numeric.")
         if (anyNA(evtime) || any(evtime < 0))
             stop("'event.time' values should be non-negative and non-missing.")
+        evtime <- as.double(evtime)
     }
 
     # number of variants from saved model
@@ -1657,7 +1673,7 @@ seqRefitNullGLMM <- function(formula, data, model=NULL, event.time=NULL,
     {
         if (isTRUE(use.offset))
             names(glmm$coefficients) <- "(Offset)"
-        else
+        else if (!is.null(colnames(glmm$obj.noK$X1)))
             names(glmm$coefficients) <- colnames(glmm$obj.noK$X1)
     } else {
         coef <- solve(X_qrr, glmm$coefficients * sqrt(nrow(data)))

@@ -272,3 +272,55 @@ test.saige_survival <- function()
 	checkException(seqRefitNullGLMM(status ~ x1 + x2, pheno, glmm2,
 		verbose=FALSE), "refit needs event.time", silent=TRUE)
 }
+
+
+test.saige_survival_noGRM <- function()
+{
+	tryCatch(suppressWarnings(RNGkind("Mersenne-Twister", "Inversion",
+		"Rounding")), error=function(e) FALSE)
+
+	# open a GDS file (used in the association test only)
+	fn <- system.file("extdata", "grm1k_10k_snp.gds", package="SAIGEgds")
+	gdsfile <- seqOpen(fn)
+	on.exit(seqClose(gdsfile))
+
+	# load phenotype and simulate a survival outcome (null wrt the SNPs)
+	phenofn <- system.file("extdata", "pheno.txt.gz", package="SAIGEgds")
+	pheno <- read.table(phenofn, header=TRUE, as.is=TRUE)
+	set.seed(100)
+	n <- nrow(pheno)
+	eta <- 0.3*pheno$x1 - 0.2*pheno$x2
+	ftime <- rexp(n, rate=exp(eta)*0.05)
+	ctime <- rexp(n, rate=0.03)
+	pheno$status <- as.integer(ftime <= ctime)
+	pheno$atime  <- round(pmin(ftime, ctime), 1)   # rounding introduces ties
+
+	# Cox model without random effects (no GRM)
+	glmm <- seqFitNullGLMM_SPA(status ~ x1 + x2, pheno,
+		trait.type="survival", event.time="atime", verbose=FALSE)
+	checkEquals("survival", glmm$trait.type, "no-GRM survival trait type")
+	checkTrue(glmm$converged, "no-GRM Cox model converged")
+	checkEqualsNumeric(c(1, 0), unname(glmm$tau), "no-GRM tau = (1, 0)")
+	checkEqualsNumeric(1, glmm$var.ratio, "no-GRM variance ratio = 1")
+	checkEqualsNumeric(0, sum(glmm$residuals), "martingale residuals sum to 0",
+		tolerance=1e-6)
+
+	# the fit is the Cox MLE with Breslow ties
+	if (requireNamespace("survival", quietly=TRUE))
+	{
+		cx <- survival::coxph(survival::Surv(pheno$atime, pheno$status) ~
+			pheno$x1 + pheno$x2, ties="breslow")
+		checkEqualsNumeric(unname(coef(cx)), unname(glmm$coefficients),
+			"no-GRM survival fixed effects reproduce coxph(Breslow)",
+			tolerance=1e-3)
+	}
+
+	# single-variant association with the Poisson saddlepoint approximation
+	assoc <- seqAssocGLMM_SPA(gdsfile, glmm, mac=4, verbose=FALSE)
+	p <- assoc$pval[is.finite(assoc$pval) & assoc$pval > 0]
+	checkTrue(all(p >= 0 & p <= 1), "no-GRM p-values in [0,1]")
+	checkTrue(any(assoc$method == "SPA"), "no-GRM Poisson SPA engaged")
+	lambda <- median(qchisq(p, 1, lower.tail=FALSE)) / qchisq(0.5, 1)
+	checkTrue(lambda > 0.85 && lambda < 1.15,
+		"no-GRM genomic inflation factor near 1")
+}

@@ -15,9 +15,15 @@ CHANGES IN VERSION 2.14.0
       (survival) outcomes via `trait.type="survival"` and a new `event.time`
       argument, fitting a Cox proportional-hazards frailty model through the
       Breslow Cox-Poisson equivalence and applying a Poisson saddlepoint
-      approximation in the single-variant score test (the GATE method, Bi et
-      al. 2020); the Cox risk-set information correction (W - U) is used in the
+      approximation in the single-variant score test (the GATE method, Dey et
+      al. 2022); the Cox risk-set information correction (W - U) is used in the
       variance-ratio estimation via a Woodbury identity
+
+    o a new vignette "Set-based Rare-Variant Association Analysis in
+      SAIGEgds", covering Burden, SKAT, ACAT-V and ACAT-O tests with full and
+      sparse GRMs
+
+    o a new vignette "Time-to-event (survival) analysis in SAIGEgds"
 
 
 CHANGES IN VERSION 2.12.0

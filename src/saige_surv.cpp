@@ -9,6 +9,7 @@
 //   (1) Breslow baseline cumulative hazard  Lambda0(eta, time, status)
 //   (2) saddlepoint approximation for the weighted-Poisson score statistic
 //   (3) WminusU::build(), the setup for the Cox risk-set covariance operator
+//   (4) the Cox model without random effects (independent samples)
 //
 // Copyright (C) 2026    Xiuwen Zheng
 // License: GPL-3
@@ -257,13 +258,128 @@ void WminusU::build(size_t n_, const double eta[], const double time[],
 	Ainv = arma::pinv(arma::symmatu(ACm));
 }
 
+
+// ===========================================================================
+// (4) Cox proportional-hazards model without random effects
+//
+// Independent samples: the same Cox-via-Poisson iteration as get_coeff() in
+// saige_fitnull.cpp, but without the mixed-model (PCG) solver. Given eta, the
+// Breslow hazard gives mu = Lambda0*exp(eta); the Poisson working response is
+// Y = eta + (y-mu)/mu with weight W = mu, and the coefficients are updated by
+// weighted least squares, alpha = (X'WX)^-1 X'WY. The fixed point of the
+// iteration is the Cox MLE (Breslow ties). Since the Poisson information X'WX
+// ignores the risk-set term U, the iteration converges linearly and is capped
+// at 'maxiter' iterations (the caller reports non-convergence).
+// Input:  y (0/1 event status), X (no intercept), time, alpha (initial)
+// Output: alpha, n_iter, eta, mu, cov = (X'WX)^-1; returns convergence
+
+bool fit_cox_noRE(const arma::vec &y, const arma::mat &X, const double time[],
+	arma::vec &alpha, int maxiter, int &n_iter, arma::vec &eta, arma::vec &mu,
+	arma::mat &cov)
+{
+	const size_t n = y.n_elem;
+	const double tol_coef = 1e-4;   // as in get_coeff() for survival
+	const double w_floor  = 1e-4;   // cf. surv_working_response()
+	std::vector<int> status(n);
+	for (size_t i=0; i < n; i++) status[i] = (int)std::lround(y[i]);
+
+	arma::vec Lambda0(n), W(n), Y(n);
+	eta = X * alpha;
+	bool converged = false;
+	n_iter = 0;
+	for (int iter=1; iter <= maxiter; iter++)
+	{
+		n_iter = iter;
+		breslow_lambda0(n, eta.memptr(), time, &status[0], Lambda0.memptr());
+		mu = Lambda0 % arma::exp(eta);
+		// subjects with mu ~ 0 (censored before the first event) carry no
+		// information: guard the working response (0/0) and the weight
+		for (size_t i=0; i < n; i++)
+		{
+			if (mu[i] > w_floor)
+			{
+				W[i] = mu[i];
+				Y[i] = eta[i] + (y[i] - mu[i]) / mu[i];
+			} else {
+				W[i] = w_floor;
+				Y[i] = eta[i];
+			}
+		}
+		arma::mat XW = X.each_col() % W;                   // W X
+		cov = arma::inv_sympd(arma::symmatu(X.t() * XW));  // (X' W X)^-1
+		arma::vec a = cov * (XW.t() * Y);
+		eta = X * a;
+		double dlt = arma::max(arma::abs(a - alpha) /
+			(arma::abs(a) + arma::abs(alpha) + tol_coef));
+		alpha = a;
+		if (dlt < tol_coef) { converged = true; break; }
+	}
+	// Poisson means at the final linear predictor
+	breslow_lambda0(n, eta.memptr(), time, &status[0], Lambda0.memptr());
+	mu = Lambda0 % arma::exp(eta);
+	return converged;
+}
+
 }  // namespace SAIGE_SURV
 
 
 // ===========================================================================
-// R-callable test wrappers (used for validation against the GATE reference)
+// R-callable functions
 
 extern "C" {
+
+// fit the Cox model without random effects (see SAIGE_SURV::fit_cox_noRE),
+// called from .fit_survival() when neither 'gdsfile' nor 'grm.mat' is given;
+// returns the same components as saige_fit_AI_PCG()
+RcppExport SEXP saige_surv_fit_noRE(SEXP r_y, SEXP r_X, SEXP r_time,
+	SEXP r_coef0, SEXP r_maxiter, SEXP r_verbose)
+{
+BEGIN_RCPP
+	const arma::vec y = as<arma::vec>(r_y);
+	const arma::mat X = as<arma::mat>(r_X);
+	arma::vec alpha = as<arma::vec>(r_coef0);
+	const int maxiter = Rf_asInteger(r_maxiter);
+	const bool verbose = Rf_asLogical(r_verbose)==TRUE;
+	const size_t n = y.n_elem;
+	if (X.n_rows != n)
+		throw std::invalid_argument("'X' does not match the sample size.");
+	if (!Rf_isReal(r_time) || (size_t)Rf_length(r_time) != n)
+		throw std::invalid_argument(
+			"'eventTime' should be a numeric vector matching the sample size.");
+	if (alpha.n_elem != X.n_cols)
+		throw std::invalid_argument("'coef0' does not match the columns of 'X'.");
+	if (maxiter < 1)
+		throw std::invalid_argument("'maxiter' should be >= 1.");
+
+	int n_iter = 0;
+	arma::vec eta, mu;
+	arma::mat cov;
+	const bool converged = SAIGE_SURV::fit_cox_noRE(y, X, REAL(r_time),
+		alpha, maxiter, n_iter, eta, mu, cov);
+	if (verbose)
+	{
+		Rprintf("Cox proportional-hazards model (no random effects):\n");
+		Rprintf("    # of iterations: %d\n", n_iter);
+		Rprintf("    fixed coeff: (");
+		for (size_t i=0; i < alpha.n_elem; i++)
+			Rprintf(i ? ", %0.7g" : "%0.7g", alpha[i]);
+		Rprintf(")\n");
+	}
+	arma::vec resid = y - mu;
+	return List::create(
+		_["coefficients"] = NumericVector(alpha.begin(), alpha.end()),
+		_["tau"] = NumericVector::create(1.0, 0.0),
+		_["linear.predictors"] = NumericVector(eta.begin(), eta.end()),
+		_["fitted.values"] = NumericVector(mu.begin(), mu.end()),
+		_["residuals"] = NumericVector(resid.begin(), resid.end()),
+		_["cov"] = cov,
+		_["converged"] = converged);
+END_RCPP
+}
+
+
+// ===========================================================================
+// R-callable test wrappers (used for validation against the GATE reference)
 
 RcppExport SEXP saige_surv_lambda0(SEXP eta, SEXP time, SEXP status)
 {
